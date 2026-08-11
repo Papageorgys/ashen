@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
+import { useSession } from "@/hooks/useSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
@@ -30,10 +31,16 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { user, ready } = useSession();
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Already sworn in? No need to linger at the gate.
+  useEffect(() => {
+    if (ready && user) void navigate({ to: "/" });
+  }, [ready, user, navigate]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,8 +87,8 @@ function AuthPage() {
         <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Banners of the</p>
         <h1 className="gilded font-display text-4xl">Ashen Realm</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Sign in to keep your company across devices and take your place on the realm ladder
-          beside every other clan.
+          The realm is open only to sworn lords. Sign in or raise a new banner to take the road,
+          keep your company across devices and stand on the ladder beside every other clan.
         </p>
       </div>
 
@@ -115,9 +122,6 @@ function AuthPage() {
         </button>
       </form>
 
-      <Link to="/" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-        Play without an account
-      </Link>
       <Toaster />
     </main>
   );
