@@ -501,6 +501,7 @@ export function useClanGame() {
                   at: Date.now(),
                   where: zone.name,
                   mobKills: m.mobKills ?? 0,
+                  oath: m.oath,
                 });
                 pushLog(
                   s,
@@ -1053,6 +1054,24 @@ export function useClanGame() {
 
     /* -------------------------------- legacy --------------------------------- */
 
+    /** A champion swears the Ashen Oath (§4.2) — irrevocable. They step forward
+     * first when death comes, and their fall becomes an outsized, honoured Deed. */
+    swearOath: (memberId: string) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m || m.isLord) return void toast("The Lord is always guarded and cannot swear the Oath.");
+        if (m.oath) return void toast("Already sworn to the Ashen Oath.");
+        m.oath = true;
+        chronicle(
+          s,
+          "rise",
+          `${m.name} swears the Ashen Oath`,
+          "To fall rather than yield, and to be remembered for it. The Warden-Fallen make room.",
+        );
+        pushLog(s, `${m.name} swore the Ashen Oath — they will step forward first, and fall hardest into legend.`, "info");
+        toast.success(`${m.name} is Oathsworn.`);
+      }),
+
     /** Carve a Deed into the Founders' Monument for a price in gold (§7.4).
      * Cosmetic only — inscription grants no power, it grants remembrance. */
     inscribeDeed: (id: string) =>
@@ -1104,7 +1123,10 @@ export function useClanGame() {
           const fated = p.memberIds
             .map((id) => s.members.find((m) => m.id === id))
             .filter((m): m is NonNullable<typeof m> => !!m && !m.isLord);
-          const victim = fated[Math.floor(Math.random() * fated.length)];
+          // The Oathsworn step forward first when death comes (§4.2).
+          const oathsworn = fated.filter((m) => m.oath);
+          const pool = oathsworn.length > 0 ? oathsworn : fated;
+          const victim = pool[Math.floor(Math.random() * pool.length)];
           if (victim) {
             s.members = s.members.filter((x) => x.id !== victim.id);
             for (const pp of s.parties) pp.memberIds = pp.memberIds.filter((x) => x !== victim.id);
@@ -1117,6 +1139,7 @@ export function useClanGame() {
               at: Date.now(),
               where: boss.name,
               mobKills: victim.mobKills ?? 0,
+              oath: victim.oath,
             });
             dropAffinity(s, victim.id);
             chronicle(
@@ -1274,6 +1297,7 @@ export function useClanGame() {
               at: Date.now(),
               where: `the field at ${zone.name}`,
               mobKills: m.mobKills ?? 0,
+              oath: m.oath,
             });
             pushLog(s, `${m.name} was killed fighting ${name}.`, "bad");
           }
@@ -1332,6 +1356,7 @@ export function useClanGame() {
               at: Date.now(),
               where: "the walls of Ravenhold",
               mobKills: m.mobKills ?? 0,
+              oath: m.oath,
             });
             pushLog(s, `${m.name} died on the walls of Ravenhold.`, "bad");
           } else {

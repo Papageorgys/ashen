@@ -229,6 +229,33 @@ export function ChampionDialog({
           </div>
         </div>
 
+        {!member.isLord &&
+          (member.oath ? (
+            <div className="rounded-sm border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs">
+              <span className="font-display text-destructive">Oathsworn.</span>{" "}
+              <span className="text-muted-foreground">
+                Sworn to the Ashen Oath — steps forward first when death comes, and their fall
+                weighs far more in the Chronicle. There is no unswearing it.
+              </span>
+            </div>
+          ) : (
+            api && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-border px-3 py-2">
+                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  <span className="font-display text-foreground">The Ashen Oath.</span> Swear this
+                  champion to fall rather than yield — greater danger, and a legend if they die.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => api.swearOath(member.id)}
+                >
+                  Swear the Oath
+                </Button>
+              </div>
+            )
+          ))}
+
         <Tabs defaultValue="stats">
           <TabsList>
             <TabsTrigger value="stats">Stats</TabsTrigger>

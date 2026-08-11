@@ -141,6 +141,9 @@ export interface Member {
   profession?: ProfessionId;
   /** the marks the world has left on them — scars, deeds, griefs; newest first */
   marks?: Mark[];
+  /** sworn to the Ashen Oath (§4.2): steps forward first when death comes, and
+   * their fall weighs far more in the Chronicle. Irrevocable. */
+  oath?: boolean;
 }
 
 /** A remembered event bound to a champion — how the numbers came to read as biography. */
@@ -273,6 +276,8 @@ export interface Fallen {
   where: string;
   mobKills: number;
   wasLord?: boolean;
+  /** fell having sworn the Ashen Oath (§4.2) — an honoured, outsized Deed */
+  oath?: boolean | undefined;
 }
 
 /** Sworn service under another clan's banner — the alternative to founding your own. */
@@ -1043,6 +1048,9 @@ export function chronicle(
 
 export type DeedClass = "conquest" | "endurance" | "first" | "sacrifice" | "craft" | "infamy";
 
+/** How much an Ashen Oath multiplies the legacy of a fall ([TUNING] §4.2). */
+export const OATH_LEGACY_MULT = 2.6;
+
 export interface DeedRecord {
   id: string;
   cls: DeedClass;
@@ -1080,12 +1088,18 @@ export function deedsFromState(state: GameState): DeedRecord[] {
     out.push({ id: `chr:${c.id}`, cls: map.cls, title: c.title, text: c.text, weight: map.weight, at: c.at });
   }
   for (const f of state.memorial ?? []) {
-    const w = 60 + Math.round(f.level * 1.5) + (f.wasLord ? 80 : 0);
+    const base = 60 + Math.round(f.level * 1.5) + (f.wasLord ? 80 : 0);
+    // An Oathsworn death is the honoured, outsized Deed the grimdark crowd craves (§4.2).
+    const w = f.oath ? Math.round(base * OATH_LEGACY_MULT) : base;
     out.push({
       id: `fallen:${f.id}`,
       cls: "sacrifice",
-      title: `${f.name} fell${f.wasLord ? ", the Lord," : ""} at ${f.where}`,
-      text: `A ${classNameOf(f.classId)} of level ${f.level}, ${f.mobKills} foes felled before the end. Their name outlives them.`,
+      title: f.oath
+        ? `${f.name} kept the Oath and fell at ${f.where}`
+        : `${f.name} fell${f.wasLord ? ", the Lord," : ""} at ${f.where}`,
+      text: f.oath
+        ? `Oathsworn. A ${classNameOf(f.classId)} of level ${f.level} who swore to fall rather than yield, and did. The Warden-Fallen keep their name.`
+        : `A ${classNameOf(f.classId)} of level ${f.level}, ${f.mobKills} foes felled before the end. Their name outlives them.`,
       weight: w,
       at: f.at,
     });
