@@ -165,3 +165,40 @@ export async function postDM(
   if (error || !data) return null;
   return data as unknown as DirectMessageRow;
 }
+
+export type BossContribRow = {
+  event_id: string;
+  user_id: string;
+  clan_name: string;
+  leader_name: string;
+  crest: unknown;
+  damage: number;
+  updated_at: string;
+};
+
+/** Every clan's damage on a boss event, highest first (shared HP + leaderboard). */
+export async function fetchBossContributions(eventId: string): Promise<BossContribRow[]> {
+  const { data } = await supabase
+    .from("world_boss_contributions")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("damage", { ascending: false });
+  return (data ?? []) as unknown as BossContribRow[];
+}
+
+/** Land a strike on the boss; returns this clan's new cumulative damage, or null. */
+export async function strikeBoss(
+  eventId: string,
+  damage: number,
+  who: { clanName?: string | undefined; leaderName?: string | undefined; crest?: unknown },
+): Promise<number | null> {
+  const { data, error } = await supabase.rpc("strike_world_boss", {
+    p_event_id: eventId,
+    p_damage: Math.max(0, Math.round(damage)),
+    p_clan_name: who.clanName ?? "",
+    p_leader_name: who.leaderName ?? "",
+    p_crest: (who.crest ?? null) as never,
+  });
+  if (error) return null;
+  return typeof data === "number" ? data : null;
+}
