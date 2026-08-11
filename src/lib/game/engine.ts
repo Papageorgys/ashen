@@ -157,6 +157,7 @@ export interface Member {
 
 /** A remembered event bound to a champion — how the numbers came to read as biography. */
 export type MarkKind =
+  | "oath" // the day they swore in — the player's own authorship
   | "clutch" // last one standing
   | "survivor" // carried a fallen comrade's memory home
   | "wounded" // dragged out of a fight at a hair's breadth

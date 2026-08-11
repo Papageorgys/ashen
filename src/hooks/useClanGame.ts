@@ -657,7 +657,7 @@ export function useClanGame() {
         s.recruits = rollRecruits(Math.max(1, s.clanLevel));
       }),
 
-    recruit: (id: string) =>
+    recruit: (id: string, opts?: { name?: string; oath?: string }) =>
       update((s) => {
         const r = s.recruits.find((x) => x.id === id);
         if (!r) return;
@@ -670,9 +670,17 @@ export function useClanGame() {
         const cost = recruitCost(r);
         if (s.gold < cost) return void toast.error("Not enough gold.");
         s.gold -= cost;
+        // the player's own choice, made before any risk — this is where attachment starts
+        const name = (opts?.name ?? "").trim().slice(0, 24) || r.name;
+        const oath = (opts?.oath ?? "").trim().slice(0, 80);
         s.recruits = s.recruits.filter((x) => x.id !== id);
-        s.members.push({ ...r, partyId: null });
-        pushLog(s, `${r.name} swore the clan oath.`, "info");
+        const sworn: Member = { ...r, name, partyId: null, joinedAt: Date.now() };
+        // the swearing-in is their first remembered moment — authored by the player
+        addMark(sworn, "oath", oath ? `Sworn to ${s.clanName} — “${oath}.”` : `Sworn to ${s.clanName}.`, {
+          bound: "oath",
+        });
+        s.members.push(sworn);
+        pushLog(s, `${name} swore the clan oath.`, "info");
       }),
 
     dismiss: (memberId: string) =>
