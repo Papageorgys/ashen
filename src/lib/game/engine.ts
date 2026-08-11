@@ -315,6 +315,8 @@ export interface GameState {
   chronicle?: ChronicleEntry[];
   /** ids of Deeds the clan has inscribed at the Founders' Monument (Legacy §7.4) */
   inscribed?: string[];
+  /** the host's carried Ash Debt (§3) — accrued in the fight, cleared only by rest */
+  ashDebt?: number;
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];
@@ -1256,8 +1258,30 @@ export function rivalOfZone(state: GameState, zoneId: string) {
   return state.rivals?.find((r) => r.claims.includes(zoneId));
 }
 
+/**
+ * Ash Debt (Systems Bible §3) — the One Law with teeth. Power reached for in the
+ * fight leaves a debt that does not auto-clear (§3.1); death feeds it (§3.3). It
+ * suppresses the host you can bring to a fight — the boss charge and the siege —
+ * but never touches ordinary farming (a warrior can still swing; it is the
+ * *reach past Vigour* that collects). Cleared only by resting at a warded flame.
+ */
+export const ASH_DEBT = { deathAccrual: 22, maxSuppression: 0.4, suppressAt: 260, restPerPoint: 3 };
+
+/** 0 .. maxSuppression — how much the carried Ash Debt shrinks usable host power. */
+export function ashDebtSuppression(state: GameState): number {
+  const d = state.ashDebt ?? 0;
+  if (d <= 0) return 0;
+  return Math.min(ASH_DEBT.maxSuppression, d / ASH_DEBT.suppressAt);
+}
+
+/** Gold to pay down the whole debt at a warded flame (§1.1 Muster). */
+export function restAtFlameCost(state: GameState): number {
+  return Math.round((state.ashDebt ?? 0) * ASH_DEBT.restPerPoint);
+}
+
 export function clanHostPower(state: GameState) {
-  return state.parties.reduce((sum, p) => sum + partyPower(state, p), 0);
+  const raw = state.parties.reduce((sum, p) => sum + partyPower(state, p), 0);
+  return Math.round(raw * (1 - ashDebtSuppression(state)));
 }
 
 /**

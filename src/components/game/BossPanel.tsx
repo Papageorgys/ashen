@@ -3,7 +3,15 @@ import { Swords, Crown, Skull, HandHeart, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ClanCrest } from "@/components/game/ClanCrest";
 import { DEFAULT_CREST, type Crest } from "@/lib/game/identity";
-import { partyPower, spoilRarity, dayKey, type GameState, type Party } from "@/lib/game/engine";
+import {
+  partyPower,
+  spoilRarity,
+  dayKey,
+  ashDebtSuppression,
+  restAtFlameCost,
+  type GameState,
+  type Party,
+} from "@/lib/game/engine";
 import { bossLootTable, blessingCost, COMMIT_COOLDOWN_MS } from "@/lib/game/worldboss";
 import { ITEM_BY_ID } from "@/lib/game/data";
 import type { ClanApi } from "@/hooks/useClanGame";
@@ -56,7 +64,9 @@ export function BossPanel({
   const commit = async (p: Party) => {
     if (busy || boss.defeated || p.memberIds.length === 0 || cooldownLeft(p) > 0) return;
     setBusy(p.id);
-    const ok = await boss.strike(partyPower(state, p), who);
+    // Ash Debt (§3) shrinks the blow the host can land — reach past it and you rest weaker.
+    const dmg = Math.round(partyPower(state, p) * (1 - ashDebtSuppression(state)));
+    const ok = await boss.strike(dmg, who);
     if (ok) api.commitBanner(p.id);
     setBusy(null);
   };
@@ -125,6 +135,33 @@ export function BossPanel({
           </div>
         </div>
       </div>
+
+      {/* Ash Debt — the One Law with teeth (§3) */}
+      {(state.ashDebt ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-sm border border-amber-500/40 bg-amber-500/5 p-3">
+          <Skull className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-widest text-amber-300/90">
+              Ash Debt — {Math.round(state.ashDebt ?? 0)}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              The host fights at −{Math.round(ashDebtSuppression(state) * 100)}% against the boss and
+              in siege until it rests. The Ash always collects.
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2"
+            disabled={state.gold < restAtFlameCost(state)}
+            onClick={() => api.restAtFlame()}
+            title={state.gold < restAtFlameCost(state) ? `Need ${restAtFlameCost(state)} gold` : undefined}
+          >
+            <span className="text-xs">Rest at the flame</span>
+            <span className="text-[10px] text-muted-foreground">{restAtFlameCost(state)}g</span>
+          </Button>
+        </div>
+      )}
 
       {/* blessing */}
       {!boss.defeated && (
