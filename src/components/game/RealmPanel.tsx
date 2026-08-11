@@ -8,6 +8,9 @@ import {
   refineAshValue,
   loanCeiling,
   siegeReady,
+  VASSAL_HOUSES,
+  vassalPower,
+  vassalTithe,
   type GameState,
 } from "@/lib/game/engine";
 import { Button } from "@/components/ui/button";
@@ -26,6 +29,8 @@ export function RealmPanel({
     setCastleWindow: (startHour: number | null, hours: number) => void;
     takeLoan: (amount: number) => void;
     repayLoan: () => void;
+    swearVassal: (houseId: string) => void;
+    releaseVassal: (houseId: string) => void;
   };
 }) {
   const host = clanHostPower(state);
@@ -238,6 +243,58 @@ export function RealmPanel({
             ))}
           </div>
         )}
+      </section>
+
+      {/* -------------------------------- vassals ------------------------------ */}
+      <section className="panel rounded-sm p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="font-display text-lg text-gold">Vassal houses</h3>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {vassalPower(state) > 0
+              ? `+${vassalPower(state).toLocaleString()} defence · +${vassalTithe(state)}g/hr tithe`
+              : "sworn to a lord, not a crown"}
+          </span>
+        </div>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {VASSAL_HOUSES.map((h) => {
+            const sworn = (state.vassals ?? []).includes(h.id);
+            const canAfford = state.gold >= h.cost;
+            const meetsLevel = state.clanLevel >= h.reqLevel;
+            return (
+              <article
+                key={h.id}
+                className={`rounded-sm border p-3 ${sworn ? "border-gold/50 bg-gold/5" : "border-border/60"}`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-display text-sm text-foreground">{h.name}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {h.power.toLocaleString()} · {h.tithe}g/hr
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{h.blurb}</p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {sworn ? "sworn to you" : meetsLevel ? `${h.cost.toLocaleString()}g to swear` : `needs clan Lv ${h.reqLevel}`}
+                  </span>
+                  {sworn ? (
+                    <Button size="sm" variant="ghost" onClick={() => api.releaseVassal(h.id)}>
+                      Release
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!meetsLevel || !canAfford}
+                      onClick={() => api.swearVassal(h.id)}
+                    >
+                      Take their oath
+                    </Button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </section>
 
       {/* -------------------------------- rivals ------------------------------- */}

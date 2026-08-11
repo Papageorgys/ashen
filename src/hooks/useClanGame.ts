@@ -109,6 +109,7 @@ import {
   refineAshValue,
   LEDGER,
   loanCeiling,
+  VASSAL_BY_ID,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1162,6 +1163,35 @@ export function useClanGame() {
           }
         }
         pushLog(s, `${p.name} broke off to charge ${boss.name}.`, "info");
+      }),
+
+    /** Take a vassal house's oath (§8.1) — a gift of gold secures their fealty. */
+    swearVassal: (houseId: string) =>
+      update((s) => {
+        const house = VASSAL_BY_ID[houseId];
+        if (!house) return;
+        s.vassals = s.vassals ?? [];
+        if (s.vassals.includes(houseId)) return void toast(`${house.name} already flies your banner.`);
+        if (s.clanLevel < house.reqLevel)
+          return void toast(`${house.name} will only swear to a clan of level ${house.reqLevel}.`);
+        if (s.gold < house.cost) return void toast.error(`${house.name} expects a gift of ${house.cost} gold.`);
+        s.gold -= house.cost;
+        s.vassals.push(houseId);
+        chronicle(
+          s,
+          "rise",
+          `${house.name} swears fealty`,
+          `They pledge tithe and service to your banner — sworn to a lord, not a crown. ${house.power.toLocaleString()} swords, ${house.tithe} gold an hour.`,
+        );
+        toast.success(`${house.name} is sworn to you.`);
+      }),
+
+    /** Release a vassal from their oath. */
+    releaseVassal: (houseId: string) =>
+      update((s) => {
+        if (!s.vassals?.includes(houseId)) return;
+        s.vassals = s.vassals.filter((id) => id !== houseId);
+        pushLog(s, `${VASSAL_BY_ID[houseId]?.name ?? "A house"} is released from their oath.`, "info");
       }),
 
     /** Borrow gold from the Gilded Compact's Ledger (§6.3), owed back with interest. */
