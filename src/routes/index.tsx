@@ -365,7 +365,7 @@ function NavButton({
           aria-label={item.label}
           className={`group flex w-full shrink-0 items-center rounded-sm border border-transparent text-[9px] uppercase tracking-widest text-muted-foreground transition-all hover:text-gold/80 data-[state=active]:border-gold/60 data-[state=active]:bg-gold/10 data-[state=active]:text-gold ${
             expanded
-              ? "lg:flex-row lg:justify-start lg:gap-2 lg:px-2.5 lg:py-2 lg:text-[10px] flex-col gap-1 px-2 py-1.5"
+              ? "lg:flex-row lg:justify-start lg:gap-2 lg:px-2.5 lg:py-1.5 lg:text-[10px] flex-col gap-1 px-2 py-1.5"
               : "flex-col gap-1 px-2 py-1.5"
           } ${active ? "rail-active" : ""}`}
         >
@@ -469,7 +469,7 @@ function Index() {
               : "lg:grid-cols-[3.75rem_minmax(0,1fr)_20rem]"
           }`}
         >
-          <TabsList className="order-2 flex h-auto w-full items-stretch gap-1 overflow-x-auto rounded-none border-t border-border/60 bg-background/80 p-1 backdrop-blur lg:order-1 lg:w-auto lg:flex-col lg:items-stretch lg:overflow-y-auto lg:border-r lg:border-t-0 lg:bg-transparent lg:py-2">
+          <TabsList className="order-2 flex h-auto w-full items-stretch gap-1 overflow-x-auto rounded-none border-t border-border/60 bg-background/80 p-1 backdrop-blur lg:order-1 lg:w-auto lg:flex-col lg:items-stretch lg:gap-0.5 lg:overflow-y-auto lg:border-r lg:border-t-0 lg:bg-transparent lg:py-1">
             <button
               type="button"
               onClick={() => setRailOpen((v) => !v)}
@@ -487,9 +487,12 @@ function Index() {
               const items = group.items.filter((i) => founded || !i.requiresClan);
               if (!items.length) return null;
               return (
-                <div key={group.title} className="flex shrink-0 gap-1 lg:w-full lg:flex-col">
+                <div
+                  key={group.title}
+                  className="flex shrink-0 gap-1 lg:w-full lg:flex-col lg:gap-0.5"
+                >
                   <div
-                    className={`hidden px-1 pt-1.5 text-[9px] uppercase tracking-[0.2em] text-muted-foreground/70 ${
+                    className={`hidden px-1 pt-1 text-[9px] uppercase tracking-[0.2em] text-muted-foreground/70 ${
                       railOpen ? "lg:block" : "lg:hidden"
                     }`}
                   >
