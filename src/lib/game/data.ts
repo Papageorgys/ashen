@@ -3157,6 +3157,27 @@ export const LANDMARKS: Landmark[] = [
   },
 ];
 
+/** The named reaches the "Near" chat is split into — the towns/keeps that anchor them. */
+export const CHAT_REGION_IDS = ["havenreach", "greymarket", "emberwatch", "coldspire", "ravenhold"];
+
+/** Which reach a zone belongs to: the nearest anchor town/keep by map distance. */
+export function regionForZone(zoneId: string): string | null {
+  const zp = ZONE_POS[zoneId];
+  if (!zp) return null;
+  let best: string | null = null;
+  let bestD = Infinity;
+  for (const id of CHAT_REGION_IDS) {
+    const lm = LANDMARKS.find((l) => l.id === id);
+    if (!lm) continue;
+    const d = Math.hypot(zp.x - lm.pos.x, zp.y - lm.pos.y);
+    if (d < bestD) {
+      bestD = d;
+      best = id;
+    }
+  }
+  return best;
+}
+
 /* -------------------------------- Contracts -------------------------------- */
 
 export type Cadence = "daily" | "weekly" | "monthly";
