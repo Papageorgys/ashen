@@ -1,0 +1,1415 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useSession } from "@/hooks/useSession";
+import { fetchCloudSave, pushCloudSave } from "@/lib/cloud/sync";
+import { CASTLE, RIVAL_BY_ID, garrisonPower, initialCastle, initialRivals, resolveClash } from "@/lib/game/rivals";
+import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "@/lib/game/identity";
+import { professionFromSeed } from "@/lib/game/professions";
+import {
+  CLAN_LEVELS,
+  CLASS_BY_ID,
+  MAX_LEVEL,
+  MAX_PARTY_SIZE,
+  MAX_SKILL_LEVEL,
+  RECIPES,
+  SKILL_BY_ID,
+  ZONES,
+  ITEM_BY_ID,
+  ZONE_BY_ID,
+  DAILY_BY_ID,
+  CADENCE_LABEL,
+  CRAFT_MASTERY_LABEL,
+  emberId,
+  shotId,
+  type CraftMastery,
+  type Grade,
+  type ItemId,
+  type ShotKind,
+  type SkillCondition,
+  MAX_QUALITY,
+  qualityItemId,
+  qualityLabel,
+} from "@/lib/game/data";
+import {
+  canCraft,
+  canSystemForge,
+  systemForgeFee,
+  recipeById,
+  systemForgeChance,
+  canRefine,
+  shotBatchCost,
+  clanCapacity,
+  musterPulse,
+  rollProspects,
+  prospectCost,
+  canAcceptCompany,
+  companyPower,
+  keepEffects,
+  keepLevel,
+  keepUpgradeCost,
+  canUpgradeKeep,
+  mendBill,
+  forgeFee,
+  KEEP_BY_ID,
+  type KeepBuildingId,
+  craftChance,
+  qualityStepChance,
+  rollQuality,
+  initialState,
+  learnSkill as learnSkillFn,
+  learnableSkills as learnableSkillsFn,
+  skillCost as skillCostFn,
+  maxHp,
+  memberStats,
+  maxMp,
+  maxParties,
+  canJoinClan,
+  JOIN_REQ,
+  nextClanReq,
+  regenRate,
+  suggestFill,
+  slotOf,
+  resolveRun,
+  spoilRarity,
+  chronicle,
+  deathRisk,
+  earnedTitle,
+  ledPersonally,
+  lordOf,
+  realmPulse,
+  clanHostPower,
+  siegeReady,
+  LORD_BONUS,
+  type Founding,
+  dayKey,
+  weekKey,
+  monthKey,
+  rollWeeklies,
+  rollMonthlies,
+  rollDailies,
+  rollRecruits,
+  recruitCost,
+  uid,
+  xpForLevel,
+  xpForSkillLevel,
+  canImprint,
+  scribeOdds,
+  type GameState,
+  type Member,
+} from "@/lib/game/engine";
+import { SCROLL_BY_ID } from "@/lib/game/data";
+import { MONSTER_BY_ID } from "@/lib/game/monsters";
+
+import {
+  IMPROVED_YIELD,
+  SCROLL_LOG_CAP,
+  attemptId,
+  rollOutcomeDetail,
+} from "@/lib/game/scrolls";
+
+const KEY = "clanleader.save.v3";
+
+function load(): GameState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    return raw ? (JSON.parse(raw) as GameState) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** bring an older or remote save up to the current shape */
+function patch(loaded: GameState): GameState {
+  const today = dayKey();
+  const week = weekKey();
+  const month = monthKey();
+  if (!loaded.daily || loaded.daily.day !== today) loaded.daily = rollDailies(today);
+  if (!loaded.weekly || loaded.weekly.day !== week) loaded.weekly = rollWeeklies(week);
+  if (!loaded.monthly || loaded.monthly.day !== month) loaded.monthly = rollMonthlies(month);
+  // older saves predate heraldry, the realm and the Lord — fill them in
+  loaded.crest = loaded.crest ?? DEFAULT_CREST;
+  loaded.motto = loaded.motto ?? "We rise from ash.";
+  loaded.chronicle = loaded.chronicle ?? [];
+  loaded.memorial = loaded.memorial ?? [];
+  loaded.rivals = loaded.rivals?.length ? loaded.rivals : initialRivals();
+  loaded.castle = loaded.castle ?? initialCastle();
+  if (!loaded.members.some((m) => m.isLord) && loaded.members[0]) loaded.members[0].isLord = true;
+  for (const m of loaded.members) m.portrait = m.portrait ?? portraitFromSeed(m.id + m.name);
+  for (const r of loaded.recruits) r.portrait = r.portrait ?? portraitFromSeed(r.id + r.name);
+  // backgrounds arrived later — give everyone the one their story implies
+  for (const m of [...loaded.members, ...loaded.recruits])
+    m.profession = m.profession ?? professionFromSeed(m.id + m.name);
+  loaded.inspiration = loaded.inspiration ?? 0;
+  // banners now hold five — trim any legacy nine-strong party
+  for (const p of loaded.parties) {
+    if (p.memberIds.length > MAX_PARTY_SIZE) {
+      for (const id of p.memberIds.slice(MAX_PARTY_SIZE)) {
+        const m = loaded.members.find((x) => x.id === id);
+        if (m) m.partyId = null;
+      }
+      p.memberIds = p.memberIds.slice(0, MAX_PARTY_SIZE);
+    }
+  }
+  return loaded;
+}
+
+export function useClanGame() {
+  const [state, setState] = useState<GameState | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const stateRef = useRef<GameState | null>(null);
+  stateRef.current = state;
+  const { user, ready: authReady } = useSession();
+  const [cloudReady, setCloudReady] = useState(false);
+
+  useEffect(() => {
+    const loaded = load();
+    setState(loaded ? patch(loaded) : null);
+    setHydrated(true);
+  }, []);
+
+  /** on sign-in: the cloud save wins if there is one, otherwise upload this device's */
+  useEffect(() => {
+    if (!hydrated || !authReady) return;
+    if (!user) {
+      setCloudReady(false);
+      return;
+    }
+    let live = true;
+    setCloudReady(false);
+    (async () => {
+      const remote = await fetchCloudSave(user.id);
+      if (!live) return;
+      if (remote) setState(patch(remote));
+      else if (stateRef.current) await pushCloudSave(user.id, stateRef.current);
+      if (live) setCloudReady(true);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [hydrated, authReady, user?.id]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (state) window.localStorage.setItem(KEY, JSON.stringify(state));
+  }, [state, hydrated]);
+
+  /** debounced push of the world state and ladder standing */
+  useEffect(() => {
+    if (!cloudReady || !user || !state) return;
+    const t = setTimeout(() => {
+      void pushCloudSave(user.id, state);
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [state, cloudReady, user?.id]);
+
+
+  const pushLog = (s: GameState, text: string, tone: "good" | "bad" | "info") => {
+    s.log = [{ id: uid(), at: Date.now(), text, tone }, ...s.log].slice(0, 60);
+  };
+
+  const update = useCallback((fn: (draft: GameState) => void) => {
+    setState((prev) => {
+      if (!prev) return prev;
+      const draft: GameState = JSON.parse(JSON.stringify(prev));
+      fn(draft);
+      return draft;
+    });
+  }, []);
+
+  /** expedition tick */
+  useEffect(() => {
+    const t = setInterval(() => {
+      const cur = stateRef.current;
+      if (!cur) return;
+      const now = Date.now();
+      if (!cur.parties.some((p) => p.run && p.run.endsAt <= now)) return;
+      update((s) => {
+        for (const party of s.parties) {
+          if (!party.run || party.run.endsAt > now) continue;
+          const zoneId = party.run.zoneId;
+          const res = resolveRun(s, party, zoneId);
+          party.run = null;
+          const lordLed = ledPersonally(s, party);
+          s.gold += Math.round(res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1));
+          s.reputation += Math.round(res.rep * keepEffects(s).repMult * (lordLed ? 1.1 : 1));
+          const zoneName = ZONE_BY_ID[zoneId]?.name ?? "the field";
+          const spoils = res.loot.map((l) => ({
+            id: uid(),
+            at: Date.now(),
+            item: l.item,
+            qty: l.qty,
+            rarity: spoilRarity(l.item),
+            zone: zoneName,
+            party: party.name,
+          }));
+          for (const l of res.loot) {
+            s.inventory[l.item] = (s.inventory[l.item] ?? 0) + l.qty;
+          }
+          if (spoils.length) s.spoils = [...spoils, ...(s.spoils ?? [])].slice(0, 40);
+          for (const sp of spoils) {
+            if (sp.rarity === "epic") {
+              toast.success(`${ITEM_BY_ID[sp.item]?.name ?? sp.item} x${sp.qty}`, {
+                description: `A find of legend out of ${sp.zone}.`,
+              });
+            } else if (sp.rarity === "rare") {
+              toast(`${ITEM_BY_ID[sp.item]?.name ?? sp.item} x${sp.qty}`, {
+                description: `Rare drop — ${sp.zone}.`,
+              });
+            }
+          }
+          // bestiary — everything the banner met out there
+          if (res.encounters?.length) {
+            s.bestiary ??= {};
+            for (const e of res.encounters) {
+              const entry = s.bestiary[e.monsterId];
+              if (entry) {
+                entry.kills += e.kills;
+                entry.elites += e.elite ? e.kills : 0;
+                entry.lastAt = now;
+              } else {
+                s.bestiary[e.monsterId] = {
+                  kills: e.kills,
+                  elites: e.elite ? e.kills : 0,
+                  firstAt: now,
+                  lastAt: now,
+                };
+                pushLog(s, `New bestiary entry: ${MONSTER_BY_ID[e.monsterId]?.name ?? e.monsterId}.`, "info");
+              }
+            }
+          }
+          for (const [item, qty] of Object.entries(res.shotsUsed)) {
+            s.inventory[item] = Math.max(0, (s.inventory[item] ?? 0) - qty);
+          }
+
+          for (const [item, qty] of Object.entries(res.scrollsUsed ?? {})) {
+            s.inventory[item] = Math.max(0, (s.inventory[item] ?? 0) - qty);
+          }
+          for (const note of (res.scrollNotes ?? []).slice(0, 3)) {
+            pushLog(s, note, note.includes("turned on") ? "bad" : "info");
+          }
+          if (res.scrollAttempts?.length) {
+            s.scrollLog = [...(s.scrollLog ?? []), ...res.scrollAttempts].slice(-SCROLL_LOG_CAP);
+          }
+
+          for (const id of res.participants) {
+            const m = s.members.find((x) => x.id === id);
+            if (!m) continue;
+
+            // lifetime record
+            const rec = res.record?.[m.id];
+            if (rec) {
+              m.mobKills = (m.mobKills ?? 0) + rec.mobKills;
+              m.pvpKills = (m.pvpKills ?? 0) + rec.pvpKills;
+              m.pkKills = (m.pkKills ?? 0) + rec.pkKills;
+            }
+            if (res.fallen.includes(m.name)) m.deaths = (m.deaths ?? 0) + 1;
+
+            // vitals
+            const v = res.vitals[m.id];
+            if (v) {
+              m.hp = Math.min(maxHp(m), v.hp);
+              m.mp = Math.min(maxMp(m), v.mp);
+            }
+
+            // character xp (capped at 52)
+            if (m.level < MAX_LEVEL) {
+              m.xp += Math.round(res.xp * (lordLed ? 1 + LORD_BONUS.xp : 1));
+              while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
+                m.xp -= xpForLevel(m.level);
+                m.level += 1;
+                pushLog(s, `${m.name} reached level ${m.level}.`, "good");
+              }
+              if (m.level >= MAX_LEVEL) m.xp = 0;
+            }
+
+            // skill mastery xp
+            const uses = res.skillUses[m.id] ?? {};
+            for (const sk of m.skills) {
+              const n = uses[sk.skillId] ?? 0;
+              if (!n || sk.level >= MAX_SKILL_LEVEL) continue;
+              sk.xp += n * 3;
+              while (sk.level < MAX_SKILL_LEVEL && sk.xp >= xpForSkillLevel(sk.level)) {
+                sk.xp -= xpForSkillLevel(sk.level);
+                sk.level += 1;
+                if (sk.level % 10 === 0)
+                  pushLog(
+                    s,
+                    `${m.name}'s ${SKILL_BY_ID[sk.skillId]?.name} reached mastery ${sk.level}.`,
+                    "good",
+                  );
+              }
+            }
+          }
+
+
+
+
+
+          // backgrounds that lived up to themselves earn the clan Inspiration
+          if (res.deeds.length) {
+            s.inspiration = (s.inspiration ?? 0) + res.deeds.length;
+            const names = res.deeds
+              .map((d) => s.members.find((x) => x.id === d.memberId)?.name)
+              .filter(Boolean)
+              .slice(0, 3)
+              .join(", ");
+            pushLog(
+              s,
+              `Inspiration earned (+${res.deeds.length}) — ${names} lived up to their past.`,
+              "good",
+            );
+          }
+
+          // the butcher's bill — some of the fallen never get up again
+          const zone = ZONE_BY_ID[zoneId];
+          if (zone) {
+            const risk0 = deathRisk(s, party, zone.kind, zone.reqLevel);
+            for (const id of res.participants) {
+              const m = s.members.find((x) => x.id === id);
+              if (!m) continue;
+              if (!res.fallen.includes(m.name)) continue;
+              const risk = deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0;
+              if (m.isLord) {
+                // the Lord is dragged out alive, but it costs
+                if (Math.random() < risk) {
+                  m.xp = 0;
+                  m.hp = 1;
+                  pushLog(
+                    s,
+                    `${m.name} was cut down and carried from ${zone.name} barely breathing.`,
+                    "bad",
+                  );
+                  chronicle(
+                    s,
+                    "loss",
+                    `${m.name} nearly dies at ${zone.name}`,
+                    "The Lord's banner was pulled from the field under shields. The clan does not speak of it.",
+                  );
+                }
+                continue;
+              }
+              if (Math.random() < risk) {
+                s.members = s.members.filter((x) => x.id !== m.id);
+                for (const pp of s.parties) pp.memberIds = pp.memberIds.filter((x) => x !== m.id);
+                s.memorial = s.memorial ?? [];
+                s.memorial.unshift({
+                  id: m.id,
+                  name: m.name,
+                  classId: m.classId,
+                  level: m.level,
+                  at: Date.now(),
+                  where: zone.name,
+                  mobKills: m.mobKills ?? 0,
+                });
+                pushLog(s, `${m.name} died in ${zone.name}. There was no body to bring home.`, "bad");
+                chronicle(
+                  s,
+                  "loss",
+                  `${m.name} falls at ${zone.name}`,
+                  `Level ${m.level} ${CLASS_BY_ID[m.classId]?.name ?? "champion"}, ${(m.mobKills ?? 0).toLocaleString()} kills. Name carved into the shrine wall.`,
+                );
+                toast.error(`${m.name} is dead.`);
+              }
+            }
+          }
+
+          // deeds earn names
+          for (const id of res.participants) {
+            const m = s.members.find((x) => x.id === id);
+            if (!m) continue;
+            const t = earnedTitle(m, s);
+            if (t && t !== m.title) {
+              m.title = t;
+              pushLog(s, `${m.name} is now called ${t}.`, "good");
+            }
+          }
+
+          // contract boards progress
+          for (const board of [s.daily, s.weekly, s.monthly]) {
+            if (!board) continue;
+            for (const dm of board.missions) {
+              const def = DAILY_BY_ID[dm.id];
+              if (!def || def.zoneId !== zoneId || dm.claimed) continue;
+              if (dm.progress < def.kills) {
+                dm.progress = Math.min(def.kills, dm.progress + res.kills);
+                if (dm.progress >= def.kills)
+                  pushLog(s, `Contract ready to claim: ${def.name}.`, "good");
+              }
+            }
+          }
+
+          for (const h of res.highlights ?? []) {
+            pushLog(s, h.text, "good");
+          }
+          if (res.mvp && res.success) {
+            pushLog(
+              s,
+              `${res.mvp.name} carried the fight — ${res.mvp.damage.toLocaleString()} damage dealt.`,
+              "info",
+            );
+          }
+          const ratingNote = res.rating ? ` [Rank ${res.rating}]` : "";
+          pushLog(s, `${res.text}${ratingNote}`, res.success ? "good" : "bad");
+
+          // keep farming the same zone until the banner is recalled
+          const standing = party.memberIds.some(
+            (id) => (s.members.find((x) => x.id === id)?.hp ?? 0) > 0,
+          );
+          if (party.farming && standing) {
+            const z = ZONE_BY_ID[party.farming];
+            if (z) party.run = { zoneId: z.id, endsAt: Date.now() + z.durationMs };
+          } else if (party.farming) {
+            party.farming = null;
+            pushLog(s, `${party.name} was wiped out and dragged home to recover.`, "bad");
+          }
+        }
+      });
+    }, 500);
+    return () => clearInterval(t);
+  }, [update]);
+
+  /** automatic HP / MP recovery — the wounded and the fallen all mend over time */
+  useEffect(() => {
+    const t = setInterval(() => {
+      const cur = stateRef.current;
+      if (!cur) return;
+      const needs = cur.members.some((m) => m.hp < maxHp(m) || m.mp < maxMp(m));
+      if (!needs) return;
+      update((s) => {
+        const rest = keepEffects(s).restMult;
+        const busy = new Set(s.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
+        for (const m of s.members) {
+          const rate = regenRate(m) * (busy.has(m.id) ? 0.35 : rest);
+          const wasDown = m.hp <= 0;
+          m.hp = Math.min(maxHp(m), Math.round(m.hp + maxHp(m) * 0.06 * rate));
+          m.mp = Math.min(maxMp(m), Math.round(m.mp + maxMp(m) * 0.08 * rate));
+          if (wasDown && m.hp > 0) pushLog(s, `${m.name} is back on their feet.`, "info");
+        }
+      });
+    }, 1500);
+    return () => clearInterval(t);
+  }, [update]);
+
+  /** the training yard drills whoever is resting at the keep */
+  useEffect(() => {
+    const t = setInterval(() => {
+      const cur = stateRef.current;
+      if (!cur) return;
+      if (!keepEffects(cur).yardXp) return;
+      update((s) => {
+        const gain = keepEffects(s).yardXp;
+        const busy = new Set(s.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
+        for (const m of s.members) {
+          if (busy.has(m.id) || m.hp <= 0 || m.level >= MAX_LEVEL) continue;
+          m.xp += gain;
+          while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
+            m.xp -= xpForLevel(m.level);
+            m.level += 1;
+            pushLog(s, `${m.name} reached level ${m.level} at the training yard.`, "good");
+          }
+          if (m.level >= MAX_LEVEL) m.xp = 0;
+        }
+      });
+    }, 5000);
+    return () => clearInterval(t);
+  }, [update]);
+
+  /** the realm moves whether you watch it or not */
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (!stateRef.current) return;
+      update((s) => {
+        realmPulse(s);
+        musterPulse(s);
+      });
+    }, 15000);
+    return () => clearInterval(t);
+  }, [update]);
+
+
+  const api = {
+    start: (founding: Founding) => setState(initialState(founding)),
+    reset: () => {
+      window.localStorage.removeItem(KEY);
+      setState(null);
+    },
+
+    refreshRecruits: () =>
+      update((s) => {
+        const cost = 150 * Math.max(1, s.clanLevel);
+        if (s.gold < cost) return void toast.error("Not enough gold to send out heralds.");
+        s.gold -= cost;
+        s.recruits = rollRecruits(Math.max(1, s.clanLevel));
+      }),
+
+    recruit: (id: string) =>
+      update((s) => {
+        const r = s.recruits.find((x) => x.id === id);
+        if (!r) return;
+        if (s.members.length >= clanCapacity(s.clanLevel, keepLevel(s, "barracks"), !!s.allegiance))
+          return void toast.error(
+            s.clanLevel < 1
+              ? "Your company is full — found a clan to swear more blades."
+              : "Clan is at capacity — raise the clan level.",
+          );
+        const cost = recruitCost(r);
+        if (s.gold < cost) return void toast.error("Not enough gold.");
+        s.gold -= cost;
+        s.recruits = s.recruits.filter((x) => x.id !== id);
+        s.members.push({ ...r, partyId: null });
+        pushLog(s, `${r.name} swore the clan oath.`, "info");
+      }),
+
+    dismiss: (memberId: string) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        if (m.isLord) return void toast.error("You cannot dismiss yourself.");
+        s.members = s.members.filter((x) => x.id !== memberId);
+        for (const p of s.parties) p.memberIds = p.memberIds.filter((x) => x !== memberId);
+        pushLog(s, `${m.name} left the clan.`, "bad");
+      }),
+
+    createParty: () =>
+      update((s) => {
+        if (s.parties.length >= maxParties(s.clanLevel, !!s.allegiance))
+          return void toast.error(
+            s.clanLevel < 1
+              ? "Found your clan before raising a second banner."
+              : "Raise the clan level to field another party.",
+          );
+        s.parties.push({
+          id: uid(),
+          name: `Banner ${s.parties.length + 1}`,
+          memberIds: [],
+          run: null,
+        });
+      }),
+
+    /** rounds out a banner with the champions that best fill its missing roles */
+    autoFillParty: (partyId: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (!p) return;
+        if (p.run) return void toast.error("That party is on an expedition.");
+        const picks = suggestFill(s, p);
+        if (!picks.length) return void toast.error("No free champions to draft.");
+        for (const m of picks) {
+          for (const q of s.parties) q.memberIds = q.memberIds.filter((x) => x !== m.id);
+          p.memberIds.push(m.id);
+          const live = s.members.find((x) => x.id === m.id);
+          if (live) live.partyId = p.id;
+        }
+        pushLog(s, `${p.name} drafted ${picks.length} champion(s).`, "info");
+      }),
+
+    /** fills every idle banner in one order */
+    autoFillAll: () =>
+      update((s) => {
+        let n = 0;
+        for (const p of s.parties) {
+          if (p.run) continue;
+          for (const m of suggestFill(s, p)) {
+            for (const q of s.parties) q.memberIds = q.memberIds.filter((x) => x !== m.id);
+            p.memberIds.push(m.id);
+            const live = s.members.find((x) => x.id === m.id);
+            if (live) live.partyId = p.id;
+            n++;
+          }
+        }
+        if (!n) return void toast.error("Nothing left to draft.");
+        pushLog(s, `The war table filled ${n} empty seat(s).`, "info");
+      }),
+
+    /** sends the whole banner back to the unassigned tray */
+    clearParty: (partyId: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (!p) return;
+        if (p.run) return void toast.error("That party is on an expedition.");
+        for (const id of p.memberIds) {
+          const m = s.members.find((x) => x.id === id);
+          if (m) m.partyId = null;
+        }
+        p.memberIds = [];
+      }),
+
+    /** renames a banner so orders read clearly on the table */
+    renameParty: (partyId: string, name: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (!p) return;
+        const clean = name.trim().slice(0, 24);
+        if (clean) p.name = clean;
+      }),
+
+    assign: (memberId: string, partyId: string | null) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        for (const p of s.parties) {
+          if (p.run && (p.memberIds.includes(memberId) || p.id === partyId))
+            return void toast.error("That party is on an expedition.");
+        }
+        for (const p of s.parties) p.memberIds = p.memberIds.filter((x) => x !== memberId);
+        if (partyId) {
+          const p = s.parties.find((x) => x.id === partyId);
+          if (!p) return;
+          if (p.memberIds.length >= MAX_PARTY_SIZE) return void toast.error(`Party is full (${MAX_PARTY_SIZE}).`);
+          p.memberIds.push(memberId);
+        }
+        m.partyId = partyId;
+      }),
+
+    sendParty: (partyId: string, zoneId: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        const z = ZONES.find((x) => x.id === zoneId);
+        if (!p || !z) return;
+        if (p.run) return;
+        if (p.memberIds.length === 0) return void toast.error("Empty party.");
+        p.run = { zoneId, endsAt: Date.now() + z.durationMs };
+        p.farming = zoneId;
+        pushLog(s, `${p.name} marched on ${z.name} and will farm until recalled.`, "info");
+      }),
+
+    recallParty: (partyId: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (!p) return;
+        p.farming = null;
+        pushLog(s, `${p.name} will return after this run.`, "info");
+      }),
+
+    setCraftMastery: (memberId: string, mastery: CraftMastery) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        m.craftMastery = mastery;
+        pushLog(s, `${m.name} devoted themselves to ${CRAFT_MASTERY_LABEL[mastery]}.`, "info");
+      }),
+
+    /* ------------------------------- skills ------------------------------- */
+
+    learnSkill: (memberId: string, skillId: string) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        const def = SKILL_BY_ID[skillId];
+        if (!m || !def) return;
+        if (m.level < def.unlock) return void toast.error(`Requires level ${def.unlock}.`);
+        if (m.skills.some((k) => k.skillId === skillId)) return;
+        const price = skillCostFn(def);
+        if (s.gold < price) return void toast.error("Not enough gold for the trainer.");
+        s.gold -= price;
+        learnSkillFn(m, skillId);
+        pushLog(s, `${m.name} learned ${def.name}.`, "info");
+      }),
+
+    /** Teach every unlocked skill the clan can afford, for one member or all. */
+    learnAllSkills: (memberId?: string) =>
+      update((s) => {
+        const targets = memberId ? s.members.filter((m) => m.id === memberId) : s.members;
+        let taught = 0;
+        for (const m of targets) {
+          for (const def of learnableSkillsFn(m)) {
+            const price = skillCostFn(def);
+            if (s.gold < price) continue;
+            s.gold -= price;
+            learnSkillFn(m, def.id);
+            taught++;
+          }
+        }
+        if (taught === 0) return void toast.error("Nothing affordable to train right now.");
+        pushLog(s, `The trainers taught ${taught} new skill${taught > 1 ? "s" : ""}.`, "info");
+        toast.success(`Learned ${taught} skill${taught > 1 ? "s" : ""}.`);
+      }),
+
+
+    setSkillCondition: (memberId: string, skillId: string, condition: SkillCondition) =>
+      update((s) => {
+        const sk = s.members.find((x) => x.id === memberId)?.skills.find((k) => k.skillId === skillId);
+        if (sk) sk.condition = condition;
+      }),
+
+    moveSkill: (memberId: string, skillId: string, dir: -1 | 1) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        const list = [...m.skills].sort((a, b) => a.priority - b.priority);
+        const i = list.findIndex((k) => k.skillId === skillId);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= list.length) return;
+        [list[i]!, list[j]!] = [list[j]!, list[i]!];
+        list.forEach((k, idx) => (k.priority = idx));
+        m.skills = list;
+      }),
+
+    claimDaily: (id: string) =>
+      update((s) => {
+        const def = DAILY_BY_ID[id];
+        const dm = [s.daily, s.weekly, s.monthly]
+          .flatMap((b) => b?.missions ?? [])
+          .find((x) => x.id === id);
+        if (!def || !dm || dm.claimed) return;
+        if (dm.progress < def.kills) return void toast.error("Contract not finished yet.");
+        dm.claimed = true;
+        s.gold += def.gold;
+        s.reputation += def.rep;
+        for (const r of [def.reward, def.reward2]) {
+          if (r) s.inventory[r.item] = (s.inventory[r.item] ?? 0) + r.qty;
+        }
+        pushLog(
+          s,
+          `${CADENCE_LABEL[def.cadence]} contract "${def.name}" claimed — ${def.gold} gold, ${def.rep} reputation.`,
+          "good",
+        );
+        toast.success(`Claimed ${def.name}`);
+      }),
+
+    /* ------------------------- identity & remembrance ------------------------ */
+
+    setCrest: (crest: Crest, motto?: string) =>
+      update((s) => {
+        s.crest = crest;
+        if (motto !== undefined) s.motto = motto;
+        toast.success("The heralds have redrawn your arms.");
+      }),
+
+    setPortrait: (memberId: string, portrait: Portrait) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        m.portrait = portrait;
+      }),
+
+    renameMember: (memberId: string, name: string) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        const clean = name.trim().slice(0, 28);
+        if (!m || !clean) return;
+        const was = m.name;
+        m.name = clean;
+        if (m.isLord) s.leaderName = clean;
+        pushLog(s, `${was} now answers to ${clean}.`, "info");
+      }),
+
+    /* ------------------------------ the realm -------------------------------- */
+
+    /** Break a rival's claim on a hunting ground with a pitched battle. */
+    contestRival: (rivalId: string, zoneId: string) =>
+      update((s) => {
+        const r = s.rivals?.find((x) => x.id === rivalId);
+        const zone = ZONE_BY_ID[zoneId];
+        if (!r || !zone) return;
+        const host = clanHostPower(s);
+        if (host <= 0) return void toast.error("You have no one to send.");
+        const res = resolveClash(host, r.power);
+        const name = RIVAL_BY_ID[rivalId]!.name;
+        // blood is paid either way
+        const roster = s.members.filter((m) => !m.isLord);
+        for (const m of roster) {
+          if (Math.random() >= res.casualtyRisk / 3) continue;
+          m.hp = Math.max(1, Math.round(m.hp * 0.35));
+          if (Math.random() < 0.22) {
+            s.members = s.members.filter((x) => x.id !== m.id);
+            for (const pp of s.parties) pp.memberIds = pp.memberIds.filter((x) => x !== m.id);
+            s.memorial = s.memorial ?? [];
+            s.memorial.unshift({
+              id: m.id,
+              name: m.name,
+              classId: m.classId,
+              level: m.level,
+              at: Date.now(),
+              where: `the field at ${zone.name}`,
+              mobKills: m.mobKills ?? 0,
+            });
+            pushLog(s, `${m.name} was killed fighting ${name}.`, "bad");
+          }
+        }
+        if (res.win) {
+          r.claims = r.claims.filter((z) => z !== zoneId);
+          r.power = Math.round(r.power * 0.82);
+          r.routed += 1;
+          r.hostility = Math.min(100, r.hostility + 12);
+          s.reputation += 60;
+          pushLog(s, `${name} was driven off ${zone.name}. The ground is yours.`, "good");
+          chronicle(s, "war", `${zone.name} taken from ${name}`, `Their tax collectors were sent home without their banners. +60 reputation.`);
+          toast.success(`${zone.name} is free of ${name}.`);
+        } else {
+          r.hostility = Math.min(100, r.hostility + 18);
+          s.reputation = Math.max(0, s.reputation - 25);
+          pushLog(s, `Your host broke against ${name} at ${zone.name}.`, "bad");
+          chronicle(s, "loss", `Repulsed at ${zone.name}`, `${name} held the line. The clan came home lighter than it left.`);
+          toast.error(`Defeated by ${name}.`);
+        }
+      }),
+
+    /** Declare and resolve a siege of Ravenhold Keep. */
+    besiegeCastle: () =>
+      update((s) => {
+        const gate = siegeReady(s);
+        if (!gate.ok) return void toast.error(gate.why);
+        s.castle = s.castle ?? initialCastle();
+        const defense = garrisonPower(s.castle, s.rivals ?? []);
+        const host = clanHostPower(s);
+        const res = resolveClash(host, defense);
+        const holderName = s.castle.holder ? RIVAL_BY_ID[s.castle.holder]?.name ?? "the crown garrison" : "the crown garrison";
+        for (const m of s.members.filter((x) => !x.isLord)) {
+          if (Math.random() >= res.casualtyRisk) continue;
+          if (Math.random() < 0.3) {
+            s.members = s.members.filter((x) => x.id !== m.id);
+            for (const pp of s.parties) pp.memberIds = pp.memberIds.filter((x) => x !== m.id);
+            s.memorial = s.memorial ?? [];
+            s.memorial.unshift({
+              id: m.id,
+              name: m.name,
+              classId: m.classId,
+              level: m.level,
+              at: Date.now(),
+              where: "the walls of Ravenhold",
+              mobKills: m.mobKills ?? 0,
+            });
+            pushLog(s, `${m.name} died on the walls of Ravenhold.`, "bad");
+          } else {
+            m.hp = Math.max(1, Math.round(m.hp * 0.3));
+          }
+        }
+        if (res.win) {
+          s.castle.holder = "player";
+          s.castle.sinceAt = Date.now();
+          s.castle.purse = 0;
+          s.castle.lastTickAt = Date.now();
+          s.castle.nextAssaultAt = Date.now() + 25 * 60_000;
+          s.reputation += 250;
+          const lord = lordOf(s);
+          if (lord) lord.title = "Lord of Ravenhold";
+          pushLog(s, `Ravenhold is taken. ${s.clanName} holds the trade road.`, "good");
+          chronicle(s, "triumph", "Ravenhold is taken", `The gate came down at dusk and ${holderName} surrendered the keep. The tax road belongs to ${s.clanName}.`);
+          toast.success("Ravenhold is yours.");
+        } else {
+          s.reputation = Math.max(0, s.reputation - 80);
+          pushLog(s, `The siege of Ravenhold failed. ${holderName} still holds the gate.`, "bad");
+          chronicle(s, "loss", "The siege fails", `${holderName} held Ravenhold. The ladders are still lying in the ditch.`);
+          toast.error("The siege failed.");
+        }
+      }),
+
+    collectTax: () =>
+      update((s) => {
+        if (!s.castle || s.castle.holder !== "player" || s.castle.purse <= 0)
+          return void toast.error("There is nothing in the strongbox.");
+        const purse = Math.round(s.castle.purse);
+        s.gold += purse;
+        s.castle.purse = 0;
+        pushLog(s, `Collected ${purse.toLocaleString()} gold in road tax from Ravenhold.`, "good");
+        toast.success(`+${purse.toLocaleString()} gold`);
+      }),
+
+    /** swear the company to an existing clan instead of founding your own */
+    joinClan: (clanId: string) =>
+      update((s) => {
+        const def = RIVAL_BY_ID[clanId];
+        if (!def) return;
+        const check = canJoinClan(s);
+        if (!check.ok) return void toast.error(check.why);
+        s.reputation -= JOIN_REQ.rep;
+        s.gold += JOIN_REQ.stipend;
+        s.allegiance = {
+          clanId: def.id,
+          clanName: def.name,
+          rank: "Sworn Captain",
+          joinedAt: Date.now(),
+        };
+        const rival = s.rivals?.find((r) => r.id === def.id);
+        if (rival) rival.hostility = 0;
+        pushLog(
+          s,
+          `${s.leaderName} swore the company to ${def.name}. A 500 gold stipend and a second banner come with the oath.`,
+          "good",
+        );
+        chronicle(
+          s,
+          "founding",
+          `Sworn to ${def.name}`,
+          `Rather than raise a crest of their own, ${s.leaderName} took service under ${def.name} as Sworn Captain.`,
+        );
+        toast.success(`Sworn to ${def.name}`);
+      }),
+
+    /** break the oath and go back to being a free company */
+    leaveClan: () =>
+      update((s) => {
+        if (!s.allegiance) return void toast.error("You serve no clan.");
+        const { clanName: name, clanId } = s.allegiance;
+        s.allegiance = null;
+        const rival = s.rivals?.find((r) => r.id === clanId);
+        if (rival) rival.hostility = Math.min(100, rival.hostility + 25);
+        while (s.parties.length > maxParties(s.clanLevel)) {
+          const dropped = s.parties.pop();
+          if (!dropped) break;
+          for (const id of dropped.memberIds) {
+            const m = s.members.find((x) => x.id === id);
+            if (m) m.partyId = null;
+          }
+        }
+        pushLog(s, `The company broke its oath to ${name}.`, "bad");
+        toast(`No longer sworn to ${name}`);
+      }),
+
+    levelUpClan: () =>
+      update((s) => {
+        const req = nextClanReq(s.clanLevel);
+        if (!req) return void toast.error("Your clan already stands at its peak.");
+        if (s.reputation < req.rep || s.gold < req.gold)
+          return void toast.error("Not enough reputation or gold.");
+        if (req.level === 1 && s.allegiance) {
+          pushLog(s, `The company left ${s.allegiance.clanName} to raise its own crest.`, "info");
+          s.allegiance = null;
+        }
+        s.reputation -= req.rep;
+        s.gold -= req.gold;
+        s.clanLevel = req.level;
+        if (req.level === 1) {
+          pushLog(s, `${s.clanName} is founded. The crest flies at last.`, "good");
+          chronicle(
+            s,
+            "founding",
+            `${s.clanName} is founded`,
+            `What began as one company is now a clan. ${s.members.length} blades stand under the crest.`,
+          );
+          toast.success(`${s.clanName} is founded!`);
+        } else {
+          pushLog(s, `The clan rose to level ${req.level}. New banner slot unlocked.`, "good");
+          chronicle(
+            s,
+            "rise",
+            `${s.clanName} rises to level ${req.level}`,
+            `Another banner may take the field. ${s.members.length} sworn stand under the crest.`,
+          );
+          toast.success(`Clan level ${req.level}!`);
+        }
+      }),
+
+    craft: (recipeId: string) =>
+      update((s) => {
+        const r = recipeById(s, recipeId);
+        if (!r) return;
+        const check = canCraft(s, recipeId);
+        if (!check.ok) return void toast.error(check.why);
+        const chance = craftChance(s, recipeId);
+        s.gold -= forgeFee(s, r.gold);
+        for (const i of r.inputs) s.inventory[i.item] = (s.inventory[i.item] ?? 0) - i.qty;
+        const name = ITEM_BY_ID[r.result]?.name;
+        if (Math.random() < chance) {
+          const quality = rollQuality(qualityStepChance(s, recipeId));
+          const made = qualityItemId(r.result, quality);
+          const madeName = ITEM_BY_ID[made]?.name ?? name;
+          s.inventory[made] = (s.inventory[made] ?? 0) + (r.qty ?? 1);
+          pushLog(
+            s,
+            quality > 0
+              ? `Forged ${madeName} — ${qualityLabel(quality)} quality ${quality}/${MAX_QUALITY}.`
+              : `Forged ${madeName}.`,
+            "good",
+          );
+          toast.success(quality > 0 ? `Forged ${madeName} (quality ${quality})` : `Forged ${madeName}`);
+          if (quality >= 12 ) {
+            chronicle(
+              s,
+              "forge",
+              `${madeName} leaves the forge`,
+              quality > 0
+                ? `Quality ${quality}/${MAX_QUALITY}. The smiths will be talking about this one for a while.`
+                : "A piece worth writing down.",
+            );
+          }
+        } else if ((s.inspiration ?? 0) > 0) {
+          // Inspiration lets the smiths take the check again
+          s.inspiration = (s.inspiration ?? 0) - 1;
+          if (Math.random() < chance) {
+            const quality = rollQuality(qualityStepChance(s, recipeId));
+            const made = qualityItemId(r.result, quality);
+            const madeName = ITEM_BY_ID[made]?.name ?? name;
+            s.inventory[made] = (s.inventory[made] ?? 0) + (r.qty ?? 1);
+            pushLog(s, `Inspiration spent — the second attempt held. Forged ${madeName}.`, "good");
+            toast.success(`Inspired reforge: ${madeName}`);
+          } else {
+            pushLog(s, `Inspiration spent, and still the ${name} shattered.`, "bad");
+            toast.error(`Craft failed twice: ${name}`);
+          }
+        } else {
+          pushLog(s, `The forge failed — ${name} shattered, materials lost.`, "bad");
+          toast.error(`Craft failed: ${name}`);
+        }
+      }),
+
+    /**
+     * Public town forge — no artisans required, heavier fee, and a success is
+     * always a standard piece (quality 0). Predictable by design.
+     */
+    systemForge: (recipeId: string, times = 1) =>
+      update((s) => {
+        const r = recipeById(s, recipeId);
+        if (!r) return;
+        const name = ITEM_BY_ID[r.result]?.name ?? "the piece";
+        let made = 0;
+        let lost = 0;
+        let attempts = 0;
+        let goldSpent = 0;
+        for (let i = 0; i < Math.max(1, times); i++) {
+          const check = canSystemForge(s, recipeId);
+          if (!check.ok) {
+            if (i === 0) toast.error(check.why);
+            break;
+          }
+          const fee = systemForgeFee(s, recipeId);
+          s.gold -= fee;
+          goldSpent += fee;
+          attempts++;
+          for (const inp of r.inputs) s.inventory[inp.item] = (s.inventory[inp.item] ?? 0) - inp.qty;
+          if (Math.random() < systemForgeChance(s, recipeId)) {
+            s.inventory[r.result] = (s.inventory[r.result] ?? 0) + (r.qty ?? 1);
+            made += r.qty ?? 1;
+          } else {
+            lost++;
+          }
+        }
+        if (attempts > 0) {
+          const entry = {
+            id: uid(),
+            at: Date.now(),
+            recipeId,
+            result: r.result,
+            attempts,
+            successes: attempts - lost,
+            produced: made,
+            goldSpent,
+            chance: systemForgeChance(s, recipeId),
+            inputs: r.inputs.map((inp) => ({ item: inp.item, qty: inp.qty * attempts })),
+          };
+          s.forgeHistory = [entry, ...(s.forgeHistory ?? [])].slice(0, 80);
+        }
+        if (made > 0) {
+          pushLog(s, `System Forge: ${made} × ${name} struck to standard pattern.`, "good");
+          toast.success(`Forged ${made} × ${name} (standard)`);
+        }
+        if (lost > 0) {
+          pushLog(s, `System Forge: ${lost} attempt(s) failed — materials lost.`, "bad");
+          if (made === 0) toast.error(`Forge failed: ${name}`);
+        }
+      }),
+
+
+
+    equip: (memberId: string, item: ItemId) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        const def = ITEM_BY_ID[item];
+        if (!m || !def) return;
+        if ((s.inventory[item] ?? 0) < 1) return;
+        const slot = slotOf(item);
+        if (!slot) return void toast.error("That cannot be worn.");
+        if (m.gear.some((g) => slotOf(g) === slot))
+          return void toast.error(`${m.name} already has a ${slot} equipped.`);
+        if (m.level < (def.reqLevel ?? 1))
+          return void toast.error(`${def.name} needs level ${def.reqLevel}.`);
+        s.inventory[item] = (s.inventory[item] ?? 0) - 1;
+        m.gear.push(item);
+      }),
+
+    unequip: (memberId: string, index: number) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        const [it] = m.gear.splice(index, 1);
+        if (it) s.inventory[it] = (s.inventory[it] ?? 0) + 1;
+      }),
+
+    sell: (item: ItemId) =>
+      update((s) => {
+        const have = s.inventory[item] ?? 0;
+        if (have < 1) return;
+        s.inventory[item] = have - 1;
+        s.gold += Math.round((ITEM_BY_ID[item]?.value ?? 0) * keepEffects(s).sellMult);
+      }),
+
+    /* ------------------------------- market ------------------------------- */
+
+    toggleShots: () =>
+      update((s) => {
+        s.shotsEnabled = s.shotsEnabled === false;
+        pushLog(
+          s,
+          s.shotsEnabled ? "Banners will load shots before every strike." : "Shots holstered — banners fight bare.",
+          "info",
+        );
+      }),
+
+    toggleMemberShots: (memberId: string) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        m.shotsOn = m.shotsOn === false;
+        pushLog(
+          s,
+          m.shotsOn
+            ? `${m.name} will load shots before every strike.`
+            : `${m.name} holsters their shots.`,
+          "info",
+        );
+      }),
+
+    refineShots: (kind: ShotKind, grade: Grade, blessed: boolean, batches = 1) =>
+      update((s) => {
+        const check = canRefine(s, kind, grade, blessed, batches);
+        if (!check.ok) return void toast.error(check.why);
+        const c = shotBatchCost(grade, blessed);
+        s.inventory[emberId(kind)] = (s.inventory[emberId(kind)] ?? 0) - c.embers * batches;
+        s.gold -= c.fee * batches;
+        const id = shotId(kind, grade, blessed);
+        const made = c.qty * batches;
+        s.inventory[id] = (s.inventory[id] ?? 0) + made;
+        pushLog(s, `The market pressed ${made} × ${ITEM_BY_ID[id]?.name}.`, "good");
+        toast.success(`+${made} ${ITEM_BY_ID[id]?.name}`);
+      }),
+
+    /* ------------------------------ scriptorium ------------------------------ */
+
+    /** Bind a spell into vellum. WIT rules the weave, MEN rules the recoil. */
+    imprintScroll: (memberId: string, scrollId: string, tries = 1) =>
+      update((s) => {
+        const def = SCROLL_BY_ID[scrollId];
+        if (!def) return;
+        let made = 0;
+        let fizzles = 0;
+        let backfires = 0;
+        let last = "";
+        for (let i = 0; i < tries; i++) {
+          const check = canImprint(s, memberId, scrollId);
+          if (!check.ok) {
+            if (i === 0) return void toast.error(check.why);
+            last = check.why;
+            break;
+          }
+          const m = s.members.find((x) => x.id === memberId)!;
+          const st = memberStats(m);
+          const hpBefore = Math.round(m.hp);
+          const mpBefore = Math.round(m.mp);
+          const stockBefore = s.inventory[def.id] ?? 0;
+          // the ink, the vellum and the caster's own strength are spent regardless
+          for (const inp of def.inputs) {
+            s.inventory[inp.item] = (s.inventory[inp.item] ?? 0) - inp.qty;
+          }
+          s.gold -= def.gold;
+          m.mp = Math.max(0, m.mp - def.mp);
+
+          const detail = rollOutcomeDetail(scribeOdds(m, def), st.wit, st.men);
+          const outcome = detail.outcome;
+          let yielded = 0;
+          let note = "";
+          if (outcome === "improved") {
+            yielded = IMPROVED_YIELD;
+            note = `${m.name} bound ${def.name} flawlessly — two scrolls from one weave.`;
+            pushLog(s, note, "good");
+          } else if (outcome === "success") {
+            yielded = 1;
+            note = `${m.name} bound ${def.name}.`;
+          } else if (outcome === "fizzle") {
+            fizzles += 1;
+            note = `${m.name} ruined the vellum — ${def.name} never took hold.`;
+          } else {
+            backfires += 1;
+            m.hp = Math.max(1, Math.round(m.hp - maxHp(m) * 0.22));
+            m.mp = Math.max(0, Math.round(m.mp - maxMp(m) * 0.15));
+            note = `${def.name} backfired on ${m.name} — the sigil burned inward.`;
+            pushLog(s, note, "bad");
+          }
+          made += yielded;
+          if (yielded > 0) s.inventory[def.id] = stockBefore + yielded;
+
+          s.scrollLog = [
+            ...(s.scrollLog ?? []),
+            {
+              id: attemptId(),
+              at: Date.now(),
+              memberId: m.id,
+              memberName: m.name,
+              scrollId: def.id,
+              scrollName: def.name,
+              phase: "imprint" as const,
+              detail,
+              cost: {
+                gold: def.gold,
+                mp: def.mp,
+                inputs: def.inputs.map((i) => ({ item: i.item as string, qty: i.qty })),
+              },
+              hpBefore,
+              hpAfter: Math.round(m.hp),
+              maxHp: Math.round(maxHp(m)),
+              mpBefore,
+              mpAfter: Math.round(m.mp),
+              maxMp: Math.round(maxMp(m)),
+              stockBefore,
+              stockAfter: stockBefore + yielded,
+              note,
+            },
+          ].slice(-SCROLL_LOG_CAP);
+        }
+
+        const parts = [
+          made ? `+${made} ${def.name}` : null,
+          fizzles ? `${fizzles} ruined` : null,
+          backfires ? `${backfires} backfired` : null,
+        ].filter(Boolean);
+        if (made > 0) toast.success(parts.join(" · "));
+        else if (parts.length) toast.error(parts.join(" · "));
+        if (last) toast.message(last);
+      }),
+
+    toggleScrolls: () =>
+      update((s) => {
+        s.scrollsEnabled = s.scrollsEnabled === false;
+        pushLog(
+          s,
+          s.scrollsEnabled
+            ? "Banners will carry scrolls into the field."
+            : "Scrolls stay locked in the warehouse.",
+          "info",
+        );
+      }),
+
+
+    /* ------------------------------ clan keep ------------------------------ */
+
+    upgradeKeep: (id: KeepBuildingId) =>
+      update((s) => {
+        const b = KEEP_BY_ID[id];
+        if (!b) return;
+        const check = canUpgradeKeep(s, id);
+        if (!check.ok) return void toast.error(check.why);
+        const lvl = keepLevel(s, id);
+        const cost = keepUpgradeCost(b, lvl);
+        s.gold -= cost.gold;
+        s.reputation -= cost.rep;
+        s.keep = { ...(s.keep ?? {}), [id]: lvl + 1 };
+        pushLog(s, `The ${b.name} was raised to level ${lvl + 1}.`, "good");
+        toast.success(`${b.name} — level ${lvl + 1}`);
+      }),
+
+    /** infirmary: pay the surgeons to put everyone resting back to full health */
+    tendWounded: () =>
+      update((s) => {
+        if (keepLevel(s, "infirmary") < 1)
+          return void toast.error("Build the Infirmary first.");
+        const bill = mendBill(s);
+        if (!bill.patients.length) return void toast.error("Nobody needs tending.");
+        if (s.gold < bill.gold) return void toast.error("Not enough gold for the surgeons.");
+        s.gold -= bill.gold;
+        for (const p of bill.patients) {
+          const m = s.members.find((x) => x.id === p.id);
+          if (!m) continue;
+          m.hp = maxHp(m);
+          m.mp = maxMp(m);
+        }
+        pushLog(
+          s,
+          `The infirmary patched up ${bill.patients.length} champion(s) for ${bill.gold} gold.`,
+          "good",
+        );
+        toast.success(`${bill.patients.length} champions mended`);
+      }),
+
+    /** training yard: a paid drill session that pushes skill mastery */
+    drill: () =>
+      update((s) => {
+        const eff = keepEffects(s);
+        if (!eff.drillXp) return void toast.error("Build the Training Yard first.");
+        if (s.gold < eff.drillCost) return void toast.error("Not enough gold for the drill.");
+        const busy = new Set(s.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
+        const resting = s.members.filter((m) => !busy.has(m.id) && m.hp > 0 && m.skills.length);
+        if (!resting.length) return void toast.error("No champions are resting at the keep.");
+        s.gold -= eff.drillCost;
+        for (const m of resting) {
+          for (const sk of m.skills) {
+            if (sk.level >= MAX_SKILL_LEVEL) continue;
+            sk.xp += eff.drillXp;
+            while (sk.level < MAX_SKILL_LEVEL && sk.xp >= xpForSkillLevel(sk.level)) {
+              sk.xp -= xpForSkillLevel(sk.level);
+              sk.level += 1;
+            }
+          }
+        }
+        pushLog(s, `Drill session at the yard — ${resting.length} champion(s) trained.`, "good");
+        toast.success(`${resting.length} champions drilled`);
+      }),
+
+    /* ------------------------------ Muster hall ------------------------------ */
+
+    /** send heralds out to find party leaders willing to be courted */
+    scoutCompanies: () =>
+      update((s) => {
+        const cost = prospectCost(s.clanLevel);
+        if (s.gold < cost) return void toast.error("Not enough gold to send heralds.");
+        s.gold -= cost;
+        s.companies = [
+          ...(s.companies ?? []).filter((c) => c.kind === "petition"),
+          ...rollProspects(Math.max(1, s.clanLevel)),
+        ];
+        s.prospectsAt = Date.now();
+        pushLog(s, "Heralds ride out looking for companies without a banner.", "info");
+      }),
+
+    /** take a whole free company into the clan, optionally as its own banner */
+    acceptCompany: (companyId: string, keepTogether = true) =>
+      update((s) => {
+        const c = (s.companies ?? []).find((x) => x.id === companyId);
+        if (!c) return;
+        const check = canAcceptCompany(s, c);
+        if (!check.ok) return void toast.error(check.why);
+
+        s.gold -= c.ask;
+        s.reputation += Math.round(companyPower(c) / 120);
+
+        let partyId: string | null = null;
+        if (keepTogether && s.parties.length < maxParties(s.clanLevel, !!s.allegiance)) {
+          partyId = uid();
+          s.parties.push({ id: partyId, name: c.name, memberIds: [], run: null });
+        }
+        for (const m of c.members) {
+          const joined = { ...m, partyId };
+          s.members.push(joined);
+          if (partyId) s.parties.find((p) => p.id === partyId)!.memberIds.push(joined.id);
+        }
+        s.companies = (s.companies ?? []).filter((x) => x.id !== companyId);
+        pushLog(
+          s,
+          `${c.leaderName} brings ${c.members.length} blade(s) of ${c.name} under your crest.`,
+          "good",
+        );
+        toast.success(`${c.name} joined${partyId ? " as their own banner" : ""}`);
+      }),
+
+    declineCompany: (companyId: string) =>
+      update((s) => {
+        const c = (s.companies ?? []).find((x) => x.id === companyId);
+        if (!c) return;
+        s.companies = (s.companies ?? []).filter((x) => x.id !== companyId);
+        if (c.kind === "petition") {
+          s.reputation = Math.max(0, s.reputation - 2);
+          pushLog(s, `${c.leaderName} of ${c.name} was turned away at the gate.`, "bad");
+        }
+      }),
+  };
+
+
+  return { state, hydrated, api, CLAN_LEVELS } as {
+    state: GameState | null;
+    hydrated: boolean;
+    api: typeof api;
+    CLAN_LEVELS: typeof CLAN_LEVELS;
+  };
+}
+
+export type ClanApi = ReturnType<typeof useClanGame>["api"];
+export type { Member };
