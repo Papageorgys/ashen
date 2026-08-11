@@ -759,6 +759,27 @@ export function synergyBonus(ms: Member[]) {
   return out;
 }
 
+/** How much each shield-bond adds, and the ceiling — so bonds help but never dominate. */
+export const BOND_POWER_PER_PAIR = 0.04;
+export const BOND_POWER_CAP = 0.2;
+
+/** Shield-bonded pairs (affinity ≥ BOND_AT) both riding in this banner. */
+export function bondedPairsInParty(state: GameState, party: Party): number {
+  const ids = party.memberIds;
+  let n = 0;
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      if (getAffinity(state, ids[i]!, ids[j]!) >= BOND_AT) n++;
+    }
+  }
+  return n;
+}
+
+/** The power edge a banner gains from champions who fight beside those they're bonded to. */
+export function bondBonus(state: GameState, party: Party): number {
+  return Math.min(BOND_POWER_CAP, bondedPairsInParty(state, party) * BOND_POWER_PER_PAIR);
+}
+
 export function partyPower(state: GameState, party: Party) {
   const ms = partyMembers(state, party);
   const base = ms.reduce((s, m) => s + memberPower(m), 0);
@@ -769,6 +790,7 @@ export function partyPower(state: GameState, party: Party) {
   if (roles.has("chanter")) mult += 0.08;
   if (ms.length === MAX_PARTY_SIZE) mult += 0.15;
   mult += synergyBonus(ms).power / 100;
+  mult += bondBonus(state, party);
   return Math.round(base * Math.max(0.4, mult));
 }
 
