@@ -112,3 +112,56 @@ export async function postChat(
   if (error || !data) return null;
   return data as unknown as ChatMessageRow;
 }
+
+export type DirectMessageRow = {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  sender_clan_name: string;
+  sender_leader_name: string;
+  crest: unknown;
+  body: string;
+  created_at: string;
+};
+
+/** The whisper thread between the signed-in soul and one other, oldest-first. */
+export async function fetchDMThread(
+  myId: string,
+  otherId: string,
+  limit = 60,
+): Promise<DirectMessageRow[]> {
+  const { data } = await supabase
+    .from("direct_messages")
+    .select("*")
+    .or(
+      `and(sender_id.eq.${myId},recipient_id.eq.${otherId}),and(sender_id.eq.${otherId},recipient_id.eq.${myId})`,
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data ?? []) as unknown as DirectMessageRow[]).reverse();
+}
+
+/** Send a whisper. `senderId` must equal the signed-in user (enforced by RLS). */
+export async function postDM(
+  senderId: string,
+  recipientId: string,
+  body: string,
+  who: { clanName?: string | undefined; leaderName?: string | undefined; crest?: unknown },
+): Promise<DirectMessageRow | null> {
+  const trimmed = body.trim().slice(0, 500);
+  if (!trimmed || senderId === recipientId) return null;
+  const { data, error } = await supabase
+    .from("direct_messages")
+    .insert({
+      sender_id: senderId,
+      recipient_id: recipientId,
+      sender_clan_name: who.clanName ?? "",
+      sender_leader_name: who.leaderName ?? "",
+      crest: (who.crest ?? null) as never,
+      body: trimmed,
+    })
+    .select()
+    .single();
+  if (error || !data) return null;
+  return data as unknown as DirectMessageRow;
+}

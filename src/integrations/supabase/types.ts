@@ -50,6 +50,39 @@ export type Database = {
         }
         Relationships: []
       }
+      direct_messages: {
+        Row: {
+          body: string
+          created_at: string
+          crest: Json | null
+          id: string
+          recipient_id: string
+          sender_clan_name: string
+          sender_id: string
+          sender_leader_name: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          recipient_id: string
+          sender_clan_name?: string
+          sender_id: string
+          sender_leader_name?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          recipient_id?: string
+          sender_clan_name?: string
+          sender_id?: string
+          sender_leader_name?: string
+        }
+        Relationships: []
+      }
       game_saves: {
         Row: {
           created_at: string
