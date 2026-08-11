@@ -1,6 +1,7 @@
 import type { Mark, MarkKind } from "@/lib/game/engine";
 
 const KIND: Record<MarkKind, { label: string; tone: string }> = {
+  oath: { label: "Oath", tone: "border-primary/60 text-primary" },
   clutch: { label: "Clutch", tone: "border-gold/70 text-gold" },
   survivor: { label: "Grief", tone: "border-border/70 text-muted-foreground" },
   wounded: { label: "Scar", tone: "border-destructive/60 text-destructive" },
