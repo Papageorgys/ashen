@@ -595,6 +595,11 @@ function Index() {
           clanName={state.clanName}
           leaderName={state.leaderName}
           crest={state.crest ?? null}
+          leadZoneId={
+            state.parties
+              .map((p) => p.run?.zoneId ?? p.travel?.zoneId ?? p.farming ?? null)
+              .find(Boolean) ?? null
+          }
         />
       </div>
       <Toaster />

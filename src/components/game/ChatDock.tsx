@@ -13,6 +13,7 @@ import {
 } from "@/lib/cloud/sync";
 import { ClanCrest } from "@/components/game/ClanCrest";
 import { DEFAULT_CREST, type Crest } from "@/lib/game/identity";
+import { regionForZone } from "@/lib/game/data";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,8 @@ type Props = {
   clanName?: string;
   leaderName?: string;
   crest?: Crest | null;
+  /** the zone your lead banner is in — the Near Reaches follows it unless pinned */
+  leadZoneId?: string | null;
 };
 
 type View = "world" | "near" | "soul";
@@ -77,11 +80,14 @@ function accentOf(crest: unknown): string {
   return c?.accent || DEFAULT_CREST.accent;
 }
 
-export function ChatDock({ signedIn, myId, clanName, leaderName, crest }: Props) {
+export function ChatDock({ signedIn, myId, clanName, leaderName, crest, leadZoneId }: Props) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(() => readFlag("chat-open", "0") === "1");
   const [view, setView] = useState<View>("world");
   const [region, setRegion] = useState(() => readFlag("chat-region", REGIONS[0]!.id));
+  // The Near Reaches follows your lead banner's zone until you pin a reach by hand.
+  const [pinned, setPinned] = useState(() => readFlag("chat-region-pinned", "0") === "1");
+  const autoRegion = leadZoneId ? regionForZone(leadZoneId) : null;
 
   // public channels
   const [world, setWorld] = useState<ChatMessageRow[] | null>(null);
@@ -107,6 +113,11 @@ export function ChatDock({ signedIn, myId, clanName, leaderName, crest }: Props)
 
   useEffect(() => window.localStorage.setItem("chat-open", open ? "1" : "0"), [open]);
   useEffect(() => window.localStorage.setItem("chat-region", region), [region]);
+  useEffect(() => window.localStorage.setItem("chat-region-pinned", pinned ? "1" : "0"), [pinned]);
+  // Follow the banner unless the player has pinned a reach.
+  useEffect(() => {
+    if (!pinned && autoRegion && autoRegion !== region) setRegion(autoRegion);
+  }, [pinned, autoRegion, region]);
 
   const speaker = useMemo(
     () => clanName?.trim() || leaderName?.trim() || "A wanderer",
@@ -358,18 +369,40 @@ export function ChatDock({ signedIn, myId, clanName, leaderName, crest }: Props)
           <p className="truncate text-[10px] italic text-muted-foreground">{theme.sub}</p>
         )}
         {view === "near" && (
-          <select
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
-            aria-label="Choose a reach"
-            className="ml-auto rounded-sm border border-border/60 bg-background px-1.5 py-0.5 text-[11px] text-foreground"
-          >
-            {REGIONS.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+          <div className="ml-auto flex items-center gap-1">
+            {pinned && autoRegion ? (
+              <button
+                type="button"
+                onClick={() => setPinned(false)}
+                title="Follow your banner"
+                className="text-[10px] uppercase tracking-widest text-muted-foreground hover:text-grade-c"
+              >
+                follow
+              </button>
+            ) : autoRegion ? (
+              <span
+                className="text-[9px] uppercase tracking-widest text-grade-c"
+                title="Following your lead banner"
+              >
+                ⚑ here
+              </span>
+            ) : null}
+            <select
+              value={region}
+              onChange={(e) => {
+                setRegion(e.target.value);
+                setPinned(true);
+              }}
+              aria-label="Choose a reach"
+              className="rounded-sm border border-border/60 bg-background px-1.5 py-0.5 text-[11px] text-foreground"
+            >
+              {REGIONS.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 
