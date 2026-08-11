@@ -6,6 +6,8 @@ import { surgeZones, SURGE_XP_PCT, SURGE_REP_PCT } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import { cn } from "@/lib/utils";
 import { DRAG_BANNER as DRAG_MIME } from "@/lib/game/dnd";
+import { AtlasTerrain } from "./AtlasTerrain";
+import { AtlasMotifs } from "./AtlasMotifs";
 
 /** Where a banner piece stands when it is not in the field: the clan keep. */
 const HOME = { x: 35, y: 46 };
@@ -402,7 +404,58 @@ export function WorldMap({
         role={interactive ? "application" : undefined}
         aria-label={interactive ? "War table: deploy banners across the Ashen Realm" : undefined}
       >
-        <MapPlate />
+        <AtlasTerrain />
+        <AtlasMotifs />
+
+        {/* aged-atlas overlay: kingsroads, vignette and engraved frame over the relief */}
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox="0 0 100 62"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <defs>
+            <radialGradient id="mapVignette" cx="50%" cy="50%" r="74%">
+              <stop offset="60%" stopColor="var(--map-parchment-dark)" stopOpacity="0" />
+              <stop offset="100%" stopColor="var(--map-parchment-dark)" stopOpacity="0.6" />
+            </radialGradient>
+          </defs>
+          {ROADS.map(([x1, y1, x2, y2]) => (
+            <line
+              key={`${x1}-${y1}-${x2}-${y2}`}
+              x1={x1}
+              y1={y1 * 0.62}
+              x2={x2}
+              y2={y2 * 0.62}
+              stroke="var(--map-road)"
+              strokeOpacity="0.5"
+              strokeWidth="0.22"
+              strokeDasharray="1.1 1.0"
+            />
+          ))}
+          <rect x="0" y="0" width="100" height="62" fill="url(#mapVignette)" />
+          <rect
+            x="1"
+            y="0.8"
+            width="98"
+            height="60.4"
+            fill="none"
+            stroke="var(--map-ink)"
+            strokeOpacity="0.6"
+            strokeWidth="0.35"
+          />
+          <rect
+            x="2"
+            y="1.8"
+            width="96"
+            height="58.4"
+            fill="none"
+            stroke="var(--map-ink)"
+            strokeOpacity="0.35"
+            strokeWidth="0.15"
+          />
+        </svg>
 
         {/* hour of high activity */}
         <div className="pointer-events-none absolute left-2 top-2 z-20 max-w-[70%] rounded-sm border border-gold/50 bg-card/85 px-2 py-1 shadow-sm">
