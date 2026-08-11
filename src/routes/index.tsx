@@ -459,9 +459,7 @@ function Index() {
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <TitleBar state={state} email={user?.email ?? null} signedIn={!!user} />
-        {founded && (
-          <BossStrip boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
-        )}
+        {founded && <BossStrip boss={boss} onOpen={() => setTab("boss")} />}
 
         <Tabs
           value={activeTab}
