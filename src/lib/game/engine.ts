@@ -328,6 +328,8 @@ export interface GameState {
   rawAsh?: number;
   /** an outstanding debt to the Gilded Compact's Ledger (§6.3) */
   loan?: { principal: number; owed: number; dueAt: number } | undefined;
+  /** ids of the vassal houses sworn to your banner (§8.1) */
+  vassals?: string[];
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];
@@ -1343,6 +1345,45 @@ export function loanCeiling(state: GameState): number {
   return Math.max(500, state.clanLevel * LEDGER.maxLoanPerLevel);
 }
 
+/**
+ * Feudal vassals (Systems Bible §8.1), AI model. Houses swear fealty to your
+ * banner: they tithe up the chain, and turn out for your defence. The engine
+ * offers the bargain; it never compels it — fealty is freely given (and can be
+ * released). Allegiance is to a lord, not a realm.
+ */
+export interface VassalHouse {
+  id: string;
+  name: string;
+  blurb: string;
+  power: number;
+  /** gold tithed up the chain per hour */
+  tithe: number;
+  /** the gift of gold that secures their oath */
+  cost: number;
+  reqLevel: number;
+}
+
+export const VASSAL_HOUSES: VassalHouse[] = [
+  { id: "kessel", name: "House Kessel", blurb: "Fen-folk levies — modest swords, a steady tithe.", power: 500, tithe: 16, cost: 900, reqLevel: 3 },
+  { id: "vantar", name: "House Vantar", blurb: "Border knights who ride for a lord, not a crown.", power: 950, tithe: 11, cost: 1600, reqLevel: 4 },
+  { id: "dromm", name: "House Dromm", blurb: "Grim veterans of the Sunless War — heavy, and proud.", power: 1500, tithe: 7, cost: 2600, reqLevel: 6 },
+  { id: "ashfeld", name: "House Ashfeld", blurb: "Ash-gatherers turned sellsword — they pay their way.", power: 700, tithe: 22, cost: 1400, reqLevel: 5 },
+];
+
+export const VASSAL_BY_ID: Record<string, VassalHouse> = Object.fromEntries(
+  VASSAL_HOUSES.map((h) => [h.id, h]),
+);
+
+export function swornVassals(state: GameState): VassalHouse[] {
+  return (state.vassals ?? []).map((id) => VASSAL_BY_ID[id]).filter((h): h is VassalHouse => !!h);
+}
+export function vassalPower(state: GameState): number {
+  return swornVassals(state).reduce((s, h) => s + h.power, 0);
+}
+export function vassalTithe(state: GameState): number {
+  return swornVassals(state).reduce((s, h) => s + h.tithe, 0);
+}
+
 /** Gold you'd get for refining the whole raw-Ash hoard right now. */
 export function refineAshValue(state: GameState): number {
   return Math.floor((state.rawAsh ?? 0) * RAW_ASH.refineRate);
@@ -1407,6 +1448,15 @@ export function realmPulse(state: GameState) {
     state.reputation = Math.max(0, Math.round(state.reputation - LEDGER.overdueRepDrip * hours));
   }
 
+  // Vassals tithe up the chain (§8.1) — into the castle purse if you hold a seat, else your coffers.
+  if (hours > 0) {
+    const tithe = Math.round(vassalTithe(state) * hours);
+    if (tithe > 0) {
+      if (state.castle?.holder === "player") state.castle.purse += tithe;
+      else state.gold += tithe;
+    }
+  }
+
   for (const r of state.rivals) {
     const def = RIVAL_BY_ID[r.id]!;
     r.power = Math.round(r.power * (1 + 0.012 * def.ambition));
@@ -1445,7 +1495,11 @@ export function realmPulse(state: GameState) {
     } else if (state.castle.nextAssaultAt && now >= state.castle.nextAssaultAt) {
       const attacker =
         state.rivals.slice().sort((a, b) => b.hostility - a.hostility)[0] ?? state.rivals[0]!;
-      const res = resolveClash(attacker.power * 1.1 * toll.wardMult, clanHostPower(state) + 400);
+      // vassals turn out for the defence (§8.1)
+      const res = resolveClash(
+        attacker.power * 1.1 * toll.wardMult,
+        clanHostPower(state) + 400 + vassalPower(state),
+      );
       // a dimmed ward is stormed more often
       state.castle.nextAssaultAt = now + Math.round((20 - 8 * toll.ramp) * 60_000);
       if (res.win) {
