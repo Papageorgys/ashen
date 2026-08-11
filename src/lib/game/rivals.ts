@@ -76,6 +76,9 @@ export interface CastleState {
   lastTickAt: number;
   /** timestamp the next rival assault lands (only while you hold it) */
   nextAssaultAt: number;
+  /** the declared Vulnerability Window (§2.3): rivals may only storm the seat
+   * during these local hours. Undefined = always vulnerable. */
+  window?: { startHour: number; hours: number } | undefined;
 }
 
 export function initialRivals(): RivalState[] {

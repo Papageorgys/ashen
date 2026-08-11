@@ -1408,7 +1408,14 @@ export function realmPulse(state: GameState) {
   if (state.castle.holder === "player" && hours > 0) {
     const toll = ashenToll(state.castle, now);
     state.castle.purse += Math.round(CASTLE.taxPerHour * hours * toll.titheFactor);
-    if (state.castle.nextAssaultAt && now >= state.castle.nextAssaultAt) {
+    if (
+      state.castle.nextAssaultAt &&
+      now >= state.castle.nextAssaultAt &&
+      !castleVulnerable(state.castle, now)
+    ) {
+      // outside the declared Vulnerability Window — the seat is safe (§2.3)
+      state.castle.nextAssaultAt = now + 10 * 60_000;
+    } else if (state.castle.nextAssaultAt && now >= state.castle.nextAssaultAt) {
       const attacker =
         state.rivals.slice().sort((a, b) => b.hostility - a.hostility)[0] ?? state.rivals[0]!;
       const res = resolveClash(attacker.power * 1.1 * toll.wardMult, clanHostPower(state) + 400);
@@ -1460,6 +1467,19 @@ export function ashenToll(
   const { graceDays, fullDays, titheDrain, wardWeaken } = ASHEN_TOLL;
   const ramp = Math.min(1, Math.max(0, (days - graceDays) / (fullDays - graceDays)));
   return { held: true, days, ramp, titheFactor: 1 - titheDrain * ramp, wardMult: 1 + wardWeaken * ramp };
+}
+
+/**
+ * The Vulnerability Window (Systems Bible §2.3) — the 4 a.m. problem, solved.
+ * A held seat can only be stormed during the hours its holder declares; outside
+ * the window it is safe. (AI-rival model: rivals wait for the opening.)
+ */
+export function castleVulnerable(castle: CastleState | undefined, now: number = Date.now()): boolean {
+  if (!castle?.window) return true;
+  const h = new Date(now).getHours();
+  const { startHour, hours } = castle.window;
+  const end = startHour + hours;
+  return end <= 24 ? h >= startHour && h < end : h >= startHour || h < end - 24;
 }
 
 export function siegeReady(state: GameState) {

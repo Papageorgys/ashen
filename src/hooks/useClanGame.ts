@@ -1346,6 +1346,23 @@ export function useClanGame() {
         }
       }),
 
+    /** Declare the castle's Vulnerability Window (§2.3) — the hours it can be
+     * stormed. null clears it (open at any hour). */
+    setCastleWindow: (startHour: number | null, hours: number) =>
+      update((s) => {
+        if (!s.castle || s.castle.holder !== "player")
+          return void toast("You hold no seat to ward.");
+        if (startHour === null) {
+          s.castle.window = undefined;
+          toast("Ravenhold now stands open to assault at any hour.");
+          return;
+        }
+        const sh = Math.max(0, Math.min(23, Math.round(startHour)));
+        const h = Math.max(2, Math.min(8, Math.round(hours)));
+        s.castle.window = { startHour: sh, hours: h };
+        toast.success(`Vulnerability window set — ${sh}:00 to ${(sh + h) % 24}:00.`);
+      }),
+
     /** Declare and resolve a siege of Ravenhold Keep. */
     besiegeCastle: () =>
       update((s) => {
