@@ -22,15 +22,24 @@ export interface Portrait {
 export const SKIN_TONES = [
   "#f0d0b4", "#e0b48f", "#c9926b", "#a97350", "#845038", "#5f3a2a",
   "#cfd8dc", "#b8c6a8", "#d5c2e0", "#9fb8c8",
+  // wider range so two champions of a kind rarely share a face
+  "#f6ddc2", "#946b4d", "#6b4a34", "#a9c0b0",
 ];
 
 export const HAIR_COLORS = [
   "#2b1d16", "#4a2f1d", "#7b4a25", "#b07a3c", "#d9c07a", "#e8e3d4",
   "#9aa5ad", "#5a2230", "#243a5e", "#3d5e40", "#6a3d7a", "#0f0f12",
+  // steel, auburn, teal, bronze
+  "#8a99a8", "#a33b28", "#2f6f6a", "#7a5a2a",
 ];
 
+// A champion's backing tint is the single most legible identity cue at roster
+// scale. A small pool means same-class champions blur together, so keep it wide
+// — every colour dark enough that the woodcut bust still reads on top.
 export const BG_COLORS = [
   "#1b1710", "#22181c", "#141c1e", "#1e1b28", "#241f14", "#101312",
+  "#101a20", "#1a2410", "#201020", "#241014", "#101824", "#1c1c22",
+  "#20180e", "#0e1e1a", "#26121a", "#12161e",
 ];
 
 export const HAIR_STYLES = 8;
