@@ -1295,14 +1295,17 @@ export function realmPulse(state: GameState) {
     }
   }
 
-  // castle purse
+  // castle purse — the Ashen Toll shrinks the tithe and dims the ward the longer
+  // the seat is held unchallenged (§2.4).
   if (state.castle.holder === "player" && hours > 0) {
-    state.castle.purse += Math.round(CASTLE.taxPerHour * hours);
+    const toll = ashenToll(state.castle, now);
+    state.castle.purse += Math.round(CASTLE.taxPerHour * hours * toll.titheFactor);
     if (state.castle.nextAssaultAt && now >= state.castle.nextAssaultAt) {
       const attacker =
         state.rivals.slice().sort((a, b) => b.hostility - a.hostility)[0] ?? state.rivals[0]!;
-      const res = resolveClash(attacker.power * 1.1, clanHostPower(state) + 400);
-      state.castle.nextAssaultAt = now + 20 * 60_000;
+      const res = resolveClash(attacker.power * 1.1 * toll.wardMult, clanHostPower(state) + 400);
+      // a dimmed ward is stormed more often
+      state.castle.nextAssaultAt = now + Math.round((20 - 8 * toll.ramp) * 60_000);
       if (res.win) {
         state.castle.holder = attacker.id;
         state.castle.sinceAt = now;
@@ -1329,6 +1332,26 @@ export function realmPulse(state: GameState) {
       }
     }
   }
+}
+
+/**
+ * The Ashen Toll (Systems Bible §2.4) — the anti-turtle valve. A seat held too
+ * long, unchallenged, accrues Ash Debt of its own: the tithe shrinks and the
+ * Ashenward dims (assaults hit harder). The One Law applies to castles as it
+ * does to casters — permanence is bought with escalating debt, never for free.
+ */
+export const ASHEN_TOLL = { graceDays: 2, fullDays: 12, titheDrain: 0.6, wardWeaken: 0.35 };
+
+export function ashenToll(
+  castle: CastleState | undefined,
+  now: number = Date.now(),
+): { held: boolean; days: number; ramp: number; titheFactor: number; wardMult: number } {
+  if (!castle || castle.holder !== "player" || !castle.sinceAt)
+    return { held: false, days: 0, ramp: 0, titheFactor: 1, wardMult: 1 };
+  const days = (now - castle.sinceAt) / 86_400_000;
+  const { graceDays, fullDays, titheDrain, wardWeaken } = ASHEN_TOLL;
+  const ramp = Math.min(1, Math.max(0, (days - graceDays) / (fullDays - graceDays)));
+  return { held: true, days, ramp, titheFactor: 1 - titheDrain * ramp, wardMult: 1 + wardWeaken * ramp };
 }
 
 export function siegeReady(state: GameState) {
