@@ -60,6 +60,9 @@ export async function fetchLadder(): Promise<LadderRow[]> {
   return (data ?? []) as unknown as LadderRow[];
 }
 
+/** The plane a voice speaks on: the Veil (all souls) or the Near Reaches (a region). */
+export type ChatChannel = "world" | "near";
+
 export type ChatMessageRow = {
   id: string;
   user_id: string;
@@ -67,24 +70,29 @@ export type ChatMessageRow = {
   leader_name: string;
   crest: unknown;
   body: string;
+  channel: string;
+  region: string | null;
   created_at: string;
 };
 
-/** The realm hall's most recent messages, oldest first for display. */
-export async function fetchChat(limit = 60): Promise<ChatMessageRow[]> {
-  const { data } = await supabase
-    .from("chat_messages")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+/** Recent messages on a channel (a region for "near"), oldest first for display. */
+export async function fetchChat(opts: {
+  channel: ChatChannel;
+  region?: string | null;
+  limit?: number;
+}): Promise<ChatMessageRow[]> {
+  let q = supabase.from("chat_messages").select("*").eq("channel", opts.channel);
+  if (opts.channel === "near" && opts.region) q = q.eq("region", opts.region);
+  const { data } = await q.order("created_at", { ascending: false }).limit(opts.limit ?? 60);
   return ((data ?? []) as unknown as ChatMessageRow[]).reverse();
 }
 
-/** Speak in the hall. `userId` must equal the signed-in user (enforced by RLS). */
+/** Speak on a channel. `userId` must equal the signed-in user (enforced by RLS). */
 export async function postChat(
   userId: string,
   body: string,
   who: { clanName?: string | undefined; leaderName?: string | undefined; crest?: unknown },
+  opts: { channel: ChatChannel; region?: string | null },
 ): Promise<ChatMessageRow | null> {
   const trimmed = body.trim().slice(0, 500);
   if (!trimmed) return null;
@@ -96,6 +104,8 @@ export async function postChat(
       leader_name: who.leaderName ?? "",
       crest: (who.crest ?? null) as never,
       body: trimmed,
+      channel: opts.channel,
+      region: opts.channel === "near" ? (opts.region ?? null) : null,
     })
     .select()
     .single();

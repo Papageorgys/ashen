@@ -17,29 +17,35 @@ export type Database = {
       chat_messages: {
         Row: {
           body: string
+          channel: string
           clan_name: string
           created_at: string
           crest: Json | null
           id: string
           leader_name: string
+          region: string | null
           user_id: string
         }
         Insert: {
           body: string
+          channel?: string
           clan_name?: string
           created_at?: string
           crest?: Json | null
           id?: string
           leader_name?: string
+          region?: string | null
           user_id: string
         }
         Update: {
           body?: string
+          channel?: string
           clan_name?: string
           created_at?: string
           crest?: Json | null
           id?: string
           leader_name?: string
+          region?: string | null
           user_id?: string
         }
         Relationships: []
