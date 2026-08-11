@@ -5,6 +5,7 @@ import {
   clanHostPower,
   longNightActive,
   longNightPressure,
+  refineAshValue,
   siegeReady,
   type GameState,
 } from "@/lib/game/engine";
@@ -20,6 +21,7 @@ export function RealmPanel({
     contestRival: (rivalId: string, zoneId: string) => void;
     besiegeCastle: () => void;
     collectTax: () => void;
+    refineAsh: () => void;
   };
 }) {
   const host = clanHostPower(state);
@@ -66,6 +68,25 @@ export function RealmPanel({
             : "The upper Ash thickens over the season. No one knows the hour it breaks — only that it will."}
         </p>
       </section>
+
+      {/* -------------------------------- raw Ash ------------------------------ */}
+      {(state.rawAsh ?? 0) >= 1 && (
+        <section className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-amber-500/40 bg-amber-500/5 p-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-widest text-amber-300/90">
+              Raw Ash — {Math.round(state.rawAsh ?? 0)}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Raw Ash never settles — a hoard burns off if you sit on it. Refine it into gold before
+              it's gone.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 gap-1 px-2" onClick={api.refineAsh}>
+            <span className="text-xs">Refine</span>
+            <span className="text-[10px] text-muted-foreground">→ {refineAshValue(state)}g</span>
+          </Button>
+        </section>
+      )}
 
       {/* ------------------------------- the castle ---------------------------- */}
       <section className="panel rounded-sm p-4">

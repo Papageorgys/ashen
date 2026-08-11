@@ -68,6 +68,7 @@ export function TitleBar({
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-1.5 md:flex">
             <Readout label="Gold" value={state.gold} />
+            {(state.rawAsh ?? 0) >= 1 && <Readout label="Ash" value={Math.round(state.rawAsh ?? 0)} />}
             <Readout label="Rep" value={state.reputation} />
             <Readout label="Sworn" value={state.members.length} />
             <Readout label="Insp" value={state.inspiration ?? 0} />

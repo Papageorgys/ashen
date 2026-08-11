@@ -324,6 +324,8 @@ export interface GameState {
   ashDebt?: number;
   /** the Long Night (§5) — rising pressure, and the window while it walks the realm */
   longNight?: { pressure: number; endsAt?: number | undefined };
+  /** raw Ash (§6.2) — a hot-potato currency that decays if hoarded; refine it or lose it */
+  rawAsh?: number;
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];
@@ -1313,6 +1315,18 @@ export const LONG_NIGHT = {
   hostilitySurgePerHour: 8,
 };
 
+/**
+ * Raw Ash (Systems Bible §6.2) — raw Ash never settles, so it decays if hoarded.
+ * It must be spent or refined into a stable store (gold) before it burns off. A
+ * hot potato that keeps the economy circulating and punishes dragon-hoarding.
+ */
+export const RAW_ASH = { decayPerHour: 0.09, refineRate: 2 };
+
+/** Gold you'd get for refining the whole raw-Ash hoard right now. */
+export function refineAshValue(state: GameState): number {
+  return Math.floor((state.rawAsh ?? 0) * RAW_ASH.refineRate);
+}
+
 export function longNightActive(state: GameState, now: number = Date.now()): boolean {
   return !!state.longNight?.endsAt && now < state.longNight.endsAt;
 }
@@ -1359,6 +1373,12 @@ export function realmPulse(state: GameState) {
   }
   state.longNight = ln;
   const nightSurge = ln.endsAt ? LONG_NIGHT.hostilitySurgePerHour * hours : 0;
+
+  // Raw Ash never settles — a hoarded pile burns off over time (§6.2).
+  if ((state.rawAsh ?? 0) > 0 && hours > 0) {
+    const kept = (state.rawAsh ?? 0) * Math.pow(1 - RAW_ASH.decayPerHour, hours);
+    state.rawAsh = kept < 0.5 ? 0 : kept;
+  }
 
   for (const r of state.rivals) {
     const def = RIVAL_BY_ID[r.id]!;
