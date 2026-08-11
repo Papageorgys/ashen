@@ -62,8 +62,8 @@ export interface Race {
 export const RACES: Race[] = [
   {
     id: "hyunan",
-    name: "Hyunan",
-    blurb: "Adaptable folk of the river kingdoms.",
+    name: "Ashborn Human",
+    blurb: "Adaptable survivors of the imperial heartland — the forgiving first blade.",
     stats: { str: 40, dex: 30, con: 43, int: 21, wit: 11, men: 25 },
     luck: 1,
     passive: {
@@ -75,8 +75,8 @@ export const RACES: Race[] = [
   },
   {
     id: "sylvani",
-    name: "Sylvani",
-    blurb: "Longlived wardens of the deep groves.",
+    name: "Sylvan Elf",
+    blurb: "Longlived wardens of the deep groves — scouts, rangers, and mobile skirmishers.",
     stats: { str: 36, dex: 35, con: 36, int: 23, wit: 14, men: 26 },
     luck: 1,
     passive: {
@@ -88,8 +88,8 @@ export const RACES: Race[] = [
   },
   {
     id: "nocturi",
-    name: "Nocturi",
-    blurb: "Exiles who bargained with the dark.",
+    name: "Hollow-Touched",
+    blurb: "Exiles who bargained with the dark — necrotic, and at home in the Hollow Covenant.",
     stats: { str: 41, dex: 32, con: 32, int: 25, wit: 12, men: 24 },
     luck: 0,
     passive: {
@@ -101,8 +101,8 @@ export const RACES: Race[] = [
   },
   {
     id: "grakhar",
-    name: "Grakhar",
-    blurb: "Ash-clan berserkers of the burnt steppe.",
+    name: "Emberkin",
+    blurb: "Ash-blooded of the burnt steppe — the Ash runs hot and hard in them.",
     stats: { str: 44, dex: 29, con: 45, int: 18, wit: 12, men: 22 },
     luck: 0,
     passive: {
@@ -114,8 +114,8 @@ export const RACES: Race[] = [
   },
   {
     id: "durgan",
-    name: "Durgan",
-    blurb: "Deep-forge smiths and hoarders.",
+    name: "Highland Dwar",
+    blurb: "Deep-forge smiths of the highlands — masters of siege and craft.",
     stats: { str: 39, dex: 27, con: 45, int: 20, wit: 10, men: 29 },
     luck: 3,
     passive: {
@@ -127,8 +127,8 @@ export const RACES: Race[] = [
   },
   {
     id: "kaemari",
-    name: "Kaemari",
-    blurb: "Winged wanderers bound to a soul-blade.",
+    name: "Ferran Beastkin",
+    blurb: "Winged wanderers bound to a soul-blade — keen of sense, deadly in the duel.",
     stats: { str: 40, dex: 34, con: 38, int: 23, wit: 13, men: 26 },
     luck: 1,
     passive: { name: "Soulbind", desc: "+6% power, +8% MP.", power: 6, mp: 8 },
