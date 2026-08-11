@@ -106,6 +106,7 @@ import {
   inscribeCost,
   ASH_DEBT,
   restAtFlameCost,
+  refineAshValue,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1038,6 +1039,7 @@ export function useClanGame() {
         s.gold += rw.gold;
         s.reputation += rw.rep;
         if (rw.inspiration) s.inspiration = (s.inspiration ?? 0) + rw.inspiration;
+        s.rawAsh = (s.rawAsh ?? 0) + 12 + streak * 2;
         pushLog(
           s,
           `Dawn rally — day ${streak} of the muster. +${rw.gold} gold, +${rw.rep} reputation${
@@ -1160,6 +1162,18 @@ export function useClanGame() {
         pushLog(s, `${p.name} broke off to charge ${boss.name}.`, "info");
       }),
 
+    /** Refine the raw-Ash hoard into stable gold before it burns off (§6.2). */
+    refineAsh: () =>
+      update((s) => {
+        const raw = Math.floor(s.rawAsh ?? 0);
+        if (raw <= 0) return void toast("No raw Ash to refine.");
+        const gold = refineAshValue(s);
+        s.rawAsh = 0;
+        s.gold += gold;
+        pushLog(s, `Refined ${raw} raw Ash into ${gold} gold before it could burn off.`, "good");
+        toast.success(`Refined ${raw} Ash → ${gold} gold.`);
+      }),
+
     /** Rest the host at a warded flame — the only place Ash Debt clears (§1.1, §3.1). */
     restAtFlame: () =>
       update((s) => {
@@ -1204,6 +1218,8 @@ export function useClanGame() {
         s.gold += sp.gold;
         s.reputation += sp.reputation;
         s.inspiration = (s.inspiration ?? 0) + sp.inspiration;
+        // raw Ash pours off a felled boss — spend or refine it before it burns (§6.2)
+        s.rawAsh = (s.rawAsh ?? 0) + Math.max(10, Math.round(level * damageShare * 3));
         s.bossClaims = { ...(s.bossClaims ?? {}), [eventId]: true };
 
         // The beast's hoard — themed loot on top of gold/rep.
