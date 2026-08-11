@@ -101,6 +101,7 @@ import {
   rollDailies,
   rollRecruits,
   recruitCost,
+  rallyReward,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1007,6 +1008,35 @@ export function useClanGame() {
           "good",
         );
         toast.success(`Claimed ${def.name}`);
+      }),
+
+    /* ------------------------------ dawn rally ------------------------------- */
+
+    /** Claim the daily dawn muster; consecutive days build a streak, gaps reset it. */
+    claimRally: () =>
+      update((s) => {
+        const today = dayKey();
+        const r = s.rally ?? { lastDay: "", streak: 0 };
+        if (r.lastDay === today) return void toast("The banners have already rallied today.");
+        const yesterday = dayKey(new Date(Date.now() - 86_400_000));
+        const streak = r.lastDay === yesterday ? r.streak + 1 : 1;
+        s.rally = { lastDay: today, streak };
+        const rw = rallyReward(streak);
+        s.gold += rw.gold;
+        s.reputation += rw.rep;
+        if (rw.inspiration) s.inspiration = (s.inspiration ?? 0) + rw.inspiration;
+        pushLog(
+          s,
+          `Dawn rally — day ${streak} of the muster. +${rw.gold} gold, +${rw.rep} reputation${
+            rw.inspiration ? `, +${rw.inspiration} inspiration` : ""
+          }.`,
+          "good",
+        );
+        toast.success(
+          rw.milestone
+            ? `Dawn rally — ${streak}-day streak! A feast-day muster.`
+            : `Dawn rally claimed — ${streak}-day streak.`,
+        );
       }),
 
     /* ------------------------------ world boss ------------------------------- */

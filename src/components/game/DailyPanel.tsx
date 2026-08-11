@@ -1,8 +1,57 @@
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { DAILY_BY_ID, ITEM_BY_ID, ZONE_BY_ID, type Cadence } from "@/lib/game/data";
-import type { DailyState, GameState } from "@/lib/game/engine";
+import { dayKey, rallyReward, type DailyState, type GameState } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
+
+function RallyCard({ state, api }: { state: GameState; api: ClanApi }) {
+  const today = dayKey();
+  const rally = state.rally ?? { lastDay: "", streak: 0 };
+  const claimedToday = rally.lastDay === today;
+  const yesterday = dayKey(new Date(Date.now() - 86_400_000));
+  const nextStreak = claimedToday
+    ? rally.streak
+    : rally.lastDay === yesterday
+      ? rally.streak + 1
+      : 1;
+  const reward = rallyReward(nextStreak);
+  const flames = "🔥".repeat(Math.min(5, nextStreak));
+
+  return (
+    <div
+      className={`panel-ornate flex flex-wrap items-center gap-3 rounded-sm p-4 ${
+        reward.milestone && !claimedToday ? "ring-1 ring-gold/50" : ""
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="gilded font-display text-base">Dawn Rally</h3>
+          {nextStreak > 1 && (
+            <span className="text-xs text-gold" title={`${nextStreak}-day streak`}>
+              {flames} {nextStreak}-day streak
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {claimedToday
+            ? "The banners have mustered today. Return at dawn to keep the streak."
+            : `Muster the banners — day ${nextStreak}. Miss a day and the streak breaks.`}
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {claimedToday ? "Next dawn: " : "Today: "}
+          <span className="text-foreground">
+            {reward.gold.toLocaleString()} gold · {reward.rep} rep
+            {reward.inspiration ? ` · ${reward.inspiration} inspiration` : ""}
+          </span>
+          {reward.milestone ? <span className="text-gold"> · feast-day bounty</span> : ""}
+        </p>
+      </div>
+      <Button onClick={() => api.claimRally()} disabled={claimedToday}>
+        {claimedToday ? "Rallied" : "Rally the banners"}
+      </Button>
+    </div>
+  );
+}
 
 const BOARDS: { cadence: Cadence; title: string; blurb: string }[] = [
   {
@@ -66,7 +115,11 @@ function Board({
                   </div>
                   <Progress className="mt-1" value={(dm.progress / def.kills) * 100} />
                 </div>
-                <Button size="sm" disabled={!done || dm.claimed} onClick={() => api.claimDaily(dm.id)}>
+                <Button
+                  size="sm"
+                  disabled={!done || dm.claimed}
+                  onClick={() => api.claimDaily(dm.id)}
+                >
                   {dm.claimed ? "Claimed" : done ? "Claim" : "In progress"}
                 </Button>
               </div>
@@ -97,6 +150,8 @@ export function DailyPanel({ state, api }: { state: GameState; api: ClanApi }) {
           warehouse.
         </p>
       </header>
+
+      <RallyCard state={state} api={api} />
 
       {BOARDS.map((b) => (
         <Board
