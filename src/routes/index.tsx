@@ -30,7 +30,7 @@ import { ChroniclePanel } from "@/components/game/ChroniclePanel";
 import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
-import { ChatPanel } from "@/components/game/ChatPanel";
+import { ChatDock } from "@/components/game/ChatDock";
 import { useSession } from "@/hooks/useSession";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { TitleBar } from "@/components/game/TitleBar";
@@ -50,7 +50,6 @@ import {
   Globe2,
   Hammer,
   Map,
-  MessagesSquare,
   PawPrint,
   Package,
   PanelLeftClose,
@@ -292,7 +291,6 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { value: "realm", label: "Realm", icon: Flag, hint: "Rivals and the castle", requiresClan: true },
       { value: "world", label: "Ladder", icon: Globe2, hint: "Live rankings of every clan" },
-      { value: "chat", label: "Hall", icon: MessagesSquare, hint: "Speak with every clan in the realm" },
       { value: "chronicle", label: "Chronicle", icon: BookOpen, hint: "Your saga and the fallen", requiresClan: true },
     ],
   },
@@ -483,15 +481,6 @@ function Index() {
               <TabsContent value="world" className="mt-0">
                 <WorldPanel signedIn={!!user} myId={user?.id ?? null} />
               </TabsContent>
-              <TabsContent value="chat" className="mt-0">
-                <ChatPanel
-                  signedIn={!!user}
-                  myId={user?.id ?? null}
-                  clanName={state.clanName}
-                  leaderName={state.leaderName}
-                  crest={state.crest ?? null}
-                />
-              </TabsContent>
               <TabsContent value="chronicle" className="mt-0">
                 <ChroniclePanel state={state} api={api} />
               </TabsContent>
@@ -524,6 +513,13 @@ function Index() {
             <ExpeditionFeed state={state} now={now} />
           </aside>
         </Tabs>
+        <ChatDock
+          signedIn={!!user}
+          myId={user?.id ?? null}
+          clanName={state.clanName}
+          leaderName={state.leaderName}
+          crest={state.crest ?? null}
+        />
       </div>
       <Toaster />
     </TooltipProvider>
