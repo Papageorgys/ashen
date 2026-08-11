@@ -22,6 +22,7 @@ export function RealmPanel({
     besiegeCastle: () => void;
     collectTax: () => void;
     refineAsh: () => void;
+    setCastleWindow: (startHour: number | null, hours: number) => void;
   };
 }) {
   const host = clanHostPower(state);
@@ -127,6 +128,49 @@ export function RealmPanel({
                     )}%; rivals storm it more often. You cannot hold forever without cost.`
                   : `${CASTLE.taxPerHour.toLocaleString()} gold an hour while the gate holds. Rivals will come for it — and holding too long dims the ward.`}
               </span>
+              <div className="flex w-full flex-wrap items-center gap-2 border-t border-border/50 pt-2">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Vulnerability window
+                </span>
+                <select
+                  className="rounded-sm border border-border/60 bg-background px-1.5 py-1 text-xs"
+                  value={castle?.window?.startHour ?? -1}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (v < 0) api.setCastleWindow(null, 4);
+                    else api.setCastleWindow(v, castle?.window?.hours ?? 4);
+                  }}
+                >
+                  <option value={-1}>Always open</option>
+                  {Array.from({ length: 24 }).map((_, h) => (
+                    <option key={h} value={h}>
+                      from {h}:00
+                    </option>
+                  ))}
+                </select>
+                {castle?.window && (
+                  <select
+                    className="rounded-sm border border-border/60 bg-background px-1.5 py-1 text-xs"
+                    value={castle.window.hours}
+                    onChange={(e) =>
+                      api.setCastleWindow(castle.window!.startHour, Number(e.target.value))
+                    }
+                  >
+                    {[2, 3, 4, 5, 6, 8].map((h) => (
+                      <option key={h} value={h}>
+                        for {h}h
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <span className="text-[11px] text-muted-foreground">
+                  {castle?.window
+                    ? `Rivals may only storm the seat ${castle.window.startHour}:00–${
+                        (castle.window.startHour + castle.window.hours) % 24
+                      }:00. Outside it, Ravenhold is safe.`
+                    : "Declare hours and the seat cannot be taken outside them (§2.3)."}
+                </span>
+              </div>
             </>
           ) : (
             <>
