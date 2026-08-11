@@ -104,6 +104,8 @@ import {
   rallyReward,
   deedsFromState,
   inscribeCost,
+  ASH_DEBT,
+  restAtFlameCost,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1123,11 +1125,29 @@ export function useClanGame() {
               `${victim.name} falls to ${boss.name}`,
               `Level ${victim.level} ${CLASS_BY_ID[victim.classId]?.name ?? "champion"}, cut down charging the World Boss. Name carved into the shrine wall.`,
             );
-            pushLog(s, `${victim.name} fell charging ${boss.name}.`, "bad");
+            s.ashDebt = (s.ashDebt ?? 0) + ASH_DEBT.deathAccrual;
+            pushLog(
+              s,
+              `${victim.name} fell charging ${boss.name}. The Ash collects — the host carries the debt until it rests.`,
+              "bad",
+            );
             toast.error(`${victim.name} is dead.`);
           }
         }
         pushLog(s, `${p.name} broke off to charge ${boss.name}.`, "info");
+      }),
+
+    /** Rest the host at a warded flame — the only place Ash Debt clears (§1.1, §3.1). */
+    restAtFlame: () =>
+      update((s) => {
+        const debt = s.ashDebt ?? 0;
+        if (debt <= 0) return void toast("The host carries no Ash Debt.");
+        const cost = restAtFlameCost(s);
+        if (s.gold < cost) return void toast.error(`The rite of rest asks ${cost} gold.`);
+        s.gold -= cost;
+        s.ashDebt = 0;
+        pushLog(s, `The host rested at the warded flame — Ash Debt cleared (${cost} gold).`, "good");
+        toast.success("Ash Debt cleared. The host stands at full strength.");
       }),
 
     /** Pray at the shrine: for the rest of the day, no champion falls in the boss fight. */
