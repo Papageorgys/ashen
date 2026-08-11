@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -329,7 +329,8 @@ function NavButton({ item, active, expanded }: { item: NavItem; active: boolean;
 
 function Index() {
   const { state, hydrated, api } = useClanGame();
-  const { user } = useSession();
+  const { user, ready: authReady } = useSession();
+  const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
   const [tab, setTab] = useState("banners");
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
@@ -372,7 +373,14 @@ function Index() {
     }
   }, [state, clanLevel, holdsCastle]);
 
-  if (!hydrated) return <div className="min-h-dvh" />;
+  // Gate the realm behind sign-in: once auth resolves, send strangers to the door.
+  useEffect(() => {
+    if (authReady && !user) void navigate({ to: "/auth" });
+  }, [authReady, user, navigate]);
+
+  // The realm is closed to strangers: only signed-in players may enter.
+  if (!hydrated || !authReady) return <div className="min-h-dvh" />;
+  if (!user) return <div className="min-h-dvh" />; // redirecting to /auth
   if (!state) {
     return (
       <>
