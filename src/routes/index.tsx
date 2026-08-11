@@ -72,13 +72,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Lead a fantasy MMO clan: recruit sworn blades, raise your clan level, forge gear from raid drops and field as many full banners of nine as you can.",
+          "Lead a fantasy MMO clan: recruit sworn blades, raise your clan level, forge gear from raid drops and field as many full warbands of five as you can.",
       },
       { property: "og:title", content: "Clan Leader — Banners of the Ashen Realm" },
       {
         property: "og:description",
         content:
-          "Recruit, level, loot and forge. Build the mightiest clan in the Ashen Realm, one banner of nine at a time.",
+          "Recruit, level, loot and forge. Build the mightiest clan in the Ashen Realm, one warband of five at a time.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
