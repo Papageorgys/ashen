@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollLedger } from "./ScrollLedger";
+import { MarkLedger } from "./MarkLedger";
 import { Switch } from "@/components/ui/switch";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
@@ -422,6 +423,12 @@ export function ChampionDialog({
                 label="Reputation"
                 value={pk > 0 ? "Outlaw" : pvp > 12 ? "Champion" : pvp > 0 ? "Blooded" : "Untested"}
               />
+            </div>
+            <div className="panel space-y-2 rounded-sm px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Scars &amp; Deeds — what the world has written on {member.name}
+              </div>
+              <MarkLedger marks={member.marks} limit={20} />
             </div>
             <div className="panel space-y-2 rounded-sm px-3 py-2">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">

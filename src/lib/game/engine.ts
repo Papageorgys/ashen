@@ -151,6 +151,45 @@ export interface Member {
   joinedAt?: number;
   /** the life they led before the banner — see professions.ts */
   profession?: ProfessionId;
+  /** the marks the world has left on them — scars, deeds, griefs; newest first */
+  marks?: Mark[];
+}
+
+/** A remembered event bound to a champion — how the numbers came to read as biography. */
+export type MarkKind =
+  | "clutch" // last one standing
+  | "survivor" // carried a fallen comrade's memory home
+  | "wounded" // dragged out of a fight at a hair's breadth
+  | "valor" // carried the fight
+  | "slayer" // first of the clan to fell a kind of beast
+  | "ascend" // came into their strength
+  | "triumph"; // a clan-defining victory
+
+export interface Mark {
+  id: string;
+  at: number;
+  kind: MarkKind;
+  /** one line of biography, written in the moment it happened */
+  text: string;
+  /** the stat or state this mark is bound to, e.g. "CON", "STR", "grief" */
+  bound?: string;
+  /** where it happened */
+  where?: string;
+}
+
+const MARKS_CAP = 40;
+
+/** Record a remembered event on a champion. Newest first, capped. */
+export function addMark(
+  m: Member,
+  kind: MarkKind,
+  text: string,
+  opts?: { bound?: string; where?: string },
+): void {
+  const entry: Mark = { id: uid(), at: Date.now(), kind, text };
+  if (opts?.bound) entry.bound = opts.bound;
+  if (opts?.where) entry.where = opts.where;
+  m.marks = [entry, ...(m.marks ?? [])].slice(0, MARKS_CAP);
 }
 
 
@@ -1564,7 +1603,10 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     vitals[f.m.id] = { hp: Math.max(0, Math.round(f.hp)), mp: Math.max(0, Math.round(f.mp)) };
   }
   const participants = fighters.map((f) => f.m.id);
-  const fallen = fighters.filter((f) => f.hp <= 0).map((f) => f.m.name);
+  // Identify the fallen by id, not name — two champions can share a rolled name,
+  // and death/marks/affinity must attribute to the right person.
+  const fallen = fighters.filter((f) => f.hp <= 0).map((f) => f.m.id);
+  const fallenNames = fighters.filter((f) => f.hp <= 0).map((f) => f.m.name);
 
   // contested ground — rival clans hunt the same zones
   const record: Record<string, { mobKills: number; pvpKills: number; pkKills: number }> = {};
@@ -1583,7 +1625,9 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   }
 
   const find = ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find;
-  const fallenNote = fallen.length ? ` ${fallen.join(", ")} fell and will be carried home.` : "";
+  const fallenNote = fallen.length
+    ? ` ${fallenNames.join(", ")} fell and will be carried home.`
+    : "";
 
   /* the story of the fight, told in beats */
   const mvpEntry = Object.entries(damageBy).sort((a, b) => b[1] - a[1])[0];
