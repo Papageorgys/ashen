@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { DRAG_BANNER as DRAG_MIME } from "@/lib/game/dnd";
 import { AtlasTerrain } from "./AtlasTerrain";
 import { AtlasMotifs } from "./AtlasMotifs";
+import { AtlasCapitals } from "./AtlasCapitals";
 
 /** Where a banner piece stands when it is not in the field: the clan keep. */
 const HOME = { x: 35, y: 46 };
@@ -456,6 +457,7 @@ export function WorldMap({
             strokeWidth="0.15"
           />
         </svg>
+        <AtlasCapitals />
 
         {/* hour of high activity */}
         <div className="pointer-events-none absolute left-2 top-2 z-20 max-w-[70%] rounded-sm border border-gold/50 bg-card/85 px-2 py-1 shadow-sm">
