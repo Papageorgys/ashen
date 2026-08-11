@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      chat_messages: {
+        Row: {
+          body: string
+          clan_name: string
+          created_at: string
+          crest: Json | null
+          id: string
+          leader_name: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          clan_name?: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          leader_name?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          clan_name?: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          leader_name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       game_saves: {
         Row: {
           created_at: string
