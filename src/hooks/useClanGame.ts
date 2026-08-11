@@ -107,6 +107,8 @@ import {
   ASH_DEBT,
   restAtFlameCost,
   refineAshValue,
+  LEDGER,
+  loanCeiling,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1160,6 +1162,38 @@ export function useClanGame() {
           }
         }
         pushLog(s, `${p.name} broke off to charge ${boss.name}.`, "info");
+      }),
+
+    /** Borrow gold from the Gilded Compact's Ledger (§6.3), owed back with interest. */
+    takeLoan: (amount: number) =>
+      update((s) => {
+        if (s.loan) return void toast("The Compact will not lend twice. Settle the ledger first.");
+        const amt = Math.max(100, Math.min(loanCeiling(s), Math.round(amount)));
+        s.gold += amt;
+        s.loan = {
+          principal: amt,
+          owed: Math.round(amt * (1 + LEDGER.rate)),
+          dueAt: Date.now() + LEDGER.termMs,
+        };
+        chronicle(
+          s,
+          "rise",
+          "A debt to the Compact",
+          `The Ledger advances ${amt} gold against the clan's name. ${Math.round(amt * (1 + LEDGER.rate))} comes due within the week — every crown has a price.`,
+        );
+        toast.success(`Borrowed ${amt} gold. ${Math.round(amt * (1 + LEDGER.rate))} owed by week's end.`);
+      }),
+
+    /** Settle the Compact debt — in full if you can afford it. */
+    repayLoan: () =>
+      update((s) => {
+        if (!s.loan) return void toast("The ledger is clear.");
+        if (s.gold < s.loan.owed)
+          return void toast.error(`The Compact wants ${s.loan.owed} gold; you hold ${s.gold}.`);
+        s.gold -= s.loan.owed;
+        pushLog(s, `Settled the Compact ledger — ${s.loan.owed} gold. The debt is closed.`, "good");
+        toast.success("The ledger is clear.");
+        s.loan = undefined;
       }),
 
     /** Refine the raw-Ash hoard into stable gold before it burns off (§6.2). */

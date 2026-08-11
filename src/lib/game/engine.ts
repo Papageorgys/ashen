@@ -326,6 +326,8 @@ export interface GameState {
   longNight?: { pressure: number; endsAt?: number | undefined };
   /** raw Ash (§6.2) — a hot-potato currency that decays if hoarded; refine it or lose it */
   rawAsh?: number;
+  /** an outstanding debt to the Gilded Compact's Ledger (§6.3) */
+  loan?: { principal: number; owed: number; dueAt: number } | undefined;
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];
@@ -1322,6 +1324,25 @@ export const LONG_NIGHT = {
  */
 export const RAW_ASH = { decayPerHour: 0.09, refineRate: 2 };
 
+/**
+ * The Ledger (Systems Bible §6.3) — the Gilded Compact's power. In the AI-rival
+ * model it is a moneylender: borrow gold to fund a campaign now, and owe it back
+ * with interest by the weekly settlement. Default, and the debt compounds and
+ * bleeds your standing — "every crown has a price."
+ */
+export const LEDGER = {
+  rate: 0.2, // interest on the principal
+  termMs: 7 * 86_400_000, // a week to repay (§1.2 weekly settlement)
+  maxLoanPerLevel: 400, // borrowing cap scales with clan level
+  overdueCompound: 0.06, // per-hour interest once overdue
+  overdueRepDrip: 2, // reputation lost per hour once overdue
+};
+
+/** The most gold the Compact will advance a clan of this standing. */
+export function loanCeiling(state: GameState): number {
+  return Math.max(500, state.clanLevel * LEDGER.maxLoanPerLevel);
+}
+
 /** Gold you'd get for refining the whole raw-Ash hoard right now. */
 export function refineAshValue(state: GameState): number {
   return Math.floor((state.rawAsh ?? 0) * RAW_ASH.refineRate);
@@ -1378,6 +1399,12 @@ export function realmPulse(state: GameState) {
   if ((state.rawAsh ?? 0) > 0 && hours > 0) {
     const kept = (state.rawAsh ?? 0) * Math.pow(1 - RAW_ASH.decayPerHour, hours);
     state.rawAsh = kept < 0.5 ? 0 : kept;
+  }
+
+  // The Ledger comes due (§6.3): an overdue Compact debt compounds and bleeds standing.
+  if (state.loan && hours > 0 && now >= state.loan.dueAt) {
+    state.loan.owed = Math.round(state.loan.owed * Math.pow(1 + LEDGER.overdueCompound, hours));
+    state.reputation = Math.max(0, Math.round(state.reputation - LEDGER.overdueRepDrip * hours));
   }
 
   for (const r of state.rivals) {

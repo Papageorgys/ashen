@@ -6,6 +6,7 @@ import {
   longNightActive,
   longNightPressure,
   refineAshValue,
+  loanCeiling,
   siegeReady,
   type GameState,
 } from "@/lib/game/engine";
@@ -23,6 +24,8 @@ export function RealmPanel({
     collectTax: () => void;
     refineAsh: () => void;
     setCastleWindow: (startHour: number | null, hours: number) => void;
+    takeLoan: (amount: number) => void;
+    repayLoan: () => void;
   };
 }) {
   const host = clanHostPower(state);
@@ -185,6 +188,56 @@ export function RealmPanel({
             </>
           )}
         </div>
+      </section>
+
+      {/* -------------------------------- the Ledger --------------------------- */}
+      <section className="panel rounded-sm p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="font-display text-lg text-gold">The Gilded Compact — Ledger</h3>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            every crown has a price
+          </span>
+        </div>
+        {state.loan ? (
+          (() => {
+            const overdue = Date.now() >= state.loan.dueAt;
+            const days = Math.max(0, (state.loan.dueAt - Date.now()) / 86_400_000);
+            return (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0 flex-1 text-xs">
+                  <span className={overdue ? "font-display text-destructive" : "font-display text-foreground"}>
+                    {state.loan.owed.toLocaleString()} gold owed
+                  </span>
+                  <span className="text-muted-foreground">
+                    {overdue
+                      ? " — overdue. The debt compounds and your standing bleeds until it's paid."
+                      : ` — due in ${days.toFixed(1)} days.`}
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={api.repayLoan}
+                  disabled={state.gold < state.loan.owed}
+                  title={state.gold < state.loan.owed ? `Need ${state.loan.owed} gold` : undefined}
+                >
+                  Settle the ledger
+                </Button>
+              </div>
+            );
+          })()
+        ) : (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+              Borrow gold to fund a campaign now, repaid with {Math.round(0.2 * 100)}% interest by
+              week's end. Default and the debt compounds. Ceiling {loanCeiling(state).toLocaleString()}g.
+            </span>
+            {[500, 1000, 2000].filter((a) => a <= loanCeiling(state)).map((a) => (
+              <Button key={a} size="sm" variant="outline" onClick={() => api.takeLoan(a)}>
+                Borrow {a.toLocaleString()}g
+              </Button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* -------------------------------- rivals ------------------------------- */}
