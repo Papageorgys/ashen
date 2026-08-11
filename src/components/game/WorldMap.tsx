@@ -398,7 +398,7 @@ export function WorldMap({
       )}
     >
       <div
-        className="relative h-[clamp(300px,50dvh,640px)] w-full bg-map-parchment"
+        className="relative h-[clamp(280px,calc(100dvh-14rem),640px)] w-full bg-map-parchment"
         role={interactive ? "application" : undefined}
         aria-label={interactive ? "War table: deploy banners across the Ashen Realm" : undefined}
       >

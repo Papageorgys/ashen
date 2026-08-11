@@ -5,7 +5,7 @@ import type { WorldBossState } from "@/hooks/useWorldBoss";
 /** A slim, always-visible band under the title bar — the realm's shared boss + a way in. */
 export function BossStrip({ boss, onOpen }: { boss: WorldBossState; onOpen: () => void }) {
   return (
-    <div className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/5 px-3 py-1.5 sm:gap-3">
+    <div className="flex shrink-0 items-center gap-2 border-b border-destructive/30 bg-destructive/5 px-3 py-1.5 sm:gap-3">
       <Skull className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
       <span className="min-w-0 flex-1 truncate text-xs font-display text-gold sm:max-w-[14rem] sm:flex-none">
         {boss.boss.name}
