@@ -55,7 +55,7 @@ export function WorldPanel({ signedIn, myId }: { signedIn: boolean; myId?: strin
               <div className="min-w-0 flex-1">
                 <div className="truncate font-display text-sm text-foreground">
                   {r.clan_name || "Unnamed company"}
-                  {r.holds_castle && <span className="ml-2 text-xs text-gold">holds Ravenhold</span>}
+                  {r.holds_castle && <span className="ml-2 text-xs text-gold">holds Vareth</span>}
                 </div>
                 <div className="truncate text-[11px] text-muted-foreground">
                   Led by {r.leader_name || "an unknown lord"}

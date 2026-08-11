@@ -3150,7 +3150,7 @@ export const LANDMARKS: Landmark[] = [
   },
   {
     id: "ravenhold",
-    name: "Ravenhold Keep",
+    name: "Castle Vareth",
     kind: "castle",
     blurb: "Black stone over the trade road. Whoever holds it taxes every caravan.",
     pos: { x: 60, y: 90 },
