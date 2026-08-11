@@ -434,7 +434,7 @@ function Index() {
           clanLevel === 1 ? "Your crest flies over the Ashen Realm" : "The banners rise higher",
       });
     } else if (holdsCastle && !before.holdsCastle) {
-      setFlourish({ id: Date.now(), title: "Ravenhold Falls", subtitle: "The castle is yours" });
+      setFlourish({ id: Date.now(), title: "Vareth Falls", subtitle: "The castle is yours" });
     }
   }, [state, clanLevel, holdsCastle]);
 

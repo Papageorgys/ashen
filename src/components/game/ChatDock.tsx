@@ -39,7 +39,7 @@ const REGIONS: { id: string; name: string }[] = [
   { id: "greymarket", name: "Greymarket" },
   { id: "emberwatch", name: "Emberwatch" },
   { id: "coldspire", name: "Coldspire" },
-  { id: "ravenhold", name: "Ravenhold" },
+  { id: "ravenhold", name: "Vareth" },
 ];
 
 /** Each plane a voice can travel on, with its own lore and colour. */

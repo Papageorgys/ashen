@@ -15,8 +15,8 @@ export type RealmSeat = {
 };
 
 export const REALM_SEATS: RealmSeat[] = [
-  // The imperial heart — Castle Vareth, contested by all.
-  { id: "ember_court", realm: "The Ember Court", seat: "Castle Vareth", x: 52, y: 40, color: [196, 96, 52] },
+  // The imperial heart — the Ashen Reach, with contested Castle Vareth at its crossroads.
+  { id: "ember_court", realm: "The Ember Court", seat: "The Ashen Reach", x: 52, y: 42, color: [196, 96, 52] },
   // North: highland clans and the border knights.
   { id: "free_holds", realm: "The Free Holds", seat: "Skald's Marches", x: 36, y: 18, color: [124, 138, 156] },
   { id: "pale_wardens", realm: "The Pale Wardens", seat: "Warden's Bastion", x: 80, y: 20, color: [160, 172, 186] },

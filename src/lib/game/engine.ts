@@ -1243,7 +1243,7 @@ export const LORD_BONUS = { power: 0.12, xp: 0.15, gold: 0.15, deathGuard: 0.5 }
 export function earnedTitle(m: Member, state: GameState): string {
   const kills = m.mobKills ?? 0;
   const pvp = m.pvpKills ?? 0;
-  if (state.castle?.holder === "player" && m.isLord) return "Lord of Ravenhold";
+  if (state.castle?.holder === "player" && m.isLord) return "Lord of Vareth";
   if (pvp >= 60) return "the Bloodwright";
   if (kills >= 12000) return "the Unending";
   if (kills >= 5000) return "the Unbroken";
@@ -1510,13 +1510,13 @@ export function realmPulse(state: GameState) {
         state.castle.purse = 0;
         pushLog(
           state,
-          `${RIVAL_BY_ID[attacker.id]!.name} has stormed Ravenhold. The keep is lost.`,
+          `${RIVAL_BY_ID[attacker.id]!.name} has stormed Vareth. The keep is lost.`,
           "bad",
         );
         chronicle(
           state,
           "loss",
-          "Ravenhold falls",
+          "Vareth falls",
           `${RIVAL_BY_ID[attacker.id]!.name} broke the gate at dawn. The banners came down without ceremony.`,
         );
       } else {
@@ -1524,7 +1524,7 @@ export function realmPulse(state: GameState) {
         state.reputation += 40;
         pushLog(
           state,
-          `${RIVAL_BY_ID[attacker.id]!.name} broke against the walls of Ravenhold.`,
+          `${RIVAL_BY_ID[attacker.id]!.name} broke against the walls of Vareth.`,
           "good",
         );
       }
@@ -1568,7 +1568,7 @@ export function castleVulnerable(castle: CastleState | undefined, now: number = 
 export function siegeReady(state: GameState) {
   if (state.clanLevel < CASTLE.reqClanLevel)
     return { ok: false, why: `Requires clan level ${CASTLE.reqClanLevel}` };
-  if (state.castle?.holder === "player") return { ok: false, why: "You already hold Ravenhold" };
+  if (state.castle?.holder === "player") return { ok: false, why: "You already hold Vareth" };
   const idle = state.parties.some((p) => !p.run && p.memberIds.length > 0);
   if (!idle) return { ok: false, why: "Every banner is in the field — recall one" };
   return { ok: true, why: "" };

@@ -175,7 +175,7 @@ export function RealmPanel({
                   {castle?.window
                     ? `Rivals may only storm the seat ${castle.window.startHour}:00–${
                         (castle.window.startHour + castle.window.hours) % 24
-                      }:00. Outside it, Ravenhold is safe.`
+                      }:00. Outside it, Vareth is safe.`
                     : "Declare hours and the seat cannot be taken outside them (§2.3)."}
                 </span>
               </div>

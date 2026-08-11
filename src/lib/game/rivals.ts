@@ -58,9 +58,9 @@ export interface RivalState {
 
 export const CASTLE = {
   id: "ravenhold",
-  name: "Ravenhold Keep",
+  name: "Castle Vareth",
   blurb:
-    "A black-stone fortress over the trade road. Whoever holds it taxes every caravan in the realm.",
+    "The crossroads fortress named for Vareth the Unbroken, who held the hill through the war's worst year. Whoever holds it taxes half the realm's trade — and the siege wars have raged here for generations.",
   /** clan level before the heralds will even accept your declaration */
   reqClanLevel: 4,
   /** gold per real-time hour while you hold it */

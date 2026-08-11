@@ -1450,7 +1450,7 @@ export function useClanGame() {
           return void toast("You hold no seat to ward.");
         if (startHour === null) {
           s.castle.window = undefined;
-          toast("Ravenhold now stands open to assault at any hour.");
+          toast("Vareth now stands open to assault at any hour.");
           return;
         }
         const sh = Math.max(0, Math.min(23, Math.round(startHour)));
@@ -1459,7 +1459,7 @@ export function useClanGame() {
         toast.success(`Vulnerability window set — ${sh}:00 to ${(sh + h) % 24}:00.`);
       }),
 
-    /** Declare and resolve a siege of Ravenhold Keep. */
+    /** Declare and resolve a siege of Castle Vareth. */
     besiegeCastle: () =>
       update((s) => {
         const gate = siegeReady(s);
@@ -1483,11 +1483,11 @@ export function useClanGame() {
               classId: m.classId,
               level: m.level,
               at: Date.now(),
-              where: "the walls of Ravenhold",
+              where: "the walls of Vareth",
               mobKills: m.mobKills ?? 0,
               oath: m.oath,
             });
-            pushLog(s, `${m.name} died on the walls of Ravenhold.`, "bad");
+            pushLog(s, `${m.name} died on the walls of Vareth.`, "bad");
           } else {
             m.hp = Math.max(1, Math.round(m.hp * 0.3));
           }
@@ -1500,23 +1500,23 @@ export function useClanGame() {
           s.castle.nextAssaultAt = Date.now() + 25 * 60_000;
           s.reputation += 250;
           const lord = lordOf(s);
-          if (lord) lord.title = "Lord of Ravenhold";
-          pushLog(s, `Ravenhold is taken. ${s.clanName} holds the trade road.`, "good");
+          if (lord) lord.title = "Lord of Vareth";
+          pushLog(s, `Vareth is taken. ${s.clanName} holds the trade road.`, "good");
           chronicle(
             s,
             "triumph",
-            "Ravenhold is taken",
+            "Vareth is taken",
             `The gate came down at dusk and ${holderName} surrendered the keep. The tax road belongs to ${s.clanName}.`,
           );
-          toast.success("Ravenhold is yours.");
+          toast.success("Vareth is yours.");
         } else {
           s.reputation = Math.max(0, s.reputation - 80);
-          pushLog(s, `The siege of Ravenhold failed. ${holderName} still holds the gate.`, "bad");
+          pushLog(s, `The siege of Vareth failed. ${holderName} still holds the gate.`, "bad");
           chronicle(
             s,
             "loss",
             "The siege fails",
-            `${holderName} held Ravenhold. The ladders are still lying in the ditch.`,
+            `${holderName} held Vareth. The ladders are still lying in the ditch.`,
           );
           toast.error("The siege failed.");
         }
@@ -1529,7 +1529,7 @@ export function useClanGame() {
         const purse = Math.round(s.castle.purse);
         s.gold += purse;
         s.castle.purse = 0;
-        pushLog(s, `Collected ${purse.toLocaleString()} gold in road tax from Ravenhold.`, "good");
+        pushLog(s, `Collected ${purse.toLocaleString()} gold in road tax from Vareth.`, "good");
         toast.success(`+${purse.toLocaleString()} gold`);
       }),
 
