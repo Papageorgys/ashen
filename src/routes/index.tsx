@@ -459,12 +459,6 @@ function Index() {
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <TitleBar state={state} email={user?.email ?? null} signedIn={!!user} />
-        {founded && (
-          <div className={railOpen ? "lg:pl-[11rem]" : "lg:pl-[3.75rem]"}>
-            <BossStrip boss={boss} onOpen={() => setTab("boss")} />
-          </div>
-        )}
-
         <Tabs
           value={activeTab}
           onValueChange={setTab}
@@ -518,6 +512,11 @@ function Index() {
           </TabsList>
 
           <div className="stage-scroll order-1 min-h-0 min-w-0 space-y-5 px-3 py-4 sm:px-5 lg:order-2">
+            {founded && (
+              <div className="sticky top-0 z-20 -mx-3 -mt-4 bg-background sm:-mx-5">
+                <BossStrip boss={boss} onOpen={() => setTab("boss")} />
+              </div>
+            )}
             <ClanHeader state={state} api={api} />
             <div className="stage-enter" key={activeTab}>
               <TabsContent value="banners" className="mt-0">
