@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { LANDMARKS, ZONES, ZONE_POS, ZONE_BY_ID } from "@/lib/game/data";
+import { LANDMARKS, ZONES, ZONE_POS, ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
 import { RIVAL_BY_ID, RIVALS } from "@/lib/game/rivals";
 import type { GameState, Party } from "@/lib/game/engine";
 import { surgeZones, SURGE_XP_PCT, SURGE_REP_PCT } from "@/lib/game/engine";
@@ -13,11 +13,26 @@ const HOME_TARGET = "__home";
 
 /** Hand-inked forest clumps (percent coords on the 100x62 plate). */
 const TREES = [
-  { x: 12, y: 60 }, { x: 16, y: 66 }, { x: 20, y: 72 }, { x: 27, y: 80 },
-  { x: 31, y: 74 }, { x: 34, y: 66 }, { x: 44, y: 72 }, { x: 48, y: 78 },
-  { x: 52, y: 82 }, { x: 20, y: 46 }, { x: 24, y: 40 }, { x: 36, y: 40 },
-  { x: 60, y: 74 }, { x: 66, y: 78 }, { x: 72, y: 80 }, { x: 8, y: 50 },
-  { x: 62, y: 46 }, { x: 56, y: 52 }, { x: 14, y: 38 }, { x: 40, y: 86 },
+  { x: 12, y: 60 },
+  { x: 16, y: 66 },
+  { x: 20, y: 72 },
+  { x: 27, y: 80 },
+  { x: 31, y: 74 },
+  { x: 34, y: 66 },
+  { x: 44, y: 72 },
+  { x: 48, y: 78 },
+  { x: 52, y: 82 },
+  { x: 20, y: 46 },
+  { x: 24, y: 40 },
+  { x: 36, y: 40 },
+  { x: 60, y: 74 },
+  { x: 66, y: 78 },
+  { x: 72, y: 80 },
+  { x: 8, y: 50 },
+  { x: 62, y: 46 },
+  { x: 56, y: 52 },
+  { x: 14, y: 38 },
+  { x: 40, y: 86 },
 ];
 
 /** Mountain ranges: each entry is a ridge line of chevrons. */
@@ -42,14 +57,12 @@ const ROADS: [number, number, number, number][] = [
 const COAST =
   "M5 31 C 6 22, 11 15, 19 12 C 24 10, 26 13, 30 12 C 33 11, 33 7, 38 7 C 44 7, 46 11, 51 10 C 55 9, 57 4, 64 5 C 72 6, 74 11, 80 12 C 89 13, 96 19, 95 27 C 94 33, 89 33, 89 37 C 89 42, 94 44, 92 49 C 89 55, 80 57, 73 55 C 67 53, 66 58, 59 59 C 52 60, 49 56, 43 57 C 37 58, 35 61, 29 59 C 22 57, 21 52, 16 50 C 10 47, 4 40, 5 31 Z";
 
-
-
 function Ridge({ x, y, n, s }: { x: number; y: number; n: number; s: number }) {
   const yy = y * 0.62;
   return (
     <g className="text-map-ink" stroke="currentColor" strokeWidth={0.18 * s} fill="none">
       {Array.from({ length: n }).map((_, i) => {
-        const px = x + i * 2.6 * s - (n * 1.3 * s);
+        const px = x + i * 2.6 * s - n * 1.3 * s;
         const py = yy + (i % 2 === 0 ? 0 : 0.9 * s);
         const h = (i % 2 === 0 ? 2.6 : 1.9) * s;
         const w = 2.0 * s;
@@ -61,8 +74,14 @@ function Ridge({ x, y, n, s }: { x: number; y: number; n: number; s: number }) {
               fillOpacity="0.06"
             />
             {/* hatching on the shaded flank */}
-            <path d={`M${px + 0.25} ${py - h + 0.5} L${px + w * 0.75} ${py - 0.2}`} strokeWidth={0.1 * s} />
-            <path d={`M${px + 0.6} ${py - h + 1.1} L${px + w * 0.85} ${py - 0.1}`} strokeWidth={0.1 * s} />
+            <path
+              d={`M${px + 0.25} ${py - h + 0.5} L${px + w * 0.75} ${py - 0.2}`}
+              strokeWidth={0.1 * s}
+            />
+            <path
+              d={`M${px + 0.6} ${py - h + 1.1} L${px + w * 0.85} ${py - 0.1}`}
+              strokeWidth={0.1 * s}
+            />
           </g>
         );
       })}
@@ -85,7 +104,13 @@ function Grove({ x, y }: { x: number; y: number }) {
 /** The inked plate never changes — keep it out of every game tick's re-render. */
 const MapPlate = memo(function MapPlate() {
   return (
-    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 62" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <svg
+      className="absolute inset-0 h-full w-full"
+      viewBox="0 0 100 62"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
       <defs>
         <filter id="foxing">
           <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="n" />
@@ -99,7 +124,13 @@ const MapPlate = memo(function MapPlate() {
           <stop offset="100%" stopColor="var(--map-parchment-dark)" stopOpacity="0.95" />
         </radialGradient>
         <pattern id="seaHatch" width="2" height="1.6" patternUnits="userSpaceOnUse">
-          <path d="M0 1.3 H2" stroke="var(--map-sea)" strokeWidth="0.12" strokeOpacity="0.55" fill="none" />
+          <path
+            d="M0 1.3 H2"
+            stroke="var(--map-sea)"
+            strokeWidth="0.12"
+            strokeOpacity="0.55"
+            fill="none"
+          />
         </pattern>
         <clipPath id="landClip">
           <path d={COAST} />
@@ -124,7 +155,13 @@ const MapPlate = memo(function MapPlate() {
       ))}
 
       {/* landmass */}
-      <path d={COAST} fill="var(--map-land)" fillOpacity="0.85" stroke="var(--map-ink)" strokeWidth="0.35" />
+      <path
+        d={COAST}
+        fill="var(--map-land)"
+        fillOpacity="0.85"
+        stroke="var(--map-ink)"
+        strokeWidth="0.35"
+      />
 
       <g clipPath="url(#landClip)">
         {/* rivers */}
@@ -173,8 +210,26 @@ const MapPlate = memo(function MapPlate() {
       <rect x="0" y="0" width="100" height="62" fill="url(#agedEdge)" />
 
       {/* engraved frame */}
-      <rect x="1" y="0.8" width="98" height="60.4" fill="none" stroke="var(--map-ink)" strokeOpacity="0.6" strokeWidth="0.35" />
-      <rect x="2" y="1.8" width="96" height="58.4" fill="none" stroke="var(--map-ink)" strokeOpacity="0.35" strokeWidth="0.15" />
+      <rect
+        x="1"
+        y="0.8"
+        width="98"
+        height="60.4"
+        fill="none"
+        stroke="var(--map-ink)"
+        strokeOpacity="0.6"
+        strokeWidth="0.35"
+      />
+      <rect
+        x="2"
+        y="1.8"
+        width="96"
+        height="58.4"
+        fill="none"
+        stroke="var(--map-ink)"
+        strokeOpacity="0.35"
+        strokeWidth="0.15"
+      />
     </svg>
   );
 });
@@ -243,16 +298,30 @@ export function WorldMap({
   const clock = now ?? Date.now();
 
   const parties = state.parties.map((p) => {
+    // On the march: interpolate the banner along the road from the keep.
+    if (p.travel) {
+      const dest = ZONE_POS[p.travel.zoneId] ?? HOME;
+      const total = travelMsTo(p.travel.zoneId);
+      const t = Math.min(1, Math.max(0, 1 - (p.travel.arrivesAt - clock) / total));
+      const pos = { x: HOME.x + (dest.x - HOME.x) * t, y: HOME.y + (dest.y - HOME.y) * t };
+      return {
+        party: p,
+        zoneId: p.travel.zoneId,
+        pos,
+        pct: t * 100,
+        fighting: false,
+        traveling: true,
+      };
+    }
     const zoneId = p.run?.zoneId ?? p.farming ?? null;
     const pos = zoneId ? (ZONE_POS[zoneId] ?? HOME) : HOME;
     const dur = zoneId ? (ZONE_BY_ID[zoneId]?.durationMs ?? 1) : 1;
     const pct = p.run ? Math.min(100, Math.max(0, 100 - ((p.run.endsAt - clock) / dur) * 100)) : 0;
-    return { party: p, zoneId, pos, pct, fighting: !!p.run };
+    return { party: p, zoneId, pos, pct, fighting: !!p.run, traveling: false };
   });
 
   /** how many banners are hunting each zone right now — drives the marker pulse */
   const busyZones = new Set(parties.filter((p) => p.fighting && p.zoneId).map((p) => p.zoneId!));
-
 
   const drop = useCallback(
     (target: string | null, partyId?: string) => {
@@ -322,7 +391,12 @@ export function WorldMap({
   };
 
   return (
-    <div className={cn("relative w-full overflow-hidden rounded-sm border-2 border-map-ink/50 shadow-[0_18px_40px_-24px_oklch(0_0_0/0.9)]", className)}>
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-sm border-2 border-map-ink/50 shadow-[0_18px_40px_-24px_oklch(0_0_0/0.9)]",
+        className,
+      )}
+    >
       <div
         className="relative h-[clamp(300px,50dvh,640px)] w-full bg-map-parchment"
         role={interactive ? "application" : undefined}
@@ -336,18 +410,35 @@ export function WorldMap({
             Hour of high activity · {surgeLeft} left
           </div>
           <div className="text-[10px] text-muted-foreground">
-            {surging.map((id) => ZONE_BY_ID[id]?.name).filter(Boolean).join(" · ")} — +{SURGE_XP_PCT}% xp, +{SURGE_REP_PCT}% reputation
+            {surging
+              .map((id) => ZONE_BY_ID[id]?.name)
+              .filter(Boolean)
+              .join(" · ")}{" "}
+            — +{SURGE_XP_PCT}% xp, +{SURGE_REP_PCT}% reputation
           </div>
         </div>
 
         {/* compass rose */}
         <div className="pointer-events-none absolute bottom-3 right-3 opacity-70">
-          <svg width="58" height="58" viewBox="0 0 46 46" aria-hidden="true" focusable="false" className="text-map-ink">
+          <svg
+            width="58"
+            height="58"
+            viewBox="0 0 46 46"
+            aria-hidden="true"
+            focusable="false"
+            className="text-map-ink"
+          >
             <circle cx="23" cy="23" r="18" fill="none" stroke="currentColor" strokeWidth="0.6" />
             <circle cx="23" cy="23" r="14" fill="none" stroke="currentColor" strokeWidth="0.3" />
             <path d="M23 5 L25.5 23 L23 41 L20.5 23 Z" fill="currentColor" fillOpacity="0.85" />
             <path d="M5 23 L23 20.5 L41 23 L23 25.5 Z" fill="currentColor" fillOpacity="0.35" />
-            <text x="23" y="4.6" textAnchor="middle" className="fill-map-ink font-display" fontSize="5">
+            <text
+              x="23"
+              y="4.6"
+              textAnchor="middle"
+              className="fill-map-ink font-display"
+              fontSize="5"
+            >
               N
             </text>
           </svg>
@@ -429,7 +520,11 @@ export function WorldMap({
 
                 aria-describedby={tipId}
                 aria-label={`${z.name} — ${dungeon ? "dungeon" : "experience field"}, level ${z.reqLevel} and up${
-                  picked ? (ts === "ok" ? ", available for the chosen banner" : ", too dangerous for the chosen banner") : ""
+                  picked
+                    ? ts === "ok"
+                      ? ", available for the chosen banner"
+                      : ", too dangerous for the chosen banner"
+                    : ""
                 }`}
                 className={cn(
                   "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] motion-safe:transition-transform group-hover:scale-110",
@@ -439,7 +534,9 @@ export function WorldMap({
                     : "border-map-ink/70 bg-map-parchment text-map-ink",
                   ts === "ok" && "ring-1 ring-primary/60",
                   ts === "blocked" && "opacity-45",
-                  hover === z.id && ts !== "blocked" && "scale-125 border-2 border-primary bg-primary/40",
+                  hover === z.id &&
+                    ts !== "blocked" &&
+                    "scale-125 border-2 border-primary bg-primary/40",
                   hover === z.id && ts === "blocked" && "scale-110 border-2 border-destructive",
                 )}
                 {...dropProps(z.id)}
@@ -474,7 +571,8 @@ export function WorldMap({
                 <p className="mt-1 text-[11px] text-muted-foreground">{z.blurb}</p>
                 {hot && (
                   <p className="mt-1 text-[11px] text-gold">
-                    High activity this hour: +{SURGE_XP_PCT}% experience, +{SURGE_REP_PCT}% reputation.
+                    High activity this hour: +{SURGE_XP_PCT}% experience, +{SURGE_REP_PCT}%
+                    reputation.
                   </p>
                 )}
                 {claimDef && (
@@ -529,8 +627,8 @@ export function WorldMap({
                     Held by{" "}
                     {state.castle?.holder === "player"
                       ? state.clanName
-                      : RIVALS.find((r) => r.id === state.castle?.holder)?.name ??
-                        "the crown's garrison"}
+                      : (RIVALS.find((r) => r.id === state.castle?.holder)?.name ??
+                        "the crown's garrison")}
                     .
                   </p>
                 )}
@@ -543,11 +641,14 @@ export function WorldMap({
         })}
 
         {/* banner pieces — they march to their destination rather than jumping */}
-        {parties.map(({ party, zoneId, pos, pct, fighting }, i) => (
+        {parties.map(({ party, zoneId, pos, pct, fighting, traveling }, i) => (
           <div
             key={party.id}
             className="absolute z-20 -translate-x-1/2 -translate-y-1/2 motion-safe:transition-[left,top] motion-safe:duration-700 motion-safe:ease-out"
-            style={{ left: `${pos.x + (i % 3) * 3}%`, top: `${pos.y - 7 - Math.floor(i / 3) * 5}%` }}
+            style={{
+              left: `${pos.x + (i % 3) * 3}%`,
+              top: `${pos.y - 7 - Math.floor(i / 3) * 5}%`,
+            }}
           >
             <button
               type="button"
@@ -571,7 +672,11 @@ export function WorldMap({
                 e.stopPropagation();
                 if (!interactive) return;
                 setPicked((p) => (p === party.id ? null : party.id));
-                setStatus(picked === party.id ? "Banner set back down." : `${party.name} lifted — choose a destination.`);
+                setStatus(
+                  picked === party.id
+                    ? "Banner set back down."
+                    : `${party.name} lifted — choose a destination.`,
+                );
               }}
               onKeyDown={(e) => {
                 if (e.key === "Escape" && picked) {
@@ -582,24 +687,29 @@ export function WorldMap({
               className={cn(
                 "relative flex items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 font-display text-[9px] shadow-sm motion-safe:transition-transform",
                 focusRing,
-                zoneId
-                  ? "border-map-ink bg-primary/70 text-map-ink"
-                  : "border-map-ink/70 bg-map-parchment text-map-ink",
+                traveling
+                  ? "border-dashed border-map-ink/80 bg-map-parchment/90 text-map-ink"
+                  : zoneId
+                    ? "border-map-ink bg-primary/70 text-map-ink"
+                    : "border-map-ink/70 bg-map-parchment text-map-ink",
                 interactive && "cursor-grab active:cursor-grabbing hover:scale-110",
                 picked === party.id && "scale-110 ring-2 ring-primary",
               )}
             >
               <span aria-hidden="true" className={cn(fighting && "motion-safe:animate-pulse")}>
-                ⚑
+                {traveling ? "➹" : "⚑"}
               </span>{" "}
               {party.name}
-              {fighting && (
+              {(fighting || traveling) && (
                 <span
                   aria-hidden="true"
                   className="absolute inset-x-0 bottom-0 h-[2px] bg-map-ink/20"
                 >
                   <span
-                    className="block h-full bg-gold motion-safe:transition-[width] motion-safe:duration-200"
+                    className={cn(
+                      "block h-full motion-safe:transition-[width] motion-safe:duration-200",
+                      traveling ? "bg-map-road" : "bg-gold",
+                    )}
                     style={{ width: `${pct}%` }}
                   />
                 </span>
@@ -607,7 +717,6 @@ export function WorldMap({
             </button>
           </div>
         ))}
-
       </div>
 
       {interactive && (

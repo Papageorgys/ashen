@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import { MemberCard } from "./MemberCard";
-import { CLASS_BY_ID, MAX_PARTY_SIZE, ZONES, type Role } from "@/lib/game/data";
+import { CLASS_BY_ID, MAX_PARTY_SIZE, ZONES, travelMsTo, type Role } from "@/lib/game/data";
 import {
   maxParties,
   memberPower,
@@ -61,6 +61,10 @@ function PartyCard({
   const zone = ZONES.find((z) => z.id === (party.run?.zoneId ?? zoneId))!;
   const remaining = party.run ? Math.max(0, party.run.endsAt - now) : 0;
   const pct = party.run ? 100 - (remaining / zone.durationMs) * 100 : 0;
+  const travelZone = party.travel ? ZONES.find((z) => z.id === party.travel!.zoneId) : null;
+  const travelRemaining = party.travel ? Math.max(0, party.travel.arrivesAt - now) : 0;
+  const travelTotal = party.travel ? travelMsTo(party.travel.zoneId) : 1;
+  const travelPct = party.travel ? 100 - (travelRemaining / travelTotal) * 100 : 0;
   const odds = Math.round(Math.max(8, Math.min(96, 15 + (power / zone.threat) * 60)));
   const synergies = partySynergies(state, party);
   const syn = synergyBonus(members);
@@ -89,7 +93,6 @@ function PartyCard({
         over && (!!party.run || full) && "border-destructive ring-2 ring-destructive/50",
       )}
     >
-
       <div className="flex items-center justify-between gap-2">
         <h3 className="flex min-w-0 items-center gap-2 font-display text-base">
           <input
@@ -143,7 +146,6 @@ function PartyCard({
           </DropdownMenu>
         </div>
       </div>
-
 
       <div className="mt-2 space-y-1.5">
         {members.map((m) => (
@@ -214,7 +216,23 @@ function PartyCard({
       )}
 
       <div className="mt-3 border-t border-border pt-3">
-        {party.run ? (
+        {party.travel ? (
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Marching to {travelZone?.name ?? "the field"} · on the road</span>
+              <span>{(travelRemaining / 1000).toFixed(0)}s</span>
+            </div>
+            <Progress value={travelPct} />
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={() => api.recallParty(party.id)}
+            >
+              Turn back
+            </Button>
+          </div>
+        ) : party.run ? (
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>
@@ -237,12 +255,12 @@ function PartyCard({
         ) : (
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span className="italic">Awaiting orders — set its piece on the war table.</span>
-            <span className="font-display text-gold">{odds}% at {zone.name}</span>
+            <span className="font-display text-gold">
+              {odds}% at {zone.name}
+            </span>
           </div>
         )}
-
       </div>
-
     </div>
   );
 }
@@ -259,7 +277,9 @@ export function PartyBoard({
   /** opens the clan keep halls when the home square is clicked */
   onOpenKeep?: () => void;
 }) {
-  const unassigned = state.members.filter((m) => !state.parties.some((p) => p.memberIds.includes(m.id)));
+  const unassigned = state.members.filter(
+    (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
+  );
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
   const openBanner = state.parties.find((p) => !p.run && p.memberIds.length < MAX_PARTY_SIZE);
@@ -284,8 +304,8 @@ export function PartyBoard({
         <div>
           <h2 className="text-lg">War Table</h2>
           <p className="text-xs text-muted-foreground">
-            {state.parties.length} / {maxParties(state.clanLevel, !!state.allegiance)} banners fielded · {unassigned.length}{" "}
-            champion(s) idle · {openSeats} open seat(s).
+            {state.parties.length} / {maxParties(state.clanLevel, !!state.allegiance)} banners
+            fielded · {unassigned.length} champion(s) idle · {openSeats} open seat(s).
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -298,7 +318,13 @@ export function PartyBoard({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="h-8 w-8 p-0" aria-label="War table actions" title="War table actions">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 w-8 p-0"
+                aria-label="War table actions"
+                title="War table actions"
+              >
                 <MoreHorizontal className="h-4 w-4" aria-hidden />
               </Button>
             </DropdownMenuTrigger>
@@ -313,7 +339,9 @@ export function PartyBoard({
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!state.parties.some((p) => p.farming)}
-                onSelect={() => state.parties.filter((p) => p.farming).forEach((p) => api.recallParty(p.id))}
+                onSelect={() =>
+                  state.parties.filter((p) => p.farming).forEach((p) => api.recallParty(p.id))
+                }
               >
                 Recall every banner
               </DropdownMenuItem>
