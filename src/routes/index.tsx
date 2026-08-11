@@ -31,17 +31,15 @@ import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
+import { BossStrip } from "@/components/game/BossStrip";
+import { BossPanel } from "@/components/game/BossPanel";
+import { useWorldBoss } from "@/hooks/useWorldBoss";
 import { useSession } from "@/hooks/useSession";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { TitleBar } from "@/components/game/TitleBar";
 import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Anvil,
   BookOpen,
@@ -52,9 +50,9 @@ import {
   Map,
   PawPrint,
   Package,
+  Skull,
   PanelLeftClose,
   PanelLeftOpen,
-
   Handshake,
   PenLine,
   ScrollText,
@@ -64,7 +62,6 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
-
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -136,11 +133,19 @@ function Founding({ onStart }: { onStart: (f: FoundingT) => void }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1">
                 <span className="text-xs text-muted-foreground">Clan name</span>
-                <Input value={clanName} maxLength={28} onChange={(e) => setClanName(e.target.value)} />
+                <Input
+                  value={clanName}
+                  maxLength={28}
+                  onChange={(e) => setClanName(e.target.value)}
+                />
               </label>
               <label className="space-y-1">
                 <span className="text-xs text-muted-foreground">Your name</span>
-                <Input value={lordName} maxLength={28} onChange={(e) => setLordName(e.target.value)} />
+                <Input
+                  value={lordName}
+                  maxLength={28}
+                  onChange={(e) => setLordName(e.target.value)}
+                />
               </label>
             </div>
 
@@ -202,8 +207,7 @@ function Founding({ onStart }: { onStart: (f: FoundingT) => void }) {
                 const pr = PROFESSIONS.find((x) => x.id === profession)!;
                 return (
                   <p className="text-xs text-muted-foreground">
-                    {pr.blurb}{" "}
-                    <span className="text-foreground">{pr.perkName}:</span> {pr.perkText}{" "}
+                    {pr.blurb} <span className="text-foreground">{pr.perkName}:</span> {pr.perkText}{" "}
                     <span className="text-foreground">Deed:</span> {pr.deedText}
                   </p>
                 );
@@ -263,15 +267,31 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { value: "banners", label: "War Table", icon: Swords, hint: "Deploy your banners" },
       { value: "map", label: "Map", icon: Map, hint: "The realm and where your banners stand" },
-      { value: "bestiary", label: "Bestiary", icon: PawPrint, hint: "Every creature your banners have faced" },
-      { value: "keep", label: "Keep", icon: Castle, hint: "Upgrade your halls", requiresClan: true },
+      {
+        value: "bestiary",
+        label: "Bestiary",
+        icon: PawPrint,
+        hint: "Every creature your banners have faced",
+      },
+      {
+        value: "keep",
+        label: "Keep",
+        icon: Castle,
+        hint: "Upgrade your halls",
+        requiresClan: true,
+      },
     ],
   },
   {
     title: "Company",
     items: [
       { value: "recruit", label: "Recruit", icon: UserPlus, hint: "Swear new blades" },
-      { value: "muster", label: "Muster", icon: Handshake, hint: "Petitions and invitations from party leaders" },
+      {
+        value: "muster",
+        label: "Muster",
+        icon: Handshake,
+        hint: "Petitions and invitations from party leaders",
+      },
       { value: "skills", label: "Skills", icon: Sparkles, hint: "Train abilities" },
       { value: "daily", label: "Contracts", icon: ScrollText, hint: "Daily, weekly and monthly" },
       { value: "scriptorium", label: "Scrolls", icon: PenLine, hint: "Imprint spells into vellum" },
@@ -282,23 +302,60 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { value: "warehouse", label: "Warehouse", icon: Package, hint: "Every drop your clan holds" },
       { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
-      { value: "forge", label: "Artisan", icon: Hammer, hint: "Craft gear from spoils — quality varies" },
-      { value: "sysforge", label: "Sys Forge", icon: Anvil, hint: "Public smithy — standard results, no artisans needed" },
+      {
+        value: "forge",
+        label: "Artisan",
+        icon: Hammer,
+        hint: "Craft gear from spoils — quality varies",
+      },
+      {
+        value: "sysforge",
+        label: "Sys Forge",
+        icon: Anvil,
+        hint: "Public smithy — standard results, no artisans needed",
+      },
     ],
   },
   {
     title: "Realm",
     items: [
-      { value: "realm", label: "Realm", icon: Flag, hint: "Rivals and the castle", requiresClan: true },
+      {
+        value: "realm",
+        label: "Realm",
+        icon: Flag,
+        hint: "Rivals and the castle",
+        requiresClan: true,
+      },
+      {
+        value: "boss",
+        label: "Warfront",
+        icon: Skull,
+        hint: "The realm's daily World Boss",
+        requiresClan: true,
+      },
       { value: "world", label: "Ladder", icon: Globe2, hint: "Live rankings of every clan" },
-      { value: "chronicle", label: "Chronicle", icon: BookOpen, hint: "Your saga and the fallen", requiresClan: true },
+      {
+        value: "chronicle",
+        label: "Chronicle",
+        icon: BookOpen,
+        hint: "Your saga and the fallen",
+        requiresClan: true,
+      },
     ],
   },
 ];
 
 const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
-function NavButton({ item, active, expanded }: { item: NavItem; active: boolean; expanded: boolean }) {
+function NavButton({
+  item,
+  active,
+  expanded,
+}: {
+  item: NavItem;
+  active: boolean;
+  expanded: boolean;
+}) {
   const Icon = item.icon;
   return (
     <Tooltip>
@@ -313,7 +370,9 @@ function NavButton({ item, active, expanded }: { item: NavItem; active: boolean;
           } ${active ? "rail-active" : ""}`}
         >
           <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
-          <span className={expanded ? "max-w-full truncate" : "max-w-full truncate lg:sr-only"}>{item.label}</span>
+          <span className={expanded ? "max-w-full truncate" : "max-w-full truncate lg:sr-only"}>
+            {item.label}
+          </span>
         </TabsTrigger>
       </TooltipTrigger>
       <TooltipContent side="right">
@@ -324,7 +383,6 @@ function NavButton({ item, active, expanded }: { item: NavItem; active: boolean;
   );
 }
 
-
 function Index() {
   const { state, hydrated, api } = useClanGame();
   const { user, ready: authReady } = useSession();
@@ -333,6 +391,7 @@ function Index() {
   const [tab, setTab] = useState("banners");
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
   const [railOpen, setRailOpen] = useState(false);
+  const boss = useWorldBoss(user?.id ?? null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -343,8 +402,6 @@ function Index() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("rail-open", railOpen ? "1" : "0");
   }, [railOpen]);
-
-
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -364,7 +421,8 @@ function Index() {
       setFlourish({
         id: Date.now(),
         title: clanLevel === 1 ? "A Clan is Born" : `Clan Level ${clanLevel}`,
-        subtitle: clanLevel === 1 ? "Your crest flies over the Ashen Realm" : "The banners rise higher",
+        subtitle:
+          clanLevel === 1 ? "Your crest flies over the Ashen Realm" : "The banners rise higher",
       });
     } else if (holdsCastle && !before.holdsCastle) {
       setFlourish({ id: Date.now(), title: "Ravenhold Falls", subtitle: "The castle is yours" });
@@ -401,13 +459,18 @@ function Index() {
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <TitleBar state={state} email={user?.email ?? null} signedIn={!!user} />
+        {founded && (
+          <BossStrip boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
+        )}
 
         <Tabs
           value={activeTab}
           onValueChange={setTab}
           orientation="vertical"
           className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-0 lg:grid-rows-1 ${
-            railOpen ? "lg:grid-cols-[11rem_minmax(0,1fr)_20rem]" : "lg:grid-cols-[3.75rem_minmax(0,1fr)_20rem]"
+            railOpen
+              ? "lg:grid-cols-[11rem_minmax(0,1fr)_20rem]"
+              : "lg:grid-cols-[3.75rem_minmax(0,1fr)_20rem]"
           }`}
         >
           <TabsList className="order-2 flex h-auto w-full items-stretch gap-1 overflow-x-auto rounded-none border-t border-border/60 bg-background/80 p-1 backdrop-blur lg:order-1 lg:w-auto lg:flex-col lg:items-stretch lg:overflow-y-auto lg:border-r lg:border-t-0 lg:bg-transparent lg:py-2">
@@ -417,7 +480,11 @@ function Index() {
               aria-label={railOpen ? "Collapse menu" : "Expand menu"}
               className="hidden shrink-0 items-center gap-2 rounded-sm border border-transparent px-2 py-1.5 text-[9px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold/80 lg:flex"
             >
-              {railOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+              {railOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeftOpen className="h-4 w-4" />
+              )}
               {railOpen && <span>Collapse</span>}
             </button>
             {NAV_GROUPS.map((group) => {
@@ -432,15 +499,21 @@ function Index() {
                   >
                     {group.title}
                   </div>
-                  {!railOpen && <div className="hidden h-px w-full bg-border/50 lg:block" aria-hidden />}
+                  {!railOpen && (
+                    <div className="hidden h-px w-full bg-border/50 lg:block" aria-hidden />
+                  )}
                   {items.map((item) => (
-                    <NavButton key={item.value} item={item} active={activeTab === item.value} expanded={railOpen} />
+                    <NavButton
+                      key={item.value}
+                      item={item}
+                      active={activeTab === item.value}
+                      expanded={railOpen}
+                    />
                   ))}
                 </div>
               );
             })}
           </TabsList>
-
 
           <div className="stage-scroll order-1 min-h-0 min-w-0 space-y-5 px-3 py-4 sm:px-5 lg:order-2">
             <ClanHeader state={state} api={api} />
@@ -477,6 +550,9 @@ function Index() {
               </TabsContent>
               <TabsContent value="realm" className="mt-0">
                 <RealmPanel state={state} api={api} />
+              </TabsContent>
+              <TabsContent value="boss" className="mt-0">
+                <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
               </TabsContent>
               <TabsContent value="world" className="mt-0">
                 <WorldPanel signedIn={!!user} myId={user?.id ?? null} />

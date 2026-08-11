@@ -152,12 +152,51 @@ export type Database = {
         }
         Relationships: []
       }
+      world_boss_contributions: {
+        Row: {
+          clan_name: string
+          crest: Json | null
+          damage: number
+          event_id: string
+          leader_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clan_name?: string
+          crest?: Json | null
+          damage?: number
+          event_id: string
+          leader_name?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clan_name?: string
+          crest?: Json | null
+          damage?: number
+          event_id?: string
+          leader_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      strike_world_boss: {
+        Args: {
+          p_clan_name: string
+          p_crest: Json
+          p_damage: number
+          p_event_id: string
+          p_leader_name: string
+        }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

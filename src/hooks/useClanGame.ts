@@ -2,7 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/useSession";
 import { fetchCloudSave, pushCloudSave } from "@/lib/cloud/sync";
-import { CASTLE, RIVAL_BY_ID, garrisonPower, initialCastle, initialRivals, resolveClash } from "@/lib/game/rivals";
+import {
+  CASTLE,
+  RIVAL_BY_ID,
+  garrisonPower,
+  initialCastle,
+  initialRivals,
+  resolveClash,
+} from "@/lib/game/rivals";
 import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "@/lib/game/identity";
 import { professionFromSeed } from "@/lib/game/professions";
 import {
@@ -104,13 +111,9 @@ import {
 } from "@/lib/game/engine";
 import { SCROLL_BY_ID } from "@/lib/game/data";
 import { MONSTER_BY_ID } from "@/lib/game/monsters";
+import { bossSpoils } from "@/lib/game/worldboss";
 
-import {
-  IMPROVED_YIELD,
-  SCROLL_LOG_CAP,
-  attemptId,
-  rollOutcomeDetail,
-} from "@/lib/game/scrolls";
+import { IMPROVED_YIELD, SCROLL_LOG_CAP, attemptId, rollOutcomeDetail } from "@/lib/game/scrolls";
 
 const KEY = "clanleader.save.v3";
 
@@ -247,7 +250,6 @@ export function useClanGame() {
     };
   }, [cloudReady, user?.id]);
 
-
   const pushLog = (s: GameState, text: string, tone: "good" | "bad" | "info") => {
     s.log = [{ id: uid(), at: Date.now(), text, tone }, ...s.log].slice(0, 60);
   };
@@ -326,10 +328,15 @@ export function useClanGame() {
                   const slayerId = res.mvp?.memberId ?? res.participants[0];
                   const slayer = slayerId ? s.members.find((x) => x.id === slayerId) : undefined;
                   if (slayer && !slayer.isLord) {
-                    addMark(slayer, "slayer", `First of ${s.clanName} to bring down ${beast}, in ${zoneName}.`, {
-                      bound: "kills",
-                      where: zoneName,
-                    });
+                    addMark(
+                      slayer,
+                      "slayer",
+                      `First of ${s.clanName} to bring down ${beast}, in ${zoneName}.`,
+                      {
+                        bound: "kills",
+                        where: zoneName,
+                      },
+                    );
                   }
                 }
               }
@@ -377,10 +384,15 @@ export function useClanGame() {
                 m.level += 1;
                 pushLog(s, `${m.name} reached level ${m.level}.`, "good");
                 if (m.level % 10 === 0 || m.level === MAX_LEVEL) {
-                  addMark(m, "ascend", `Came into their strength at level ${m.level}, out in ${zoneName}.`, {
-                    bound: "level",
-                    where: zoneName,
-                  });
+                  addMark(
+                    m,
+                    "ascend",
+                    `Came into their strength at level ${m.level}, out in ${zoneName}.`,
+                    {
+                      bound: "level",
+                      where: zoneName,
+                    },
+                  );
                 }
               }
               if (m.level >= MAX_LEVEL) m.xp = 0;
@@ -404,10 +416,6 @@ export function useClanGame() {
               }
             }
           }
-
-
-
-
 
           // backgrounds that lived up to themselves earn the clan Inspiration
           if (res.deeds.length) {
@@ -467,7 +475,11 @@ export function useClanGame() {
                   where: zone.name,
                   mobKills: m.mobKills ?? 0,
                 });
-                pushLog(s, `${m.name} died in ${zone.name}. There was no body to bring home.`, "bad");
+                pushLog(
+                  s,
+                  `${m.name} died in ${zone.name}. There was no body to bring home.`,
+                  "bad",
+                );
                 chronicle(
                   s,
                   "loss",
@@ -483,16 +495,23 @@ export function useClanGame() {
           {
             const where = zone?.name ?? zoneName;
             const here = (mid: string) => s.members.find((x) => x.id === mid);
-            const standing = res.participants.filter((id) => (res.vitals[id]?.hp ?? 0) > 0 && here(id));
+            const standing = res.participants.filter(
+              (id) => (res.vitals[id]?.hp ?? 0) > 0 && here(id),
+            );
 
             // last one standing — walked out of a fight the others went down in
             if (res.success && standing.length === 1 && res.participants.length > 1) {
               const m = here(standing[0]!);
               if (m && !m.isLord)
-                addMark(m, "clutch", `Last banner standing at ${where} — walked out of a fight the others went down in.`, {
-                  bound: "resolve",
-                  where,
-                });
+                addMark(
+                  m,
+                  "clutch",
+                  `Last banner standing at ${where} — walked out of a fight the others went down in.`,
+                  {
+                    bound: "resolve",
+                    where,
+                  },
+                );
             }
 
             // grief — survivors of a run where a comrade was lost for good.
@@ -504,16 +523,26 @@ export function useClanGame() {
                 const bondedLost = lostThisRun.filter((f) => getAffinity(s, m.id, f.id) >= BOND_AT);
                 if (bondedLost.length) {
                   const names = bondedLost.map((f) => f.name).join(", ");
-                  addMark(m, "survivor", `${names} was ${m.name}'s shield-bond. ${m.name} walked out of ${where}; something in them did not.`, {
-                    bound: "grief",
-                    where,
-                  });
+                  addMark(
+                    m,
+                    "survivor",
+                    `${names} was ${m.name}'s shield-bond. ${m.name} walked out of ${where}; something in them did not.`,
+                    {
+                      bound: "grief",
+                      where,
+                    },
+                  );
                 } else {
                   const lostNames = lostThisRun.map((f) => f.name).join(", ");
-                  addMark(m, "survivor", `Marched home from ${where} without ${lostNames}. Some part of them stayed behind.`, {
-                    bound: "grief",
-                    where,
-                  });
+                  addMark(
+                    m,
+                    "survivor",
+                    `Marched home from ${where} without ${lostNames}. Some part of them stayed behind.`,
+                    {
+                      bound: "grief",
+                      where,
+                    },
+                  );
                 }
               }
               // the bonds to the departed are severed
@@ -530,12 +559,22 @@ export function useClanGame() {
                   const a = here(survived[i]!);
                   const b = here(survived[j]!);
                   if (a && b) {
-                    addMark(a, "bond", `Fought through enough beside ${b.name} to trust no one else at their back.`, {
-                      bound: "loyalty",
-                    });
-                    addMark(b, "bond", `Fought through enough beside ${a.name} to trust no one else at their back.`, {
-                      bound: "loyalty",
-                    });
+                    addMark(
+                      a,
+                      "bond",
+                      `Fought through enough beside ${b.name} to trust no one else at their back.`,
+                      {
+                        bound: "loyalty",
+                      },
+                    );
+                    addMark(
+                      b,
+                      "bond",
+                      `Fought through enough beside ${a.name} to trust no one else at their back.`,
+                      {
+                        bound: "loyalty",
+                      },
+                    );
                   }
                 }
               }
@@ -545,10 +584,15 @@ export function useClanGame() {
             if (res.mvp && (res.rating === "S" || res.rating === "A")) {
               const m = here(res.mvp.memberId);
               if (m && !m.isLord && Math.random() < 0.5)
-                addMark(m, "valor", `Carried the banner through ${where} — ${res.mvp.damage.toLocaleString()} damage when the line nearly broke.`, {
-                  bound: "STR",
-                  where,
-                });
+                addMark(
+                  m,
+                  "valor",
+                  `Carried the banner through ${where} — ${res.mvp.damage.toLocaleString()} damage when the line nearly broke.`,
+                  {
+                    bound: "STR",
+                    where,
+                  },
+                );
             }
 
             // wounded — dragged out at a hair's breadth; the body remembers
@@ -559,10 +603,15 @@ export function useClanGame() {
               if (!v || v.hp <= 0) continue;
               if (v.hp / Math.max(1, maxHp(m)) < 0.1 && Math.random() < 0.4) {
                 const part = WOUND_PARTS[Math.floor(Math.random() * WOUND_PARTS.length)]!;
-                addMark(m, "wounded", `Cut down to nothing at ${where} and carried out breathing — the ${part} never set right after.`, {
-                  bound: "CON",
-                  where,
-                });
+                addMark(
+                  m,
+                  "wounded",
+                  `Cut down to nothing at ${where} and carried out breathing — the ${part} never set right after.`,
+                  {
+                    bound: "CON",
+                    where,
+                  },
+                );
               }
             }
           }
@@ -680,7 +729,6 @@ export function useClanGame() {
     return () => clearInterval(t);
   }, [update]);
 
-
   const api = {
     start: (founding: Founding) => setState(initialState(founding)),
     reset: () => {
@@ -715,9 +763,14 @@ export function useClanGame() {
         s.recruits = s.recruits.filter((x) => x.id !== id);
         const sworn: Member = { ...r, name, partyId: null, joinedAt: Date.now() };
         // the swearing-in is their first remembered moment — authored by the player
-        addMark(sworn, "oath", oath ? `Sworn to ${s.clanName} — “${oath}.”` : `Sworn to ${s.clanName}.`, {
-          bound: "oath",
-        });
+        addMark(
+          sworn,
+          "oath",
+          oath ? `Sworn to ${s.clanName} — “${oath}.”` : `Sworn to ${s.clanName}.`,
+          {
+            bound: "oath",
+          },
+        );
         s.members.push(sworn);
         pushLog(s, `${name} swore the clan oath.`, "info");
       }),
@@ -818,7 +871,8 @@ export function useClanGame() {
         if (partyId) {
           const p = s.parties.find((x) => x.id === partyId);
           if (!p) return;
-          if (p.memberIds.length >= MAX_PARTY_SIZE) return void toast.error(`Party is full (${MAX_PARTY_SIZE}).`);
+          if (p.memberIds.length >= MAX_PARTY_SIZE)
+            return void toast.error(`Party is full (${MAX_PARTY_SIZE}).`);
           p.memberIds.push(memberId);
         }
         m.partyId = partyId;
@@ -887,10 +941,11 @@ export function useClanGame() {
         toast.success(`Learned ${taught} skill${taught > 1 ? "s" : ""}.`);
       }),
 
-
     setSkillCondition: (memberId: string, skillId: string, condition: SkillCondition) =>
       update((s) => {
-        const sk = s.members.find((x) => x.id === memberId)?.skills.find((k) => k.skillId === skillId);
+        const sk = s.members
+          .find((x) => x.id === memberId)
+          ?.skills.find((k) => k.skillId === skillId);
         if (sk) sk.condition = condition;
       }),
 
@@ -927,6 +982,43 @@ export function useClanGame() {
           "good",
         );
         toast.success(`Claimed ${def.name}`);
+      }),
+
+    /* ------------------------------ world boss ------------------------------- */
+
+    /** Stamp the strike cooldown after a blow lands on the World Boss. */
+    markBossStrike: () =>
+      update((s) => {
+        s.bossStrikeAt = Date.now();
+      }),
+
+    /** Claim a felled boss's spoils, once, scaled by this clan's share and rank. */
+    claimBossReward: (
+      eventId: string,
+      bossName: string,
+      level: number,
+      damageShare: number,
+      rank: number,
+    ) =>
+      update((s) => {
+        if (s.bossClaims?.[eventId]) return;
+        const sp = bossSpoils(level, damageShare, rank);
+        s.gold += sp.gold;
+        s.reputation += sp.reputation;
+        s.inspiration = (s.inspiration ?? 0) + sp.inspiration;
+        s.bossClaims = { ...(s.bossClaims ?? {}), [eventId]: true };
+        chronicle(
+          s,
+          "triumph",
+          `${bossName} felled`,
+          `The realm brought down ${bossName}. Our banners claimed ${sp.gold} gold and ${sp.reputation} reputation for our part in the kill.`,
+        );
+        pushLog(
+          s,
+          `${bossName} felled — claimed ${sp.gold} gold, ${sp.reputation} reputation.`,
+          "good",
+        );
+        toast.success(`${bossName} felled — spoils claimed`);
       }),
 
     /* ------------------------- identity & remembrance ------------------------ */
@@ -996,13 +1088,23 @@ export function useClanGame() {
           r.hostility = Math.min(100, r.hostility + 12);
           s.reputation += 60;
           pushLog(s, `${name} was driven off ${zone.name}. The ground is yours.`, "good");
-          chronicle(s, "war", `${zone.name} taken from ${name}`, `Their tax collectors were sent home without their banners. +60 reputation.`);
+          chronicle(
+            s,
+            "war",
+            `${zone.name} taken from ${name}`,
+            `Their tax collectors were sent home without their banners. +60 reputation.`,
+          );
           toast.success(`${zone.name} is free of ${name}.`);
         } else {
           r.hostility = Math.min(100, r.hostility + 18);
           s.reputation = Math.max(0, s.reputation - 25);
           pushLog(s, `Your host broke against ${name} at ${zone.name}.`, "bad");
-          chronicle(s, "loss", `Repulsed at ${zone.name}`, `${name} held the line. The clan came home lighter than it left.`);
+          chronicle(
+            s,
+            "loss",
+            `Repulsed at ${zone.name}`,
+            `${name} held the line. The clan came home lighter than it left.`,
+          );
           toast.error(`Defeated by ${name}.`);
         }
       }),
@@ -1016,7 +1118,9 @@ export function useClanGame() {
         const defense = garrisonPower(s.castle, s.rivals ?? []);
         const host = clanHostPower(s);
         const res = resolveClash(host, defense);
-        const holderName = s.castle.holder ? RIVAL_BY_ID[s.castle.holder]?.name ?? "the crown garrison" : "the crown garrison";
+        const holderName = s.castle.holder
+          ? (RIVAL_BY_ID[s.castle.holder]?.name ?? "the crown garrison")
+          : "the crown garrison";
         for (const m of s.members.filter((x) => !x.isLord)) {
           if (Math.random() >= res.casualtyRisk) continue;
           if (Math.random() < 0.3) {
@@ -1047,12 +1151,22 @@ export function useClanGame() {
           const lord = lordOf(s);
           if (lord) lord.title = "Lord of Ravenhold";
           pushLog(s, `Ravenhold is taken. ${s.clanName} holds the trade road.`, "good");
-          chronicle(s, "triumph", "Ravenhold is taken", `The gate came down at dusk and ${holderName} surrendered the keep. The tax road belongs to ${s.clanName}.`);
+          chronicle(
+            s,
+            "triumph",
+            "Ravenhold is taken",
+            `The gate came down at dusk and ${holderName} surrendered the keep. The tax road belongs to ${s.clanName}.`,
+          );
           toast.success("Ravenhold is yours.");
         } else {
           s.reputation = Math.max(0, s.reputation - 80);
           pushLog(s, `The siege of Ravenhold failed. ${holderName} still holds the gate.`, "bad");
-          chronicle(s, "loss", "The siege fails", `${holderName} held Ravenhold. The ladders are still lying in the ditch.`);
+          chronicle(
+            s,
+            "loss",
+            "The siege fails",
+            `${holderName} held Ravenhold. The ladders are still lying in the ditch.`,
+          );
           toast.error("The siege failed.");
         }
       }),
@@ -1175,8 +1289,10 @@ export function useClanGame() {
               : `Forged ${madeName}.`,
             "good",
           );
-          toast.success(quality > 0 ? `Forged ${madeName} (quality ${quality})` : `Forged ${madeName}`);
-          if (quality >= 12 ) {
+          toast.success(
+            quality > 0 ? `Forged ${madeName} (quality ${quality})` : `Forged ${madeName}`,
+          );
+          if (quality >= 12) {
             chronicle(
               s,
               "forge",
@@ -1229,7 +1345,8 @@ export function useClanGame() {
           s.gold -= fee;
           goldSpent += fee;
           attempts++;
-          for (const inp of r.inputs) s.inventory[inp.item] = (s.inventory[inp.item] ?? 0) - inp.qty;
+          for (const inp of r.inputs)
+            s.inventory[inp.item] = (s.inventory[inp.item] ?? 0) - inp.qty;
           if (Math.random() < systemForgeChance(s, recipeId)) {
             s.inventory[r.result] = (s.inventory[r.result] ?? 0) + (r.qty ?? 1);
             made += r.qty ?? 1;
@@ -1261,8 +1378,6 @@ export function useClanGame() {
           if (made === 0) toast.error(`Forge failed: ${name}`);
         }
       }),
-
-
 
     equip: (memberId: string, item: ItemId) =>
       update((s) => {
@@ -1303,7 +1418,9 @@ export function useClanGame() {
         s.shotsEnabled = s.shotsEnabled === false;
         pushLog(
           s,
-          s.shotsEnabled ? "Banners will load shots before every strike." : "Shots holstered — banners fight bare.",
+          s.shotsEnabled
+            ? "Banners will load shots before every strike."
+            : "Shots holstered — banners fight bare.",
           "info",
         );
       }),
@@ -1441,7 +1558,6 @@ export function useClanGame() {
         );
       }),
 
-
     /* ------------------------------ clan keep ------------------------------ */
 
     upgradeKeep: (id: KeepBuildingId) =>
@@ -1462,8 +1578,7 @@ export function useClanGame() {
     /** infirmary: pay the surgeons to put everyone resting back to full health */
     tendWounded: () =>
       update((s) => {
-        if (keepLevel(s, "infirmary") < 1)
-          return void toast.error("Build the Infirmary first.");
+        if (keepLevel(s, "infirmary") < 1) return void toast.error("Build the Infirmary first.");
         const bill = mendBill(s);
         if (!bill.patients.length) return void toast.error("Nobody needs tending.");
         if (s.gold < bill.gold) return void toast.error("Not enough gold for the surgeons.");
@@ -1563,7 +1678,6 @@ export function useClanGame() {
         }
       }),
   };
-
 
   return { state, hydrated, api, CLAN_LEVELS } as {
     state: GameState | null;
