@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { setRememberSession } from "@/integrations/supabase/auth-storage";
 import { lovable } from "@/integrations/lovable/index";
 import { useSession } from "@/hooks/useSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -35,7 +37,9 @@ function AuthPage() {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "bad" | "info"; text: string } | null>(null);
 
   // Already sworn in? No need to linger at the gate.
   useEffect(() => {
@@ -45,6 +49,9 @@ function AuthPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setNotice(null);
+    // Honour the "remember me" choice before the session is written.
+    setRememberSession(remember);
     try {
       if (mode === "in") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -62,17 +69,26 @@ function AuthPage() {
           toast.success("Your name is written in the rolls.");
           navigate({ to: "/" });
         } else {
+          // No session means the project requires email confirmation first.
+          setMode("in");
+          setNotice({
+            tone: "info",
+            text: `Your name is recorded. We sent a confirmation link to ${email} — confirm it, then sign in.`,
+          });
           toast.success("Check your email to confirm your name.");
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "That did not work.");
+      const text = err instanceof Error ? err.message : "That did not work.";
+      setNotice({ tone: "bad", text });
+      toast.error(text);
     } finally {
       setBusy(false);
     }
   }
 
   async function google() {
+    setRememberSession(remember);
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: window.location.origin,
     });
@@ -107,6 +123,21 @@ function AuthPage() {
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
+        <label className="flex cursor-pointer items-center gap-2 pt-0.5">
+          <Checkbox
+            checked={remember}
+            onCheckedChange={(v) => setRemember(v === true)}
+            aria-label="Keep me signed in on this device"
+          />
+          <span className="text-xs text-muted-foreground">Keep me signed in on this device</span>
+        </label>
+        {notice && (
+          <p
+            className={`text-xs ${notice.tone === "bad" ? "text-destructive" : "text-muted-foreground"}`}
+          >
+            {notice.text}
+          </p>
+        )}
         <Button type="submit" disabled={busy} className="w-full">
           {mode === "in" ? "Sign in" : "Raise a new banner"}
         </Button>
