@@ -203,6 +203,14 @@ export function MemberCard({
           {member.title && (
             <div className="text-[10px] italic text-gold/80">{member.title}</div>
           )}
+          {!compact && member.marks && member.marks.length > 0 && (
+            <div
+              className="truncate text-[10px] italic text-muted-foreground/90"
+              title={member.marks[0]!.text}
+            >
+              “{member.marks[0]!.text}”
+            </div>
+          )}
           <ClassTag classId={member.classId} />
           <Vitals member={member} />
           {!compact && (

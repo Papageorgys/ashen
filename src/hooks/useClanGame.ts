@@ -70,6 +70,7 @@ import {
   suggestFill,
   slotOf,
   resolveRun,
+  addMark,
   spoilRarity,
   chronicle,
   deathRisk,
@@ -109,6 +110,9 @@ import {
 
 const KEY = "clanleader.save.v3";
 
+/** the body remembers — wounds that leave a champion marked */
+const WOUND_PARTS = ["left arm", "shoulder", "knee", "ribs", "sword hand", "jaw", "hip"] as const;
+
 function load(): GameState | null {
   if (typeof window === "undefined") return null;
   try {
@@ -140,6 +144,8 @@ function patch(loaded: GameState): GameState {
   // backgrounds arrived later — give everyone the one their story implies
   for (const m of [...loaded.members, ...loaded.recruits])
     m.profession = m.profession ?? professionFromSeed(m.id + m.name);
+  // the marks ledger post-dates older saves — start everyone with a clean slate
+  for (const m of [...loaded.members, ...loaded.recruits]) m.marks = m.marks ?? [];
   loaded.inspiration = loaded.inspiration ?? 0;
   // banners now hold five — trim any legacy nine-strong party
   for (const p of loaded.parties) {
@@ -306,7 +312,20 @@ export function useClanGame() {
                   firstAt: now,
                   lastAt: now,
                 };
-                pushLog(s, `New bestiary entry: ${MONSTER_BY_ID[e.monsterId]?.name ?? e.monsterId}.`, "info");
+                const beast = MONSTER_BY_ID[e.monsterId]?.name ?? e.monsterId;
+                pushLog(s, `New bestiary entry: ${beast}.`, "info");
+                // first of the clan to fell a new kind of beast — a deed worth remembering.
+                // Elites only, attributed to whoever carried the fight, to keep it rare and earned.
+                if (e.elite) {
+                  const slayerId = res.mvp?.memberId ?? res.participants[0];
+                  const slayer = slayerId ? s.members.find((x) => x.id === slayerId) : undefined;
+                  if (slayer && !slayer.isLord) {
+                    addMark(slayer, "slayer", `First of ${s.clanName} to bring down ${beast}, in ${zoneName}.`, {
+                      bound: "kills",
+                      where: zoneName,
+                    });
+                  }
+                }
               }
             }
           }
@@ -335,7 +354,7 @@ export function useClanGame() {
               m.pvpKills = (m.pvpKills ?? 0) + rec.pvpKills;
               m.pkKills = (m.pkKills ?? 0) + rec.pkKills;
             }
-            if (res.fallen.includes(m.name)) m.deaths = (m.deaths ?? 0) + 1;
+            if (res.fallen.includes(m.id)) m.deaths = (m.deaths ?? 0) + 1;
 
             // vitals
             const v = res.vitals[m.id];
@@ -351,6 +370,12 @@ export function useClanGame() {
                 m.xp -= xpForLevel(m.level);
                 m.level += 1;
                 pushLog(s, `${m.name} reached level ${m.level}.`, "good");
+                if (m.level % 10 === 0 || m.level === MAX_LEVEL) {
+                  addMark(m, "ascend", `Came into their strength at level ${m.level}, out in ${zoneName}.`, {
+                    bound: "level",
+                    where: zoneName,
+                  });
+                }
               }
               if (m.level >= MAX_LEVEL) m.xp = 0;
             }
@@ -395,12 +420,13 @@ export function useClanGame() {
 
           // the butcher's bill — some of the fallen never get up again
           const zone = ZONE_BY_ID[zoneId];
+          const lostThisRun: { id: string; name: string }[] = [];
           if (zone) {
             const risk0 = deathRisk(s, party, zone.kind, zone.reqLevel);
             for (const id of res.participants) {
               const m = s.members.find((x) => x.id === id);
               if (!m) continue;
-              if (!res.fallen.includes(m.name)) continue;
+              if (!res.fallen.includes(m.id)) continue;
               const risk = deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0;
               if (m.isLord) {
                 // the Lord is dragged out alive, but it costs
@@ -422,6 +448,7 @@ export function useClanGame() {
                 continue;
               }
               if (Math.random() < risk) {
+                lostThisRun.push({ id: m.id, name: m.name });
                 s.members = s.members.filter((x) => x.id !== m.id);
                 for (const pp of s.parties) pp.memberIds = pp.memberIds.filter((x) => x !== m.id);
                 s.memorial = s.memorial ?? [];
@@ -442,6 +469,61 @@ export function useClanGame() {
                   `Level ${m.level} ${CLASS_BY_ID[m.classId]?.name ?? "champion"}, ${(m.mobKills ?? 0).toLocaleString()} kills. Name carved into the shrine wall.`,
                 );
                 toast.error(`${m.name} is dead.`);
+              }
+            }
+          }
+
+          // ---- Scars & Deeds — the run leaves its mark on those who lived it ----
+          {
+            const where = zone?.name ?? zoneName;
+            const here = (mid: string) => s.members.find((x) => x.id === mid);
+            const standing = res.participants.filter((id) => (res.vitals[id]?.hp ?? 0) > 0 && here(id));
+
+            // last one standing — walked out of a fight the others went down in
+            if (res.success && standing.length === 1 && res.participants.length > 1) {
+              const m = here(standing[0]!);
+              if (m && !m.isLord)
+                addMark(m, "clutch", `Last banner standing at ${where} — walked out of a fight the others went down in.`, {
+                  bound: "resolve",
+                  where,
+                });
+            }
+
+            // grief — survivors of a run where a comrade was lost for good
+            if (lostThisRun.length) {
+              const lostNames = lostThisRun.map((f) => f.name).join(", ");
+              for (const id of res.participants) {
+                const m = here(id);
+                if (!m) continue; // the lost themselves are gone from the roster
+                addMark(m, "survivor", `Marched home from ${where} without ${lostNames}. Some part of them stayed behind.`, {
+                  bound: "grief",
+                  where,
+                });
+              }
+            }
+
+            // valor — carried the fight on the hardest runs
+            if (res.mvp && (res.rating === "S" || res.rating === "A")) {
+              const m = here(res.mvp.memberId);
+              if (m && !m.isLord && Math.random() < 0.5)
+                addMark(m, "valor", `Carried the banner through ${where} — ${res.mvp.damage.toLocaleString()} damage when the line nearly broke.`, {
+                  bound: "STR",
+                  where,
+                });
+            }
+
+            // wounded — dragged out at a hair's breadth; the body remembers
+            for (const id of res.participants) {
+              const m = here(id);
+              if (!m || m.isLord) continue;
+              const v = res.vitals[id];
+              if (!v || v.hp <= 0) continue;
+              if (v.hp / Math.max(1, maxHp(m)) < 0.1 && Math.random() < 0.4) {
+                const part = WOUND_PARTS[Math.floor(Math.random() * WOUND_PARTS.length)]!;
+                addMark(m, "wounded", `Cut down to nothing at ${where} and carried out breathing — the ${part} never set right after.`, {
+                  bound: "CON",
+                  where,
+                });
               }
             }
           }
