@@ -5,10 +5,22 @@
  * the same UTC day key to the same boss, and the shared HP is simply HP_max minus
  * the sum of all clans' recorded damage. See supabase/migrations/*world_boss.sql.
  */
-import { MONSTERS, FAMILY_LABEL, type Monster } from "./monsters";
+import { MONSTERS, FAMILY_LABEL, humanoidGearPool, type Monster } from "./monsters";
+import type { ItemId } from "./data";
 
 /** How long a clan must wait between strikes — short enough to feel active in a session. */
 export const STRIKE_COOLDOWN_MS = 45_000;
+
+/** A committed banner must regroup this long before it can charge the boss again. */
+export const COMMIT_COOLDOWN_MS = 60_000;
+
+/** Chance one champion of a committed banner falls for good — unless the clan is blessed. */
+export const COMMIT_DEATH_RISK = 0.08;
+
+/** What a shrine blessing (no deaths in the fight today) costs in gold. */
+export function blessingCost(clanLevel: number): number {
+  return 600 + clanLevel * 120;
+}
 
 /** The elite (named) monsters make the rotating boss roster, weakest first. */
 const ELITES: Monster[] = MONSTERS.filter((m) => m.elite).sort((a, b) => a.level - b.level);
@@ -74,4 +86,36 @@ export function bossSpoils(
     reputation: Math.round(4 + base * 1.4),
     inspiration: 1 + (rank <= 3 ? 1 : 0),
   };
+}
+
+/** The signature material a boss of this tier hoards, for its loot table. */
+function bossMaterials(level: number): ItemId[] {
+  if (level >= 45) return ["abyss_crystal", "dragon_sinew"];
+  if (level >= 30) return ["ember_core", "spirit_ore"];
+  if (level >= 15) return ["spirit_ore", "moon_silk"];
+  return ["iron_shard", "coarse_hide"];
+}
+
+/** Everything a boss of this tier can drop — gear themed to its level plus its hoard. */
+export function bossLootTable(level: number): ItemId[] {
+  return [...humanoidGearPool(level).items, ...bossMaterials(level)];
+}
+
+/** Roll a clan's actual drops on the kill — more picks for a bigger share and higher rank. */
+export function rollBossLoot(
+  level: number,
+  damageShare: number,
+  rank: number,
+): { item: ItemId; qty: number }[] {
+  const pool = bossLootTable(level);
+  const gear = humanoidGearPool(level).items;
+  const picks = 1 + (rank <= 3 ? 1 : 0) + (damageShare > 0.25 ? 1 : 0);
+  const out: Record<string, number> = {};
+  for (let i = 0; i < picks; i++) {
+    const item = pool[Math.floor(Math.random() * pool.length)]!;
+    // gear comes as a single piece; hoarded materials come in small stacks
+    const qty = gear.includes(item) ? 1 : 1 + Math.floor(Math.random() * 3);
+    out[item] = (out[item] ?? 0) + qty;
+  }
+  return Object.entries(out).map(([item, qty]) => ({ item: item as ItemId, qty }));
 }

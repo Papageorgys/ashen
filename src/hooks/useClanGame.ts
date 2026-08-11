@@ -112,7 +112,13 @@ import {
 } from "@/lib/game/engine";
 import { SCROLL_BY_ID, travelMsTo } from "@/lib/game/data";
 import { MONSTER_BY_ID } from "@/lib/game/monsters";
-import { bossSpoils } from "@/lib/game/worldboss";
+import {
+  bossSpoils,
+  bossForDay,
+  rollBossLoot,
+  blessingCost,
+  COMMIT_DEATH_RISK,
+} from "@/lib/game/worldboss";
 
 import { IMPROVED_YIELD, SCROLL_LOG_CAP, attemptId, rollOutcomeDetail } from "@/lib/game/scrolls";
 
@@ -157,6 +163,8 @@ function patch(loaded: GameState): GameState {
   // bonds between champions arrived later too
   loaded.affinity = loaded.affinity ?? {};
   loaded.inspiration = loaded.inspiration ?? 0;
+  // per-banner boss-charge cooldowns post-date older saves
+  loaded.bossCommitAt = loaded.bossCommitAt ?? {};
   // banners now hold five — trim any legacy nine-strong party
   for (const p of loaded.parties) {
     if (p.memberIds.length > MAX_PARTY_SIZE) {
@@ -1047,6 +1055,73 @@ export function useClanGame() {
         s.bossStrikeAt = Date.now();
       }),
 
+    /**
+     * Commit a banner to the World Boss: it breaks off farming to charge the
+     * beast, then must regroup before it can charge again. Every charge risks a
+     * champion's life unless the clan has prayed for a blessing today. (Damage is
+     * submitted separately from the banner's power.)
+     */
+    commitBanner: (partyId: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (!p) return;
+        const boss = bossForDay();
+        // Break off whatever it was doing — the boss takes priority.
+        p.run = null;
+        p.travel = null;
+        p.farming = null;
+        s.bossCommitAt = { ...(s.bossCommitAt ?? {}), [partyId]: Date.now() };
+
+        const blessed = s.bossBlessing?.day === dayKey();
+        if (!blessed && Math.random() < COMMIT_DEATH_RISK) {
+          const fated = p.memberIds
+            .map((id) => s.members.find((m) => m.id === id))
+            .filter((m): m is NonNullable<typeof m> => !!m && !m.isLord);
+          const victim = fated[Math.floor(Math.random() * fated.length)];
+          if (victim) {
+            s.members = s.members.filter((x) => x.id !== victim.id);
+            for (const pp of s.parties) pp.memberIds = pp.memberIds.filter((x) => x !== victim.id);
+            s.memorial = s.memorial ?? [];
+            s.memorial.unshift({
+              id: victim.id,
+              name: victim.name,
+              classId: victim.classId,
+              level: victim.level,
+              at: Date.now(),
+              where: boss.name,
+              mobKills: victim.mobKills ?? 0,
+            });
+            dropAffinity(s, victim.id);
+            chronicle(
+              s,
+              "loss",
+              `${victim.name} falls to ${boss.name}`,
+              `Level ${victim.level} ${CLASS_BY_ID[victim.classId]?.name ?? "champion"}, cut down charging the World Boss. Name carved into the shrine wall.`,
+            );
+            pushLog(s, `${victim.name} fell charging ${boss.name}.`, "bad");
+            toast.error(`${victim.name} is dead.`);
+          }
+        }
+        pushLog(s, `${p.name} broke off to charge ${boss.name}.`, "info");
+      }),
+
+    /** Pray at the shrine: for the rest of the day, no champion falls in the boss fight. */
+    prayForBlessing: () =>
+      update((s) => {
+        const today = dayKey();
+        if (s.bossBlessing?.day === today) return void toast("The blessing already holds today.");
+        const cost = blessingCost(s.clanLevel);
+        if (s.gold < cost) return void toast.error(`The shrine asks ${cost} gold for the rite.`);
+        s.gold -= cost;
+        s.bossBlessing = { day: today };
+        pushLog(
+          s,
+          `Prayed at the shrine — the host is warded against death today (${cost} gold).`,
+          "good",
+        );
+        toast.success("A blessing shields your champions in the fight today.");
+      }),
+
     /** Claim a felled boss's spoils, once, scaled by this clan's share and rank. */
     claimBossReward: (
       eventId: string,
@@ -1062,15 +1137,37 @@ export function useClanGame() {
         s.reputation += sp.reputation;
         s.inspiration = (s.inspiration ?? 0) + sp.inspiration;
         s.bossClaims = { ...(s.bossClaims ?? {}), [eventId]: true };
+
+        // The beast's hoard — themed loot on top of gold/rep.
+        const loot = rollBossLoot(level, damageShare, rank);
+        for (const l of loot) s.inventory[l.item] = (s.inventory[l.item] ?? 0) + l.qty;
+        const lootText = loot
+          .map((l) => `${ITEM_BY_ID[l.item]?.name ?? l.item}${l.qty > 1 ? ` ×${l.qty}` : ""}`)
+          .join(", ");
+        if (loot.length) {
+          s.spoils = [
+            ...loot.map((l) => ({
+              id: uid(),
+              at: Date.now(),
+              item: l.item,
+              qty: l.qty,
+              rarity: spoilRarity(l.item),
+              zone: bossName,
+              party: "the realm",
+            })),
+            ...(s.spoils ?? []),
+          ].slice(0, 40);
+        }
+
         chronicle(
           s,
           "triumph",
           `${bossName} felled`,
-          `The realm brought down ${bossName}. Our banners claimed ${sp.gold} gold and ${sp.reputation} reputation for our part in the kill.`,
+          `The realm brought down ${bossName}. Our banners claimed ${sp.gold} gold, ${sp.reputation} reputation${lootText ? `, and the beast's hoard: ${lootText}` : ""} for our part in the kill.`,
         );
         pushLog(
           s,
-          `${bossName} felled — claimed ${sp.gold} gold, ${sp.reputation} reputation.`,
+          `${bossName} felled — claimed ${sp.gold} gold, ${sp.reputation} reputation${lootText ? `, ${lootText}` : ""}.`,
           "good",
         );
         toast.success(`${bossName} felled — spoils claimed`);

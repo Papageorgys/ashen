@@ -346,6 +346,10 @@ export interface GameState {
   bossStrikeAt?: number;
   /** World Boss events whose spoils this clan has already claimed, by event id */
   bossClaims?: Record<string, boolean>;
+  /** a shrine blessing that shields champions from death in the boss fight, for a day */
+  bossBlessing?: { day: string };
+  /** wall-clock each banner last charged the World Boss (per-banner cooldown) */
+  bossCommitAt?: Record<string, number>;
   /** the dawn muster — daily login reward and its consecutive-day streak */
   rally?: { lastDay: string; streak: number };
 }
