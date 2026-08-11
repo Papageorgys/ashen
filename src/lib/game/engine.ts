@@ -46,11 +46,9 @@ import {
   SCROLL_BY_ID,
   type ScrollDef,
   type ScrollKind,
-
   SYNERGIES,
   crowdingPenalty,
   type SynergyDef,
-
   type CraftMastery,
   type Grade,
   type ItemId,
@@ -86,12 +84,7 @@ import {
   type ScrollAttempt,
 } from "./scrolls";
 
-import {
-  DEFAULT_CREST,
-  portraitFromSeed,
-  type Crest,
-  type Portrait,
-} from "./identity";
+import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "./identity";
 import {
   CASTLE,
   RIVAL_BY_ID,
@@ -103,12 +96,7 @@ import {
   type CastleState,
   type RivalState,
 } from "./rivals";
-import {
-  PROFESSION_BY_ID,
-  perkSum,
-  professionFromSeed,
-  type ProfessionId,
-} from "./professions";
+import { PROFESSION_BY_ID, perkSum, professionFromSeed, type ProfessionId } from "./professions";
 
 export interface SkillState {
   skillId: string;
@@ -158,6 +146,7 @@ export interface Member {
 /** A remembered event bound to a champion — how the numbers came to read as biography. */
 export type MarkKind =
   | "oath" // the day they swore in — the player's own authorship
+  | "bond" // forged a shield-bond with a comrade
   | "clutch" // last one standing
   | "survivor" // carried a fallen comrade's memory home
   | "wounded" // dragged out of a fight at a hair's breadth
@@ -193,6 +182,48 @@ export function addMark(
   m.marks = [entry, ...(m.marks ?? [])].slice(0, MARKS_CAP);
 }
 
+/** shared runs survived before two champions are shield-bonded */
+export const BOND_AT = 6;
+
+/** canonical key for an unordered pair of champion ids */
+export function pairKey(a: string, b: string): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+export function getAffinity(s: GameState, a: string, b: string): number {
+  return s.affinity?.[pairKey(a, b)] ?? 0;
+}
+
+/** grant affinity to a pair who came back from the field together; returns the new total */
+export function bumpAffinity(s: GameState, a: string, b: string, n = 1): number {
+  if (a === b) return 0;
+  s.affinity ??= {};
+  const k = pairKey(a, b);
+  const v = (s.affinity[k] ?? 0) + n;
+  s.affinity[k] = v;
+  return v;
+}
+
+/** sever every bond that references a champion who has left the roster */
+export function dropAffinity(s: GameState, id: string): void {
+  if (!s.affinity) return;
+  for (const k of Object.keys(s.affinity)) {
+    const [a, b] = k.split(":");
+    if (a === id || b === id) delete s.affinity[k];
+  }
+}
+
+/** a champion's bonds, strongest first */
+export function bondsOf(s: GameState, id: string): { id: string; value: number }[] {
+  if (!s.affinity) return [];
+  const out: { id: string; value: number }[] = [];
+  for (const [k, v] of Object.entries(s.affinity)) {
+    const [a, b] = k.split(":");
+    if (a === id && b) out.push({ id: b, value: v });
+    else if (b === id && a) out.push({ id: a, value: v });
+  }
+  return out.sort((x, y) => y.value - x.value);
+}
 
 export interface Party {
   id: string;
@@ -203,7 +234,6 @@ export interface Party {
   /** zone the banner keeps farming; cleared on recall */
   farming?: string | null;
 }
-
 
 export interface LogEntry {
   id: string;
@@ -308,7 +338,8 @@ export interface GameState {
   ownerId?: string | null;
   /** wall-clock of the last local write — arbitrates local vs cloud on sign-in */
   savedAt?: number;
-
+  /** shared danger forges bonds — affinity keyed by a canonical "idA:idB" pair */
+  affinity?: Record<string, number>;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -399,16 +430,13 @@ export function rollBoard(key: string, pool: DailyMissionDef[], count: number): 
 }
 
 export const rollDailies = (day: string = dayKey()) => rollBoard(day, DAILY_POOL, DAILY_COUNT);
-export const rollWeeklies = (key: string = weekKey()) =>
-  rollBoard(key, WEEKLY_POOL, WEEKLY_COUNT);
+export const rollWeeklies = (key: string = weekKey()) => rollBoard(key, WEEKLY_POOL, WEEKLY_COUNT);
 export const rollMonthlies = (key: string = monthKey()) =>
   rollBoard(key, MONTHLY_POOL, MONTHLY_COUNT);
 
-
-
 const uid = () => Math.random().toString(36).slice(2, 10);
 const rnd = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
+const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export function xpForLevel(level: number) {
@@ -506,10 +534,22 @@ export function mitigation(m: Member) {
 /* --------------------------------- Vitals ---------------------------------- */
 
 const HP_BASE: Record<Role, number> = {
-  guardian: 34, blade: 28, archer: 24, arcanist: 18, mender: 20, chanter: 22, artisan: 20,
+  guardian: 34,
+  blade: 28,
+  archer: 24,
+  arcanist: 18,
+  mender: 20,
+  chanter: 22,
+  artisan: 20,
 };
 const MP_BASE: Record<Role, number> = {
-  guardian: 8, blade: 8, archer: 10, arcanist: 22, mender: 22, chanter: 20, artisan: 10,
+  guardian: 8,
+  blade: 8,
+  archer: 10,
+  arcanist: 22,
+  mender: 22,
+  chanter: 20,
+  artisan: 10,
 };
 
 export function maxHp(m: Member) {
@@ -540,14 +580,14 @@ export function memberPower(m: Member) {
   const base =
     (cls.power + main * 0.25) * (1 + m.level * 0.35) + gear + mastery + setBonus(m).power;
   const prof = perkSum([m.profession], "power");
-  return Math.round(
-    base * (1 + (passiveSum(m, "power") + prof) / 100) * armorMastery(m).mult,
-  );
+  return Math.round(base * (1 + (passiveSum(m, "power") + prof) / 100) * armorMastery(m).mult);
 }
 
 export function memberFind(m: Member) {
   const cls = CLASS_BY_ID[m.classId]!;
-  return cls.find + RACE_BY_ID[cls.race]!.luck + passiveSum(m, "find") + perkSum([m.profession], "find");
+  return (
+    cls.find + RACE_BY_ID[cls.race]!.luck + passiveSum(m, "find") + perkSum([m.profession], "find")
+  );
 }
 
 /** Total craft-chance points the clan's passives contribute. */
@@ -558,7 +598,6 @@ export function craftPassiveBonus(state: GameState) {
 export function slotOf(item: ItemId): Slot | null {
   return ITEM_BY_ID[item]?.slot ?? null;
 }
-
 
 /* --------------------------------- Skills ---------------------------------- */
 
@@ -620,7 +659,15 @@ export function suggestFill(state: GameState, party: Party, pool?: Member[]): Me
   const slots = MAX_PARTY_SIZE - roster.length;
   if (slots <= 0) return [];
 
-  const priority: Role[] = ["guardian", "mender", "chanter", "arcanist", "archer", "blade", "artisan"];
+  const priority: Role[] = [
+    "guardian",
+    "mender",
+    "chanter",
+    "arcanist",
+    "archer",
+    "blade",
+    "artisan",
+  ];
   const have = new Map<Role, number>();
   for (const m of roster) {
     const r = CLASS_BY_ID[m.classId]!.role;
@@ -654,7 +701,6 @@ export function suggestFill(state: GameState, party: Party, pool?: Member[]): Me
   }
   return picked;
 }
-
 
 /** Which synergies a given roster lights up. */
 export function synergiesFor(ms: Member[]): SynergyDef[] {
@@ -701,7 +747,6 @@ export function partyPower(state: GameState, party: Party) {
   mult += synergyBonus(ms).power / 100;
   return Math.round(base * Math.max(0.4, mult));
 }
-
 
 export function maxParties(clanLevel: number, sworn = false) {
   /** Level 0 = no clan of your own: one free company, two if you serve another clan. */
@@ -863,7 +908,6 @@ export function mendBill(state: GameState) {
   return { patients, gold: Math.round(missing * eff.mendCost) };
 }
 
-
 export function nextClanReq(clanLevel: number) {
   return CLAN_LEVELS.find((c) => c.level === clanLevel + 1) ?? null;
 }
@@ -874,7 +918,6 @@ export function artisanRank(state: GameState, mastery?: CraftMastery) {
     .filter((m) => !mastery || m.craftMastery === mastery)
     .reduce((s, m) => s + 1 + Math.floor(m.level / 8), 0);
 }
-
 
 /* -------------------------------- Recruiting -------------------------------- */
 
@@ -953,8 +996,7 @@ export function makeLord(f: Founding): Member {
     portrait: f.portrait,
     profession: f.profession,
     joinedAt: Date.now(),
-    craftMastery:
-      CLASS_BY_ID[f.classId]!.role === "artisan" ? CRAFT_MASTERIES[0] : undefined,
+    craftMastery: CLASS_BY_ID[f.classId]!.role === "artisan" ? CRAFT_MASTERIES[0] : undefined,
   };
   for (const sk of classSkills(f.classId).filter((x) => x.unlock <= 3)) learnSkill(lord, sk.id);
   lord.hp = maxHp(lord);
@@ -973,7 +1015,9 @@ export function initialState(founding: Founding): GameState {
     reputation: 0,
     gold: 1200,
     members: [lord],
-    parties: [{ id: "p1", name: `${founding.lordName}'s Company`, memberIds: [lord.id], run: null }],
+    parties: [
+      { id: "p1", name: `${founding.lordName}'s Company`, memberIds: [lord.id], run: null },
+    ],
     inventory: {},
     recruits: rollRecruits(1),
     daily: rollDailies(),
@@ -1093,7 +1137,11 @@ export function realmPulse(state: GameState) {
         const z = free[Math.floor(Math.random() * free.length)]!;
         r.claims.push(z);
         const zone = ZONE_BY_ID[z];
-        pushLog(state, `${def.name} has claimed ${zone?.name}. Their tax collectors are already there.`, "bad");
+        pushLog(
+          state,
+          `${def.name} has claimed ${zone?.name}. Their tax collectors are already there.`,
+          "bad",
+        );
       }
     }
   }
@@ -1110,7 +1158,11 @@ export function realmPulse(state: GameState) {
         state.castle.holder = attacker.id;
         state.castle.sinceAt = now;
         state.castle.purse = 0;
-        pushLog(state, `${RIVAL_BY_ID[attacker.id]!.name} has stormed Ravenhold. The keep is lost.`, "bad");
+        pushLog(
+          state,
+          `${RIVAL_BY_ID[attacker.id]!.name} has stormed Ravenhold. The keep is lost.`,
+          "bad",
+        );
         chronicle(
           state,
           "loss",
@@ -1120,7 +1172,11 @@ export function realmPulse(state: GameState) {
       } else {
         attacker.power = Math.round(attacker.power * 0.85);
         state.reputation += 40;
-        pushLog(state, `${RIVAL_BY_ID[attacker.id]!.name} broke against the walls of Ravenhold.`, "good");
+        pushLog(
+          state,
+          `${RIVAL_BY_ID[attacker.id]!.name} broke against the walls of Ravenhold.`,
+          "good",
+        );
       }
     }
   }
@@ -1185,7 +1241,8 @@ export function canRefine(
   const c = shotBatchCost(grade, blessed);
   const need = c.embers * batches;
   const have = state.inventory[emberId(kind)] ?? 0;
-  if (have < need) return { ok: false, why: `Needs ${need} ${kind === "soul" ? "souls" : "spirits"}` };
+  if (have < need)
+    return { ok: false, why: `Needs ${need} ${kind === "soul" ? "souls" : "spirits"}` };
   if (state.gold < c.fee * batches) return { ok: false, why: "Not enough gold for the market fee" };
   return { ok: true, why: "" };
 }
@@ -1224,7 +1281,8 @@ export interface RunResult {
   /** the single biggest blow landed */
   bigHit?: { name: string; skill: string; damage: number; crit: boolean } | undefined;
   /** headline beats worth reading out loud */
-  highlights?: { text: string; kind: "crit" | "clutch" | "flawless" | "rout" | "rare" }[] | undefined;
+  highlights?:
+    { text: string; kind: "crit" | "clutch" | "flawless" | "rout" | "rare" }[] | undefined;
   /** letter grade for the run, S down to C */
   rating?: "S" | "A" | "B" | "C" | undefined;
   /** what the banner actually fought out there */
@@ -1238,13 +1296,20 @@ function conditionMet(
   ctx: { round: number; selfPct: number; lowestAllyPct: number; enemyPct: number; mpPct: number },
 ) {
   switch (cond) {
-    case "always": return true;
-    case "never": return false;
-    case "opening": return ctx.round === 0;
-    case "self_hp_low": return ctx.selfPct < 0.5;
-    case "ally_hp_low": return ctx.lowestAllyPct < 0.6;
-    case "enemy_hp_low": return ctx.enemyPct < 0.4;
-    case "mp_high": return ctx.mpPct > 0.5;
+    case "always":
+      return true;
+    case "never":
+      return false;
+    case "opening":
+      return ctx.round === 0;
+    case "self_hp_low":
+      return ctx.selfPct < 0.5;
+    case "ally_hp_low":
+      return ctx.lowestAllyPct < 0.6;
+    case "enemy_hp_low":
+      return ctx.enemyPct < 0.4;
+    case "mp_high":
+      return ctx.mpPct > 0.5;
   }
 }
 
@@ -1265,20 +1330,35 @@ export function earnedDeeds(ms: Member[], ctx: DeedContext) {
     if (!def) continue;
     let hit = false;
     switch (def.deed) {
-      case "clear_dungeon": hit = ctx.success && ctx.zoneKind === "dungeon"; break;
-      case "clear_field": hit = ctx.success && ctx.zoneKind === "field"; break;
-      case "survive_rout": hit = !ctx.success && ctx.standing > 0; break;
-      case "finish_wounded": hit = ctx.success && ctx.standing === ctx.partySize && ctx.partySize > 1; break;
-      case "big_haul": hit = ctx.success && ctx.lootKinds >= 4; break;
-      case "outnumbered": hit = ctx.success && ctx.standing > 0 && ctx.standing < 4; break;
-      case "full_party": hit = ctx.partySize >= MAX_PARTY_SIZE; break;
-      case "high_kills": hit = ctx.kills >= 40; break;
+      case "clear_dungeon":
+        hit = ctx.success && ctx.zoneKind === "dungeon";
+        break;
+      case "clear_field":
+        hit = ctx.success && ctx.zoneKind === "field";
+        break;
+      case "survive_rout":
+        hit = !ctx.success && ctx.standing > 0;
+        break;
+      case "finish_wounded":
+        hit = ctx.success && ctx.standing === ctx.partySize && ctx.partySize > 1;
+        break;
+      case "big_haul":
+        hit = ctx.success && ctx.lootKinds >= 4;
+        break;
+      case "outnumbered":
+        hit = ctx.success && ctx.standing > 0 && ctx.standing < 4;
+        break;
+      case "full_party":
+        hit = ctx.partySize >= MAX_PARTY_SIZE;
+        break;
+      case "high_kills":
+        hit = ctx.kills >= 40;
+        break;
     }
     if (hit) out.push({ memberId: m.id, profession: def.id, text: def.deedText });
   }
   return out;
 }
-
 
 /* ------------------------- Hourly high-activity surge ------------------------ */
 
@@ -1328,16 +1408,18 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   const power = partyPower(state, party);
   const syn = synergyBonus(ms);
 
-  const fighters = ms.filter((m) => m.hp > 0).map((m) => ({
-    m,
-    hp: m.hp,
-    maxHp: maxHp(m),
-    mp: m.mp,
-    maxMp: maxMp(m),
-    atkBuff: 0,
-    defBuff: 0,
-    cd: {} as Record<string, number>,
-  }));
+  const fighters = ms
+    .filter((m) => m.hp > 0)
+    .map((m) => ({
+      m,
+      hp: m.hp,
+      maxHp: maxHp(m),
+      mp: m.mp,
+      maxMp: maxMp(m),
+      atkBuff: 0,
+      defBuff: 0,
+      cd: {} as Record<string, number>,
+    }));
 
   const skillUses: Record<string, Record<string, number>> = {};
   const bump = (mid: string, sid: string) => {
@@ -1474,7 +1556,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   const met: Monster[] = [];
   for (let i = 0; i < 3; i++) {
     const useElite = elites.length > 0 && Math.random() < eliteChance;
-    const pick = useElite ? pickWeighted(elites) : pickWeighted(commons) ?? pickWeighted(elites);
+    const pick = useElite ? pickWeighted(elites) : (pickWeighted(commons) ?? pickWeighted(elites));
     if (pick && !met.some((x) => x.id === pick.id)) met.push(pick);
   }
   const eliteMet = met.some((m) => m.elite);
@@ -1486,7 +1568,6 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   let findBonus = 0;
   let kills = 0;
 
-
   for (let round = 0; round < zone.rounds && enemyHp > 0; round++) {
     const alive = fighters.filter((f) => f.hp > 0);
     if (alive.length === 0) break;
@@ -1494,9 +1575,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
 
     // vellum first: the steadiest head in the banner unrolls what it carries
     if (scrollsOn) {
-      const reader = alive.reduce((a, b) =>
-        memberStats(a.m).wit >= memberStats(b.m).wit ? a : b,
-      );
+      const reader = alive.reduce((a, b) => (memberStats(a.m).wit >= memberStats(b.m).wit ? a : b));
       if (round === 0) {
         const buff = bestScroll("buff");
         if (buff) readScroll(buff, reader, alive);
@@ -1511,7 +1590,6 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         scrollCd -= 1;
       }
     }
-
 
     for (const f of alive) {
       for (const k of Object.keys(f.cd)) f.cd[k] = Math.max(0, (f.cd[k] ?? 0) - 1);
@@ -1598,7 +1676,6 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     });
   }
 
-
   const vitals: Record<string, { hp: number; mp: number }> = {};
   for (const f of fighters) {
     vitals[f.m.id] = { hp: Math.max(0, Math.round(f.hp)), mp: Math.max(0, Math.round(f.mp)) };
@@ -1659,7 +1736,10 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     highlights.push({ text: `Not a scratch on the banner — a flawless sweep.`, kind: "flawless" });
   }
   if (success && critCount >= 5) {
-    highlights.push({ text: `${critCount} critical strikes tore through ${zone.name}.`, kind: "rout" });
+    highlights.push({
+      text: `${critCount} critical strikes tore through ${zone.name}.`,
+      kind: "rout",
+    });
   }
 
   const rating: "S" | "A" | "B" | "C" = !success
@@ -1671,7 +1751,6 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         : survivors > 1
           ? "B"
           : "C";
-
 
   if (!success) {
     const gold = Math.round(rnd(zone.gold[0], zone.gold[1]) * 0.18);
@@ -1705,14 +1784,16 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       rating,
       encounters,
       text: `${party.name} was driven out of ${zone.name}, salvaging ${gold} gold.${fallenNote}`,
-
     };
   }
 
   const ratio = power / zone.threat;
   const scale = Math.min(1.6, 0.7 + ratio * 0.4);
   const gold = Math.round(
-    rnd(zone.gold[0], zone.gold[1]) * scale * (1 + syn.gold / 100) * (eliteMet ? ELITE.goldMult : 1),
+    rnd(zone.gold[0], zone.gold[1]) *
+      scale *
+      (1 + syn.gold / 100) *
+      (eliteMet ? ELITE.goldMult : 1),
   );
   const loot: { item: ItemId; qty: number }[] = [];
   const eliteBonus = eliteMet ? ELITE.dropBonus : 0;
@@ -1742,8 +1823,6 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     const el = met.find((m) => m.elite);
     if (el) highlights.push({ text: `${el.name} was brought down — an elite kill.`, kind: "rout" });
   }
-
-
 
   // soul / spirit essence — split by what the zone's inhabitants are made of
   const band = ZONE_ESSENCE[zone.id];
@@ -1805,8 +1884,6 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   };
 }
 
-
-
 /* --------------------------------- Crafting -------------------------------- */
 
 export function recipeById(_state: GameState, id: string): Recipe | undefined {
@@ -1815,7 +1892,13 @@ export function recipeById(_state: GameState, id: string): Recipe | undefined {
 
 /** Guild-trained backgrounds raise the odds at the forge, up to a ceiling. */
 export function guildCraftBonus(state: GameState) {
-  return Math.min(12, perkSum(state.members.map((m) => m.profession), "craft"));
+  return Math.min(
+    12,
+    perkSum(
+      state.members.map((m) => m.profession),
+      "craft",
+    ),
+  );
 }
 
 export function craftChance(state: GameState, recipeId: string) {
@@ -1911,7 +1994,6 @@ export function canSystemForge(state: GameState, recipeId: string) {
   return { ok: true, why: "" };
 }
 
-
 /* -------------------------------- Scriptorium ------------------------------- */
 
 /** Who can sit at the writing desk — anyone standing, out of the field. */
@@ -1944,7 +2026,6 @@ export function canImprint(state: GameState, memberId: string, scrollId: string)
 }
 
 export { SCROLLS, SCROLL_BY_ID, type ScrollDef, type ScrollKind };
-
 
 export function scoreClan(state: GameState) {
   const full = state.parties.filter((p) => p.memberIds.length === MAX_PARTY_SIZE).length;
@@ -2059,10 +2140,7 @@ export function musterPulse(state: GameState) {
   );
 }
 
-export function canAcceptCompany(
-  state: GameState,
-  c: FreeCompany,
-): { ok: boolean; why: string } {
+export function canAcceptCompany(state: GameState, c: FreeCompany): { ok: boolean; why: string } {
   if (!hasClan(state) && !state.allegiance)
     return { ok: false, why: "Found a clan (or swear an oath) before taking others in." };
   const cap = clanCapacity(state.clanLevel, keepLevel(state, "barracks"), !!state.allegiance);

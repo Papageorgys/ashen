@@ -71,6 +71,10 @@ import {
   slotOf,
   resolveRun,
   addMark,
+  BOND_AT,
+  bumpAffinity,
+  getAffinity,
+  dropAffinity,
   spoilRarity,
   chronicle,
   deathRisk,
@@ -146,6 +150,8 @@ function patch(loaded: GameState): GameState {
     m.profession = m.profession ?? professionFromSeed(m.id + m.name);
   // the marks ledger post-dates older saves — start everyone with a clean slate
   for (const m of [...loaded.members, ...loaded.recruits]) m.marks = m.marks ?? [];
+  // bonds between champions arrived later too
+  loaded.affinity = loaded.affinity ?? {};
   loaded.inspiration = loaded.inspiration ?? 0;
   // banners now hold five — trim any legacy nine-strong party
   for (const p of loaded.parties) {
@@ -489,16 +495,49 @@ export function useClanGame() {
                 });
             }
 
-            // grief — survivors of a run where a comrade was lost for good
+            // grief — survivors of a run where a comrade was lost for good.
+            // A severed shield-bond cuts deeper than a comrade merely known.
             if (lostThisRun.length) {
-              const lostNames = lostThisRun.map((f) => f.name).join(", ");
               for (const id of res.participants) {
                 const m = here(id);
                 if (!m) continue; // the lost themselves are gone from the roster
-                addMark(m, "survivor", `Marched home from ${where} without ${lostNames}. Some part of them stayed behind.`, {
-                  bound: "grief",
-                  where,
-                });
+                const bondedLost = lostThisRun.filter((f) => getAffinity(s, m.id, f.id) >= BOND_AT);
+                if (bondedLost.length) {
+                  const names = bondedLost.map((f) => f.name).join(", ");
+                  addMark(m, "survivor", `${names} was ${m.name}'s shield-bond. ${m.name} walked out of ${where}; something in them did not.`, {
+                    bound: "grief",
+                    where,
+                  });
+                } else {
+                  const lostNames = lostThisRun.map((f) => f.name).join(", ");
+                  addMark(m, "survivor", `Marched home from ${where} without ${lostNames}. Some part of them stayed behind.`, {
+                    bound: "grief",
+                    where,
+                  });
+                }
+              }
+              // the bonds to the departed are severed
+              for (const f of lostThisRun) dropAffinity(s, f.id);
+            }
+
+            // bonds — shared danger forges affinity between those who came back together
+            const survived = res.participants.filter((id) => here(id));
+            for (let i = 0; i < survived.length; i++) {
+              for (let j = i + 1; j < survived.length; j++) {
+                const before = getAffinity(s, survived[i]!, survived[j]!);
+                const after = bumpAffinity(s, survived[i]!, survived[j]!, 1);
+                if (before < BOND_AT && after >= BOND_AT) {
+                  const a = here(survived[i]!);
+                  const b = here(survived[j]!);
+                  if (a && b) {
+                    addMark(a, "bond", `Fought through enough beside ${b.name} to trust no one else at their back.`, {
+                      bound: "loyalty",
+                    });
+                    addMark(b, "bond", `Fought through enough beside ${a.name} to trust no one else at their back.`, {
+                      bound: "loyalty",
+                    });
+                  }
+                }
               }
             }
 
@@ -690,6 +729,7 @@ export function useClanGame() {
         if (m.isLord) return void toast.error("You cannot dismiss yourself.");
         s.members = s.members.filter((x) => x.id !== memberId);
         for (const p of s.parties) p.memberIds = p.memberIds.filter((x) => x !== memberId);
+        dropAffinity(s, memberId);
         pushLog(s, `${m.name} left the clan.`, "bad");
       }),
 

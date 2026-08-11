@@ -52,6 +52,8 @@ import {
   skillCost,
   xpForLevel,
   xpForSkillLevel,
+  bondsOf,
+  BOND_AT,
   type Member,
 } from "@/lib/game/engine";
 import { cn } from "@/lib/utils";
@@ -102,6 +104,49 @@ function Row({ label, value, tone }: { label: string; value: React.ReactNode; to
   );
 }
 
+function bondTier(v: number): string {
+  if (v >= BOND_AT * 2) return "Inseparable";
+  if (v >= BOND_AT) return "Shield-bond";
+  if (v >= 3) return "Trusted";
+  return "Marched together";
+}
+
+/** Those a champion has bled beside — bonds forged run after run. */
+function BondsPanel({ state, member }: { state: GameState; member: Member }) {
+  const bonds = bondsOf(state, member.id)
+    .map((b) => ({ ...b, other: state.members.find((x) => x.id === b.id) }))
+    .filter((b) => b.other)
+    .slice(0, 8);
+  return (
+    <div className="panel space-y-2 rounded-sm px-3 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+        Bonds — those {member.name} has bled beside
+      </div>
+      {bonds.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No bonds yet — they are forged in the field, run after run.
+        </p>
+      ) : (
+        <div className="grid gap-1">
+          {bonds.map((b) => (
+            <div key={b.id} className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate text-foreground">{b.other!.name}</span>
+              <span
+                className={cn(
+                  "shrink-0 text-[10px] uppercase tracking-widest",
+                  b.value >= BOND_AT ? "text-gold" : "text-muted-foreground",
+                )}
+              >
+                {bondTier(b.value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChampionDialog({
   member,
   open,
@@ -126,7 +171,6 @@ export function ChampionDialog({
     .filter((s) => !member.skills.some((k) => k.skillId === s.id))
     .sort((a, b) => a.unlock - b.unlock);
 
-
   const worn = new Map<Slot, string>();
   for (const g of member.gear) {
     const it = ITEM_BY_ID[g];
@@ -145,7 +189,12 @@ export function ChampionDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             {member.portrait ? (
-              <Portrait data={member.portrait} classId={member.classId} ring={!!member.isLord} className="h-14 w-14 shrink-0" />
+              <Portrait
+                data={member.portrait}
+                classId={member.classId}
+                ring={!!member.isLord}
+                className="h-14 w-14 shrink-0"
+              />
             ) : (
               <ClassPicto classId={member.classId} size="lg" />
             )}
@@ -160,9 +209,7 @@ export function ChampionDialog({
                   {member.level >= MAX_LEVEL ? " (max)" : ""}
                 </span>
               </DialogTitle>
-              {member.title && (
-                <div className="text-xs italic text-gold/80">{member.title}</div>
-              )}
+              {member.title && <div className="text-xs italic text-gold/80">{member.title}</div>}
               <DialogDescription className="text-xs">
                 {race.name} · {cls.name} · {ROLE_LABEL[cls.role]} · {ARMOR_LABEL[cls.armor]} mastery
                 {member.craftMastery ? ` · ${CRAFT_MASTERY_LABEL[member.craftMastery]}` : ""}
@@ -284,31 +331,31 @@ export function ChampionDialog({
               {known.length === 0 && (
                 <p className="text-xs text-muted-foreground">No skills learned yet.</p>
               )}
-            {known.map(({ state: s, def }) => (
-              <div key={s.skillId} className="panel rounded-sm px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <SkillPicto skillId={def.id} />
-                  <span className="font-display text-sm">{def.name}</span>
-                  <span className="text-xs text-gold">
-                    mastery {s.level}/{MAX_SKILL_LEVEL}
-                  </span>
-                  <span className="ml-auto text-[10px] uppercase text-muted-foreground">
-                    {CONDITION_LABEL[s.condition]}
-                  </span>
+              {known.map(({ state: s, def }) => (
+                <div key={s.skillId} className="panel rounded-sm px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <SkillPicto skillId={def.id} />
+                    <span className="font-display text-sm">{def.name}</span>
+                    <span className="text-xs text-gold">
+                      mastery {s.level}/{MAX_SKILL_LEVEL}
+                    </span>
+                    <span className="ml-auto text-[10px] uppercase text-muted-foreground">
+                      {CONDITION_LABEL[s.condition]}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {def.desc} · {def.mp} MP · cd {def.cooldown}
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-sm bg-secondary">
+                    <div
+                      className="h-full bg-gold"
+                      style={{
+                        width: `${Math.min(100, (s.xp / xpForSkillLevel(s.level)) * 100)}%`,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {def.desc} · {def.mp} MP · cd {def.cooldown}
-                </div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-sm bg-secondary">
-                  <div
-                    className="h-full bg-gold"
-                    style={{
-                      width: `${Math.min(100, (s.xp / xpForSkillLevel(s.level)) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
             </div>
 
             <div className="space-y-2">
@@ -382,9 +429,7 @@ export function ChampionDialog({
                 );
               })}
             </div>
-
           </TabsContent>
-
 
           <TabsContent value="record" className="mt-3 space-y-3">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -430,6 +475,7 @@ export function ChampionDialog({
               </div>
               <MarkLedger marks={member.marks} limit={20} />
             </div>
+            {state ? <BondsPanel state={state} member={member} /> : null}
             <div className="panel space-y-2 rounded-sm px-3 py-2">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
                 Scroll ledger — every imprint and field reading, with the check that decided it
@@ -441,10 +487,7 @@ export function ChampionDialog({
           <TabsContent value="gear" className="mt-3 space-y-2">
             {api && (
               <div className="flex flex-wrap items-center gap-3 rounded-sm border border-border bg-secondary/40 px-3 py-2">
-                <ItemIcon
-                  item={shotId(memberShotKind(member), memberShotTier(member))}
-                  size={32}
-                />
+                <ItemIcon item={shotId(memberShotKind(member), memberShotTier(member))} size={32} />
                 <div className="min-w-0">
                   <div className="font-display text-sm">
                     {memberShotKind(member) === "soul" ? "Soulshots" : "Spiritshots"} —{" "}
@@ -532,11 +575,17 @@ export function ChampionDialog({
                         disabled={stock.length === 0}
                       >
                         <SelectTrigger className="h-8 w-44 text-xs">
-                          <SelectValue placeholder={stock.length ? "Equip from vault" : "None in vault"} />
+                          <SelectValue
+                            placeholder={stock.length ? "Equip from vault" : "None in vault"}
+                          />
                         </SelectTrigger>
                         <SelectContent>
                           {stock.map((o) => (
-                            <SelectItem key={o.id} value={o.id} disabled={member.level < (o.reqLevel ?? 1)}>
+                            <SelectItem
+                              key={o.id}
+                              value={o.id}
+                              disabled={member.level < (o.reqLevel ?? 1)}
+                            >
                               {o.name} · {o.grade} · +{o.power ?? 0}
                               {member.level < (o.reqLevel ?? 1) ? ` (Lv ${o.reqLevel})` : ""}
                             </SelectItem>
