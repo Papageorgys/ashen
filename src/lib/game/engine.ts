@@ -346,6 +346,8 @@ export interface GameState {
   bossStrikeAt?: number;
   /** World Boss events whose spoils this clan has already claimed, by event id */
   bossClaims?: Record<string, boolean>;
+  /** the dawn muster — daily login reward and its consecutive-day streak */
+  rally?: { lastDay: string; streak: number };
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -404,6 +406,22 @@ export function spoilRarity(item: ItemId): SpoilRarity {
 /** Local calendar day key — the daily board resets on this. */
 export function dayKey(d: Date = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** The dawn-rally reward for a given consecutive-day streak. Every 7th day is a feast. */
+export function rallyReward(streak: number): {
+  gold: number;
+  rep: number;
+  inspiration: number;
+  milestone: boolean;
+} {
+  const milestone = streak > 0 && streak % 7 === 0;
+  return {
+    gold: 80 + streak * 45 + (milestone ? 400 : 0),
+    rep: 4 + streak * 2,
+    inspiration: milestone ? 2 : streak % 3 === 0 ? 1 : 0,
+    milestone,
+  };
 }
 
 /** ISO-ish week key — the weekly board resets on this. */
