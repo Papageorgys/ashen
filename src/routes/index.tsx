@@ -16,6 +16,7 @@ import { MarketPanel } from "@/components/game/MarketPanel";
 import { ScriptoriumPanel } from "@/components/game/ScriptoriumPanel";
 import { MusterPanel } from "@/components/game/MusterPanel";
 import { WorldMap } from "@/components/game/WorldMap";
+import { WorldAtlas } from "@/components/game/WorldAtlas";
 import { ClanKeepPanel } from "@/components/game/ClanKeepPanel";
 import { ExpeditionFeed } from "@/components/game/ExpeditionFeed";
 import { useClanGame } from "@/hooks/useClanGame";
@@ -45,6 +46,7 @@ import {
   BookOpen,
   Castle,
   Flag,
+  Compass,
   Globe2,
   Hammer,
   Map,
@@ -267,6 +269,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { value: "banners", label: "War Table", icon: Swords, hint: "Deploy your banners" },
       { value: "map", label: "Map", icon: Map, hint: "The realm and where your banners stand" },
+      {
+        value: "atlas",
+        label: "Atlas",
+        icon: Compass,
+        hint: "The illustrated realm and the seven fallen capitals",
+      },
       {
         value: "bestiary",
         label: "Bestiary",
@@ -550,6 +558,18 @@ function Index() {
                     </p>
                   </header>
                   <WorldMap state={state} />
+                </section>
+              </TabsContent>
+              <TabsContent value="atlas" className="mt-0">
+                <section className="space-y-3">
+                  <header>
+                    <h2 className="font-display text-lg text-gold">Atlas of the Realm</h2>
+                    <p className="text-xs text-muted-foreground">
+                      The seven realms and their fallen capitals, drawn as the old cartographers
+                      saw them — before the ash.
+                    </p>
+                  </header>
+                  <WorldAtlas />
                 </section>
               </TabsContent>
               <TabsContent value="realm" className="mt-0">
