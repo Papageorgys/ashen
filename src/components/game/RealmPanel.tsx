@@ -1,6 +1,6 @@
 import { CASTLE, RIVALS, garrisonPower, resolveClash } from "@/lib/game/rivals";
 import { ZONE_BY_ID, ZONES } from "@/lib/game/data";
-import { clanHostPower, siegeReady, type GameState } from "@/lib/game/engine";
+import { ashenToll, clanHostPower, siegeReady, type GameState } from "@/lib/game/engine";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -25,6 +25,7 @@ export function RealmPanel({
       ? state.clanName
       : RIVALS.find((r) => r.id === holder)?.name ?? "the crown's garrison";
   const defense = castle ? garrisonPower(castle, rivals) : 0;
+  const toll = ashenToll(castle);
 
   return (
     <div className="space-y-4">
@@ -59,8 +60,13 @@ export function RealmPanel({
                 Collect road tax
               </Button>
               <span className="text-xs text-muted-foreground">
-                {CASTLE.taxPerHour.toLocaleString()} gold an hour while the gate holds. Rivals will
-                come for it.
+                {toll.ramp > 0.02
+                  ? `Held ${toll.days.toFixed(1)} days — the Ashenward is ${Math.round(
+                      toll.ramp * 100,
+                    )}% dimmed. Tithe at ${Math.round(
+                      toll.titheFactor * 100,
+                    )}%; rivals storm it more often. You cannot hold forever without cost.`
+                  : `${CASTLE.taxPerHour.toLocaleString()} gold an hour while the gate holds. Rivals will come for it — and holding too long dims the ward.`}
               </span>
             </>
           ) : (
