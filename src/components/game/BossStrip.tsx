@@ -34,17 +34,17 @@ export function BossStrip({
   };
 
   return (
-    <div className="flex items-center gap-3 border-b border-destructive/30 bg-destructive/5 px-3 py-1.5">
+    <div className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/5 px-3 py-1.5 sm:gap-3">
       <Skull className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="shrink-0 truncate text-xs font-display text-gold">{boss.boss.name}</span>
-        <div className="hidden h-2 min-w-0 flex-1 overflow-hidden rounded-sm border border-destructive/30 bg-secondary sm:block">
-          <div className="h-full bg-destructive transition-all" style={{ width: `${boss.pct}%` }} />
-        </div>
-        <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
-          {boss.defeated ? "slain" : `${Math.round(boss.pct)}%`}
-        </span>
+      <span className="min-w-0 flex-1 truncate text-xs font-display text-gold sm:max-w-[14rem] sm:flex-none">
+        {boss.boss.name}
+      </span>
+      <div className="hidden h-2 min-w-0 flex-1 overflow-hidden rounded-sm border border-destructive/30 bg-secondary sm:block">
+        <div className="h-full bg-destructive transition-all" style={{ width: `${boss.pct}%` }} />
       </div>
+      <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+        {boss.defeated ? "slain" : `${Math.round(boss.pct)}%`}
+      </span>
       {boss.defeated ? (
         <span className="shrink-0 text-[11px] text-grade-c">Felled — claim in the Warfront</span>
       ) : (

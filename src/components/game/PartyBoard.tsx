@@ -29,6 +29,8 @@ import {
   partyPower,
   partySynergies,
   synergyBonus,
+  bondedPairsInParty,
+  bondBonus,
   type GameState,
   type Party,
 } from "@/lib/game/engine";
@@ -68,6 +70,8 @@ function PartyCard({
   const odds = Math.round(Math.max(8, Math.min(96, 15 + (power / zone.threat) * 60)));
   const synergies = partySynergies(state, party);
   const syn = synergyBonus(members);
+  const bonds = bondedPairsInParty(state, party);
+  const bondPct = Math.round(bondBonus(state, party) * 100);
   const [over, setOver] = useState(false);
   const full = members.length >= MAX_PARTY_SIZE;
 
@@ -212,6 +216,14 @@ function PartyCard({
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {bonds > 0 && (
+            <p
+              className="mt-1 text-[10px] text-grade-c"
+              title="Champions fighting beside those they are shield-bonded to"
+            >
+              🛡 {bonds} shield-bond{bonds > 1 ? "s" : ""} riding together · +{bondPct}% power
+            </p>
+          )}
         </div>
       )}
 
