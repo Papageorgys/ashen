@@ -322,6 +322,8 @@ export interface GameState {
   inscribed?: string[];
   /** the host's carried Ash Debt (§3) — accrued in the fight, cleared only by rest */
   ashDebt?: number;
+  /** the Long Night (§5) — rising pressure, and the window while it walks the realm */
+  longNight?: { pressure: number; endsAt?: number | undefined };
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];
@@ -1299,6 +1301,28 @@ export function clanHostPower(state: GameState) {
 }
 
 /**
+ * The Long Night (Systems Bible §5) — a recurring world event, not a one-time
+ * apocalypse. A pressure gauge rises over the season; the exact hour it breaks
+ * is hidden (the horror is the uncertainty). When it breaks, the light-fearing
+ * things pour out and the realm's rivals press harder — old enemies call bitter
+ * truce to survive it. [TUNING].
+ */
+export const LONG_NIGHT = {
+  risePerHour: 6,
+  durationMs: 20 * 60_000,
+  hostilitySurgePerHour: 8,
+};
+
+export function longNightActive(state: GameState, now: number = Date.now()): boolean {
+  return !!state.longNight?.endsAt && now < state.longNight.endsAt;
+}
+
+/** 0..100 — how close the sky is to being swallowed. */
+export function longNightPressure(state: GameState): number {
+  return Math.min(100, Math.max(0, state.longNight?.pressure ?? 0));
+}
+
+/**
  * Advances the world one step: rivals grow, stake claims, and the castle pays
  * out. Called on a slow timer so the realm keeps moving while you play.
  */
@@ -1313,10 +1337,36 @@ export function realmPulse(state: GameState) {
 
   const openZones = ZONES.filter((z) => z.reqLevel <= 52).map((z) => z.id);
 
+  // The Long Night (§5): pressure rises, then breaks over the realm for a window.
+  const ln = state.longNight ?? { pressure: 0 };
+  if (ln.endsAt && now >= ln.endsAt) {
+    ln.endsAt = undefined;
+    pushLog(state, "The Long Night lifts. The sun returns, grey and cold, and the truce with it.", "info");
+  }
+  if (!ln.endsAt) {
+    ln.pressure = Math.min(100, (ln.pressure ?? 0) + LONG_NIGHT.risePerHour * hours);
+    if (ln.pressure >= 100) {
+      ln.pressure = 0;
+      ln.endsAt = now + LONG_NIGHT.durationMs;
+      pushLog(state, "The upper Ash thickens and swallows the sun — the Long Night is upon the realm.", "bad");
+      chronicle(
+        state,
+        "war",
+        "The Long Night breaks",
+        "The dead grow restless and the light-fearing things pour out. Old enemies call bitter truce to outlast it — and remember who held the line.",
+      );
+    }
+  }
+  state.longNight = ln;
+  const nightSurge = ln.endsAt ? LONG_NIGHT.hostilitySurgePerHour * hours : 0;
+
   for (const r of state.rivals) {
     const def = RIVAL_BY_ID[r.id]!;
     r.power = Math.round(r.power * (1 + 0.012 * def.ambition));
-    r.hostility = Math.min(100, r.hostility + (state.clanLevel > 3 ? 1.5 : 0.6) * def.ambition);
+    r.hostility = Math.min(
+      100,
+      r.hostility + (state.clanLevel > 3 ? 1.5 : 0.6) * def.ambition + nightSurge,
+    );
     if (r.claims.length < 3 && Math.random() < 0.35) {
       const taken = new Set(state.rivals.flatMap((x) => x.claims));
       const free = openZones.filter((z) => !taken.has(z));

@@ -1,6 +1,13 @@
 import { CASTLE, RIVALS, garrisonPower, resolveClash } from "@/lib/game/rivals";
 import { ZONE_BY_ID, ZONES } from "@/lib/game/data";
-import { ashenToll, clanHostPower, siegeReady, type GameState } from "@/lib/game/engine";
+import {
+  ashenToll,
+  clanHostPower,
+  longNightActive,
+  longNightPressure,
+  siegeReady,
+  type GameState,
+} from "@/lib/game/engine";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -26,9 +33,40 @@ export function RealmPanel({
       : RIVALS.find((r) => r.id === holder)?.name ?? "the crown's garrison";
   const defense = castle ? garrisonPower(castle, rivals) : 0;
   const toll = ashenToll(castle);
+  const night = longNightActive(state);
+  const pressure = longNightPressure(state);
 
   return (
     <div className="space-y-4">
+      {/* ------------------------------ the Long Night ------------------------- */}
+      <section
+        className={`rounded-sm border p-3 ${
+          night ? "border-destructive/60 bg-destructive/10" : "border-border/60"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span
+            className={`font-display text-sm ${night ? "text-destructive" : "text-muted-foreground"}`}
+          >
+            {night ? "The Long Night is upon the realm" : "The Long Night"}
+          </span>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {night ? "truce or perish" : `pressure ${Math.round(pressure)}%`}
+          </span>
+        </div>
+        <div className="mt-2 h-2 overflow-hidden rounded-sm border border-border/60 bg-secondary">
+          <div
+            className={`h-full transition-all ${night ? "bg-destructive animate-pulse" : "bg-sky-400/60"}`}
+            style={{ width: `${night ? 100 : pressure}%` }}
+          />
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          {night
+            ? "The dead walk and the light-fearing things pour out. Rivals press harder — but who holds the line is remembered."
+            : "The upper Ash thickens over the season. No one knows the hour it breaks — only that it will."}
+        </p>
+      </section>
+
       {/* ------------------------------- the castle ---------------------------- */}
       <section className="panel rounded-sm p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
