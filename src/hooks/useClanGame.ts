@@ -102,6 +102,8 @@ import {
   rollRecruits,
   recruitCost,
   rallyReward,
+  deedsFromState,
+  inscribeCost,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1045,6 +1047,29 @@ export function useClanGame() {
             ? `Dawn rally — ${streak}-day streak! A feast-day muster.`
             : `Dawn rally claimed — ${streak}-day streak.`,
         );
+      }),
+
+    /* -------------------------------- legacy --------------------------------- */
+
+    /** Carve a Deed into the Founders' Monument for a price in gold (§7.4).
+     * Cosmetic only — inscription grants no power, it grants remembrance. */
+    inscribeDeed: (id: string) =>
+      update((s) => {
+        const deed = deedsFromState(s).find((d) => d.id === id);
+        if (!deed) return;
+        s.inscribed = s.inscribed ?? [];
+        if (s.inscribed.includes(id)) return void toast("Already carved into the Monument.");
+        const cost = inscribeCost(deed);
+        if (s.gold < cost) return void toast(`Need ${cost} gold to inscribe this deed.`);
+        s.gold -= cost;
+        s.inscribed.push(id);
+        chronicle(
+          s,
+          "rise",
+          "Inscribed at the Founders' Monument",
+          `“${deed.title}” is carved into the stone for ${cost} gold. The Ash always collects — even for remembrance.`,
+        );
+        toast.success(`Inscribed: ${deed.title}`);
       }),
 
     /* ------------------------------ world boss ------------------------------- */
