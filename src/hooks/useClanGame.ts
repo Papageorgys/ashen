@@ -103,6 +103,7 @@ import {
   recruitCost,
   rallyReward,
   deedsFromState,
+  renownScore,
   inscribeCost,
   ASH_DEBT,
   restAtFlameCost,
@@ -1058,6 +1059,37 @@ export function useClanGame() {
       }),
 
     /* -------------------------------- legacy --------------------------------- */
+
+    /** Declare the Reckoning (§1.3): tally the season into the permanent Chronicle
+     * and begin a new Season of Ash. A perturbation, not a wipe — everything you
+     * earned endures; only the map and the meta-clocks stir anew. */
+    declareReckoning: () =>
+      update((s) => {
+        const season = s.season ?? 1;
+        const deeds = deedsFromState(s);
+        const renown = renownScore(deeds);
+        chronicle(
+          s,
+          "triumph",
+          `The Season of Ash ${season} is reckoned`,
+          `${renown.toLocaleString()} renown across ${deeds.length} deeds. The map is perturbed and the war begins again — but your name endures in the stone.`,
+        );
+        s.season = season + 1;
+        // perturbation: rivals surge back stronger, their claims reset; meta-clocks clear.
+        s.rivals = initialRivals().map((r) => ({
+          ...r,
+          power: Math.round(r.power * (1 + 0.15 * season)), // [TUNING]
+        }));
+        s.longNight = { pressure: 0 };
+        s.ashDebt = 0;
+        s.rawAsh = 0;
+        pushLog(
+          s,
+          `The Reckoning is declared. Season ${season + 1} of the endless war begins — the realms stir anew.`,
+          "info",
+        );
+        toast.success(`Season ${season} reckoned. The war begins again.`);
+      }),
 
     /** A champion swears the Ashen Oath (§4.2) — irrevocable. They step forward
      * first when death comes, and their fall becomes an outsized, honoured Deed. */

@@ -330,6 +330,8 @@ export interface GameState {
   loan?: { principal: number; owed: number; dueAt: number } | undefined;
   /** ids of the vassal houses sworn to your banner (§8.1) */
   vassals?: string[];
+  /** the current Season of Ash (§1.3) — each Reckoning begins a new one */
+  season?: number;
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];

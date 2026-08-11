@@ -40,7 +40,7 @@ export function LegacyPanel({
   api,
 }: {
   state: GameState;
-  api: { inscribeDeed: (id: string) => void };
+  api: { inscribeDeed: (id: string) => void; declareReckoning: () => void };
 }) {
   const deeds = useMemo(() => deedsFromState(state), [state]);
   const score = renownScore(deeds);
@@ -57,7 +57,7 @@ export function LegacyPanel({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-              Renown — prestige, never power
+              Renown — prestige, never power · Season of Ash {state.season ?? 1}
             </div>
             <h2 className="font-display text-2xl text-gold">{rank.title}</h2>
             <p className="text-xs text-muted-foreground">
@@ -143,6 +143,34 @@ export function LegacyPanel({
             })}
           </ol>
         )}
+      </section>
+
+      {/* ------------------------------ the Reckoning -------------------------- */}
+      <section className="panel rounded-sm p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-lg text-gold">The Reckoning</h3>
+            <p className="text-[11px] text-muted-foreground">
+              End the Season of Ash and begin the next. Your Chronicle, renown, champions,
+              inscriptions and vassals endure — the map is perturbed and rivals surge back stronger.
+              You cannot win the war; you can only outlast another season of it.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Declare the Reckoning and begin Season ${(state.season ?? 1) + 1}? Everything you earned endures; the rivals return stronger.`,
+                )
+              )
+                api.declareReckoning();
+            }}
+          >
+            Declare the Reckoning
+          </Button>
+        </div>
       </section>
     </div>
   );
