@@ -1,24 +1,31 @@
 /**
- * The seven realms of the Ashen Realm and their fallen capitals — points of
- * interest on the War Table map. Each realm's borders fall along the mountains
- * and the sea; a ruined capital anchors each. Coordinates are in the map's
- * 0..100 design space (the plate scales y by 0.62). Colours tint the realm name.
+ * The seven realms of Aethyr and their seats — points of interest on the War
+ * Table map, drawn to follow the canonical atlas (Story Bible §6): the Ember
+ * Court at the contested heart, the others ringing it by the cartographer's
+ * hand. Coordinates are in the map's 0..100 design space (the plate scales y by
+ * 0.62); colours are the atlas's Realm Influence key.
  */
-export type FallenCapital = {
+export type RealmSeat = {
   id: string;
-  race: string;
-  capital: string;
+  realm: string;
+  seat: string;
   x: number;
   y: number;
   color: [number, number, number];
 };
 
-export const FALLEN_CAPITALS: FallenCapital[] = [
-  { id: "sylvani", race: "Sylvani", capital: "Eldanar", x: 28, y: 16, color: [92, 138, 92] },
-  { id: "ravenfold", race: "Ravenfold", capital: "Ravensgate", x: 48, y: 16, color: [154, 124, 98] },
-  { id: "durgan", race: "Durgan", capital: "Kaz Durom", x: 80, y: 20, color: [120, 120, 152] },
-  { id: "hyunan", race: "Hyunan", capital: "Cael Havar", x: 44, y: 46, color: [184, 164, 92] },
-  { id: "kaemari", race: "Kaemari", capital: "Aeraveth", x: 84, y: 50, color: [108, 160, 168] },
-  { id: "grakhar", race: "Grakhar", capital: "Gor Ashkul", x: 68, y: 74, color: [190, 110, 72] },
-  { id: "nocturi", race: "Nocturi", capital: "Vael Noctis", x: 22, y: 62, color: [156, 100, 146] },
+export const REALM_SEATS: RealmSeat[] = [
+  // The imperial heart — Castle Vareth, contested by all.
+  { id: "ember_court", realm: "The Ember Court", seat: "Castle Vareth", x: 52, y: 40, color: [196, 96, 52] },
+  // North: highland clans and the border knights.
+  { id: "free_holds", realm: "The Free Holds", seat: "Skald's Marches", x: 36, y: 18, color: [124, 138, 156] },
+  { id: "pale_wardens", realm: "The Pale Wardens", seat: "Warden's Bastion", x: 80, y: 20, color: [160, 172, 186] },
+  // West: the death-cult in the murmuring dark.
+  { id: "hollow_covenant", realm: "The Hollow Covenant", seat: "The Murmuring Depths", x: 22, y: 46, color: [150, 112, 170] },
+  // East: druids and the reclaiming green.
+  { id: "verdant_reclamation", realm: "The Verdant Reclamation", seat: "Greenfall Sanctuary", x: 82, y: 50, color: [122, 152, 92] },
+  // South-west: merchant princes and the ledger.
+  { id: "gilded_compact", realm: "The Gilded Compact", seat: "Brightmarket Exchange", x: 30, y: 72, color: [200, 168, 84] },
+  // South-east: the zealot cult in the sunless waste.
+  { id: "sunless_choir", realm: "The Sunless Choir", seat: "The Obsidian Spire", x: 72, y: 76, color: [128, 98, 158] },
 ];

@@ -1,16 +1,16 @@
 import { memo } from "react";
-import { FALLEN_CAPITALS } from "@/lib/game/realms";
+import { REALM_SEATS } from "@/lib/game/realms";
 
 /**
- * The seven fallen capitals — decorative points of interest on the War Table map.
- * Each is drawn as a broad ruined keep with a torn banner, under a faint realm name
- * and a captioned capital name. Purely lore/atmosphere (pointer-events-none), laid
- * over the terrain and below the interactive zone/banner overlay. Map space 100x62.
+ * The seven realms of Aethyr — decorative points of interest on the War Table map,
+ * following the canonical atlas. Each realm's name is spread across its territory
+ * over a keep glyph marking its seat. Purely lore/atmosphere (pointer-events-none),
+ * laid over the terrain and below the interactive zone/banner overlay. Map 100x62.
  */
 
 const my = (y: number) => y * 0.62;
 
-/** A broad ruined keep with a torn banner. */
+/** A broad ruined keep with a torn banner — a realm's seat. */
 function CapitalRuin({ cx, cy }: { cx: number; cy: number }) {
   return (
     <g stroke="#4a2a1a" strokeWidth={0.16} strokeLinejoin="round" fill="#c7ad82">
@@ -51,23 +51,23 @@ export const AtlasCapitals = memo(function AtlasCapitals() {
       aria-hidden="true"
       focusable="false"
     >
-      {FALLEN_CAPITALS.map((r) => {
+      {REALM_SEATS.map((r) => {
         const cx = r.x;
         const cy = my(r.y);
         return (
           <g key={r.id}>
             <text
               x={cx}
-              y={cy - 4.8}
+              y={cy - 4.6}
               textAnchor="middle"
               fontFamily="Georgia, serif"
-              fontSize={2.9}
+              fontSize={2.3}
               fill={`rgb(${r.color[0]},${r.color[1]},${r.color[2]})`}
-              opacity={0.4}
-              letterSpacing={0.4}
+              opacity={0.5}
+              letterSpacing={0.3}
               fontWeight={700}
             >
-              {r.race.toUpperCase()}
+              {r.realm.replace(/^The /, "").toUpperCase()}
             </text>
             <CapitalRuin cx={cx} cy={cy} />
             <text
@@ -75,14 +75,14 @@ export const AtlasCapitals = memo(function AtlasCapitals() {
               y={cy + 3.1}
               textAnchor="middle"
               fontFamily="Georgia, serif"
-              fontSize={2.0}
+              fontSize={1.9}
               fill="#5c1f13"
               fontWeight={600}
               paintOrder="stroke"
               stroke="#efe0c2"
-              strokeWidth={0.55}
+              strokeWidth={0.5}
             >
-              {r.capital} †
+              {r.seat}
             </text>
           </g>
         );
