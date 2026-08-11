@@ -109,7 +109,7 @@ import {
   type GameState,
   type Member,
 } from "@/lib/game/engine";
-import { SCROLL_BY_ID } from "@/lib/game/data";
+import { SCROLL_BY_ID, travelMsTo } from "@/lib/game/data";
 import { MONSTER_BY_ID } from "@/lib/game/monsters";
 import { bossSpoils } from "@/lib/game/worldboss";
 
@@ -269,9 +269,23 @@ export function useClanGame() {
       const cur = stateRef.current;
       if (!cur) return;
       const now = Date.now();
-      if (!cur.parties.some((p) => p.run && p.run.endsAt <= now)) return;
+      if (
+        !cur.parties.some(
+          (p) => (p.run && p.run.endsAt <= now) || (p.travel && p.travel.arrivesAt <= now),
+        )
+      )
+        return;
       update((s) => {
         for (const party of s.parties) {
+          // A marching banner that has reached its zone sets to the hunt (no loot yet).
+          if (party.travel) {
+            if (party.travel.arrivesAt > now) continue;
+            const tz = ZONE_BY_ID[party.travel.zoneId];
+            party.run = tz ? { zoneId: party.travel.zoneId, endsAt: now + tz.durationMs } : null;
+            party.travel = null;
+            if (tz) pushLog(s, `${party.name} reached ${tz.name} and set to the hunt.`, "info");
+            continue;
+          }
           if (!party.run || party.run.endsAt > now) continue;
           const zoneId = party.run.zoneId;
           const res = resolveRun(s, party, zoneId);
@@ -883,11 +897,16 @@ export function useClanGame() {
         const p = s.parties.find((x) => x.id === partyId);
         const z = ZONES.find((x) => x.id === zoneId);
         if (!p || !z) return;
-        if (p.run) return;
+        if (p.run || p.travel) return;
         if (p.memberIds.length === 0) return void toast.error("Empty party.");
-        p.run = { zoneId, endsAt: Date.now() + z.durationMs };
+        const travelMs = travelMsTo(zoneId);
+        p.travel = { zoneId, arrivesAt: Date.now() + travelMs };
         p.farming = zoneId;
-        pushLog(s, `${p.name} marched on ${z.name} and will farm until recalled.`, "info");
+        pushLog(
+          s,
+          `${p.name} set out to march on ${z.name} — ${Math.round(travelMs / 1000)}s on the road.`,
+          "info",
+        );
       }),
 
     recallParty: (partyId: string) =>
@@ -895,6 +914,12 @@ export function useClanGame() {
         const p = s.parties.find((x) => x.id === partyId);
         if (!p) return;
         p.farming = null;
+        // Still on the road? Turn the banner around rather than march into an empty hunt.
+        if (p.travel && !p.run) {
+          p.travel = null;
+          pushLog(s, `${p.name} broke off the march and is turning home.`, "info");
+          return;
+        }
         pushLog(s, `${p.name} will return after this run.`, "info");
       }),
 

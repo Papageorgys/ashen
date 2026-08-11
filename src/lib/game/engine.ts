@@ -231,6 +231,8 @@ export interface Party {
   memberIds: string[];
   /** active expedition — farms the zone on a loop until recalled */
   run: { zoneId: string; endsAt: number } | null;
+  /** on the march to a zone — set on deploy, cleared to a run on arrival */
+  travel?: { zoneId: string; arrivesAt: number } | null;
   /** zone the banner keeps farming; cleared on recall */
   farming?: string | null;
 }
