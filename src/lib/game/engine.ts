@@ -264,6 +264,10 @@ export interface GameState {
   /** everything the clan has ever killed, by monster id */
   bestiary?: Record<string, BestiaryEntry>;
   createdAt: number;
+  /** the auth user this save belongs to — guards against cross-account overwrite */
+  ownerId?: string | null;
+  /** wall-clock of the last local write — arbitrates local vs cloud on sign-in */
+  savedAt?: number;
 
 }
 

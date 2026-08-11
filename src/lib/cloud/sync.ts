@@ -59,3 +59,46 @@ export async function fetchLadder(): Promise<LadderRow[]> {
     .limit(100);
   return (data ?? []) as unknown as LadderRow[];
 }
+
+export type ChatMessageRow = {
+  id: string;
+  user_id: string;
+  clan_name: string;
+  leader_name: string;
+  crest: unknown;
+  body: string;
+  created_at: string;
+};
+
+/** The realm hall's most recent messages, oldest first for display. */
+export async function fetchChat(limit = 60): Promise<ChatMessageRow[]> {
+  const { data } = await supabase
+    .from("chat_messages")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return ((data ?? []) as unknown as ChatMessageRow[]).reverse();
+}
+
+/** Speak in the hall. `userId` must equal the signed-in user (enforced by RLS). */
+export async function postChat(
+  userId: string,
+  body: string,
+  who: { clanName?: string | undefined; leaderName?: string | undefined; crest?: unknown },
+): Promise<ChatMessageRow | null> {
+  const trimmed = body.trim().slice(0, 500);
+  if (!trimmed) return null;
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .insert({
+      user_id: userId,
+      clan_name: who.clanName ?? "",
+      leader_name: who.leaderName ?? "",
+      crest: (who.crest ?? null) as never,
+      body: trimmed,
+    })
+    .select()
+    .single();
+  if (error || !data) return null;
+  return data as unknown as ChatMessageRow;
+}

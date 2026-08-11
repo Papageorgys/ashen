@@ -168,7 +168,14 @@ export function useClanGame() {
     setHydrated(true);
   }, []);
 
-  /** on sign-in: the cloud save wins if there is one, otherwise upload this device's */
+  /**
+   * On sign-in, reconcile this device's save with the cloud:
+   * - the cloud wins only when it is actually newer, or when the local save belongs to
+   *   a different user (never blindly overwrite a fresher local save);
+   * - otherwise the local save is claimed for this user and uploaded;
+   * - a local save owned by someone else, with no cloud save for this user, is never
+   *   uploaded — that would leak the previous player's clan into a new account.
+   */
   useEffect(() => {
     if (!hydrated || !authReady) return;
     if (!user) {
@@ -180,8 +187,18 @@ export function useClanGame() {
     (async () => {
       const remote = await fetchCloudSave(user.id);
       if (!live) return;
-      if (remote) setState(patch(remote));
-      else if (stateRef.current) await pushCloudSave(user.id, stateRef.current);
+      const local = stateRef.current;
+      const localOwnedByUser = !!local && (local.ownerId == null || local.ownerId === user.id);
+      if (remote && (!localOwnedByUser || (remote.savedAt ?? 0) >= (local?.savedAt ?? 0))) {
+        setState(patch({ ...remote, ownerId: user.id }));
+      } else if (localOwnedByUser && local) {
+        const claimed = patch({ ...local, ownerId: user.id, savedAt: Date.now() });
+        setState(claimed);
+        await pushCloudSave(user.id, claimed);
+      } else {
+        // local save belongs to another account and the cloud is empty: don't leak it
+        setState(null);
+      }
       if (live) setCloudReady(true);
     })();
     return () => {
@@ -191,17 +208,32 @@ export function useClanGame() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (state) window.localStorage.setItem(KEY, JSON.stringify(state));
+    if (state) {
+      // stamp recency on every write so sign-in can arbitrate local vs cloud
+      state.savedAt = Date.now();
+      window.localStorage.setItem(KEY, JSON.stringify(state));
+    }
   }, [state, hydrated]);
 
-  /** debounced push of the world state and ladder standing */
+  /**
+   * Steady push of the world state and ladder standing. A fixed interval that reads the
+   * latest state from the ref cannot be starved the way a debounce cleared on every state
+   * change could — that starvation previously meant actively-playing users never saved to
+   * the cloud (state changes as often as every 1.5s). Also flushes once on teardown/sign-out.
+   */
   useEffect(() => {
-    if (!cloudReady || !user || !state) return;
-    const t = setTimeout(() => {
-      void pushCloudSave(user.id, state);
-    }, 4000);
-    return () => clearTimeout(t);
-  }, [state, cloudReady, user?.id]);
+    if (!cloudReady || !user) return;
+    const userId = user.id;
+    const flush = () => {
+      const s = stateRef.current;
+      if (s && (s.ownerId == null || s.ownerId === userId)) void pushCloudSave(userId, s);
+    };
+    const t = setInterval(flush, 10000);
+    return () => {
+      clearInterval(t);
+      flush();
+    };
+  }, [cloudReady, user?.id]);
 
 
   const pushLog = (s: GameState, text: string, tone: "good" | "bad" | "info") => {
