@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import { ZONE_POS, HOME_POS, LANDMARKS } from "@/lib/game/data";
-import { FALLEN_CAPITALS } from "@/lib/game/realms";
+import { REALM_SEATS } from "@/lib/game/realms";
 import { bakeAtlasTerrain, type MapPoint } from "@/lib/game/atlasTerrain";
 
 /** Every marker the game draws — zones, landmarks, fallen capitals, the keep —
@@ -9,7 +9,7 @@ const LAND_STAMPS: MapPoint[] = [
   HOME_POS,
   ...Object.values(ZONE_POS),
   ...LANDMARKS.map((l) => l.pos),
-  ...FALLEN_CAPITALS.map((c) => ({ x: c.x, y: c.y })),
+  ...REALM_SEATS.map((c) => ({ x: c.x, y: c.y })),
 ];
 
 /**
