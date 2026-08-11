@@ -313,6 +313,8 @@ export interface GameState {
   motto?: string;
   /** the deeds worth remembering */
   chronicle?: ChronicleEntry[];
+  /** ids of Deeds the clan has inscribed at the Founders' Monument (Legacy §7.4) */
+  inscribed?: string[];
   /** champions lost for good */
   memorial?: Fallen[];
   rivals?: RivalState[];
@@ -1027,6 +1029,103 @@ export function chronicle(
   state.chronicle = state.chronicle ?? [];
   state.chronicle.unshift({ id: uid(), at: Date.now(), title, text, kind });
   if (state.chronicle.length > 200) state.chronicle.length = 200;
+}
+
+/* --------------------------------- Legacy ---------------------------------- *
+ * The only victory (Systems Bible §7). Deeds are derived from the permanent
+ * record the clan already keeps — the Chronicle, the memorial, and champions'
+ * marks — so the Chronicle IS the permanence. Renown is prestige only: it
+ * never grants a stat ([CANON] §7.5). Inscription (§7.4) is a separate,
+ * player-willed act that carves a Deed into the Monument for a price in gold.
+ */
+
+export type DeedClass = "conquest" | "endurance" | "first" | "sacrifice" | "craft" | "infamy";
+
+export interface DeedRecord {
+  id: string;
+  cls: DeedClass;
+  title: string;
+  text: string;
+  /** Chronicle weight — provisional [TUNING], seeded conservatively (§7.2 L1). */
+  weight: number;
+  at: number;
+}
+
+export const DEED_LABEL: Record<DeedClass, string> = {
+  conquest: "Conquest",
+  endurance: "Endurance",
+  first: "First",
+  sacrifice: "Sacrifice",
+  craft: "Craft",
+  infamy: "Infamy",
+};
+
+/** chronicle kind -> deed class + weight (skip the ones the memorial owns). */
+const CHRON_DEED: Partial<Record<ChronicleEntry["kind"], { cls: DeedClass; weight: number }>> = {
+  founding: { cls: "first", weight: 40 },
+  triumph: { cls: "conquest", weight: 90 },
+  war: { cls: "conquest", weight: 80 },
+  rise: { cls: "endurance", weight: 60 },
+  forge: { cls: "craft", weight: 45 },
+};
+
+/** The clan's Deeds — the atoms of legacy (§7.2), read from the permanent record. */
+export function deedsFromState(state: GameState): DeedRecord[] {
+  const out: DeedRecord[] = [];
+  for (const c of state.chronicle ?? []) {
+    const map = CHRON_DEED[c.kind];
+    if (!map) continue;
+    out.push({ id: `chr:${c.id}`, cls: map.cls, title: c.title, text: c.text, weight: map.weight, at: c.at });
+  }
+  for (const f of state.memorial ?? []) {
+    const w = 60 + Math.round(f.level * 1.5) + (f.wasLord ? 80 : 0);
+    out.push({
+      id: `fallen:${f.id}`,
+      cls: "sacrifice",
+      title: `${f.name} fell${f.wasLord ? ", the Lord," : ""} at ${f.where}`,
+      text: `A ${classNameOf(f.classId)} of level ${f.level}, ${f.mobKills} foes felled before the end. Their name outlives them.`,
+      weight: w,
+      at: f.at,
+    });
+  }
+  for (const m of state.members ?? []) {
+    for (const mk of m.marks ?? []) {
+      if (mk.kind !== "slayer") continue; // first of the clan to fell a kind — a "First"
+      out.push({ id: `mark:${m.id}:${mk.id}`, cls: "first", title: mk.text, text: `${m.name} — ${mk.where ?? "the field"}.`, weight: 70, at: mk.at });
+    }
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
+function classNameOf(classId: string): string {
+  return CLASS_BY_ID[classId]?.name ?? "champion";
+}
+
+/** Cosmetic Renown ranks — prestige, never power ([CANON] §7.5). */
+export const RENOWN_RANKS: { at: number; title: string }[] = [
+  { at: 0, title: "Unsung" },
+  { at: 120, title: "Named" },
+  { at: 350, title: "Renowned" },
+  { at: 800, title: "Storied" },
+  { at: 1600, title: "Legendary" },
+  { at: 3200, title: "Immortal" },
+];
+
+export function renownScore(deeds: DeedRecord[]): number {
+  return deeds.reduce((s, d) => s + d.weight, 0);
+}
+
+export function renownRank(score: number): { title: string; next: { title: string; at: number } | null; floor: number } {
+  let idx = 0;
+  for (let i = 0; i < RENOWN_RANKS.length; i++) if (score >= RENOWN_RANKS[i]!.at) idx = i;
+  const cur = RENOWN_RANKS[idx]!;
+  const next = idx + 1 < RENOWN_RANKS.length ? RENOWN_RANKS[idx + 1]! : null;
+  return { title: cur.title, next, floor: cur.at };
+}
+
+/** What it costs in gold to carve a Deed into the Monument (§7.4 — being remembered is paid for). */
+export function inscribeCost(deed: DeedRecord): number {
+  return 40 + deed.weight * 4;
 }
 
 export function makeLord(f: Founding): Member {

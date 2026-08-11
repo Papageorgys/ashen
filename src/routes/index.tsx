@@ -27,6 +27,7 @@ import { CrestEditor } from "@/components/game/CrestEditor";
 import { ClanCrest } from "@/components/game/ClanCrest";
 import { Portrait } from "@/components/game/Portrait";
 import { ChroniclePanel } from "@/components/game/ChroniclePanel";
+import { LegacyPanel } from "@/components/game/LegacyPanel";
 import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
@@ -58,6 +59,7 @@ import {
   ScrollText,
   Sparkles,
   Store,
+  Trophy,
   Swords,
   UserPlus,
   type LucideIcon,
@@ -341,6 +343,13 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: "Your saga and the fallen",
         requiresClan: true,
       },
+      {
+        value: "legacy",
+        label: "Legacy",
+        icon: Trophy,
+        hint: "Deeds, renown, and the Monument — the only victory",
+        requiresClan: true,
+      },
     ],
   },
 ];
@@ -563,6 +572,18 @@ function Index() {
               </TabsContent>
               <TabsContent value="chronicle" className="mt-0">
                 <ChroniclePanel state={state} api={api} />
+              </TabsContent>
+              <TabsContent value="legacy" className="mt-0">
+                <section className="space-y-3">
+                  <header>
+                    <h2 className="font-display text-lg text-gold">Legacy</h2>
+                    <p className="text-xs text-muted-foreground">
+                      You cannot win the war. You can only be remembered in it. Your deeds, your
+                      renown, and the names you carve into the Monument.
+                    </p>
+                  </header>
+                  <LegacyPanel state={state} api={api} />
+                </section>
               </TabsContent>
               <TabsContent value="bestiary" className="mt-0">
                 <BestiaryPanel state={state} />
