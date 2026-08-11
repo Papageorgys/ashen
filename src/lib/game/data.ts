@@ -3143,10 +3143,10 @@ export const LANDMARKS: Landmark[] = [
   },
   {
     id: "ravensgate",
-    name: "Ravensgate Castle",
+    name: "Frostwatch Keep",
     kind: "castle",
-    blurb: "Seat of the crown. Clan levels are sworn here.",
-    pos: { x: 42, y: 18 },
+    blurb: "A Pale Warden bastion on the north-east frontier, where the Long Night presses hardest.",
+    pos: { x: 86, y: 14 },
   },
   {
     id: "ravenhold",
