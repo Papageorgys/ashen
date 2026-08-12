@@ -1,6 +1,6 @@
 # Ashen Legacy — Systems Bible
 
-**Version 0.2 · Draft canon · 11 August 2026**
+**Version 0.3 · Draft canon · 12 August 2026**
 Canonical systems-design reference for *Ashen Legacy*, the dark-fantasy MMORPG set in Aethyr. Companion to the **Story Bible v0.1**. Where the Story Bible governs *what is true*, this document governs *what the player does*.
 
 > **Precedence.** On matters of fiction, the Story Bible wins. On matters of mechanics, this bible wins. Where a system contradicts the fiction, the system is wrong and gets redesigned — fiction is not retrofitted to excuse a mechanic. The One Law ("Ash always collects") binds both documents equally.
@@ -152,6 +152,10 @@ Every character runs on two meters:
 | **Ash Debt** | Accrued when you reach *past* Vigour for greater power. **Does not auto-clear.** It follows you between fights, between sessions, until you pay it down at a warded flame (§1.1 Muster). |
 
 **[CANON] Debt suppresses Vigour.** The more Ash Debt you carry, the smaller your usable Vigour pool. Push your power hard and you burn yourself down — you hit harder now and weaker for the rest of the run. This is *why the strongest mages are rarely the oldest* (Story Bible §4), expressed as a curve a player feels every fight.
+
+**[CANON] Overdraw — the active push.** Debt is not only a punishment for dying; it is a *choice* the player reaches for. On a committed action (v1: charging the World Boss) a warband may **Overdraw** — reach past its Vigour for a burst of power **now** (**[TUNING]** +55% to the blow) in exchange for banked Ash Debt (**[TUNING]** +30) and a sharply higher chance of a champion falling on that charge (**[TUNING]** ×1.7 risk). This is the push-your-luck heartbeat of the One Law: outsized force, paid for after. *Implemented v0.3.*
+
+**[CANON] Searing — the debt that burns.** Past a threshold of carried debt (**[TUNING]** ≥150) the host is **Searing**: the Ash is burning it alive, and every risky action is far deadlier (**[TUNING]** ×1.35 death risk on top of everything else) until the debt is rested off at a warded flame. High debt is not merely "weaker" — it is *dangerous to field*. *Implemented v0.3.*
 
 ### 3.2 The three disciplines pay three different prices — **[CANON]**
 
@@ -436,6 +440,7 @@ Fealty is sworn to a *person*, never an ideology. A vassal and their lord may ho
 |---|---|---|
 | 0.1 | 11 Aug 2026 | Initial draft systems canon. Establishes the three-tier core loop, siege & territory (vulnerability windows, holding tiers, conquest, anti-turtle Toll, map perturbation), Ash Debt (dual-resource One Law with three discipline costs), zone-tiered death & full-loot with opt-in Ashen Oath, the Long Night as a system, the destruction economy with decaying Ash and the Compact's Ledger, the Legacy system (Chronicle/Inscription split, Deeds, Renown-not-power, inheritance), social tiers, NPE, and a cosmetic-only business model. Six systems questions logged; six Story-Bible questions carried forward. |
 | 0.2 | 11 Aug 2026 | Added **§8.1 Feudal Infrastructure** [CANON]: voluntary tools, never engine-enforced obligation; the third "allegiance" axis (fealty to a lord, not a realm); the tithe/service–protection/share/access bargain; enforcement via reputation, the Ledger, and the siege — never auto-seizure; per-realm expression incl. the Free Holds anti-feudal carve-out; primitives-first build order; anti-calcification; leadership-layer only. Also logged the §8 race-mixed-House rule [CANON]. Married to Story Bible §6.1 (v0.3). F1–F2 reserved. |
+| 0.3 | 12 Aug 2026 | **Depth pass — Ash Debt §3** [CANON]. Gave the One Law an active edge and a punishing tail: **Overdraw** (opt-in on a banner charge — +55% damage now, +30 debt, ×1.7 death risk) turns discipline into a live gamble instead of a passive meter; **Searing** (debt ≥150 burns the host — ×1.35 death risk on every commit until rested) makes a neglected debt actively lethal rather than merely a soft cap. Both *Implemented v0.3* in engine `ASH_DEBT` + `isSearing()`, `commitBanner(partyId, overdraw)`, and the Warfront Ash Debt card. |
 
 ---
 *Companion to Ashen Legacy Story Bible v0.1. Assign a systems owner before extending. Read §7 first.*

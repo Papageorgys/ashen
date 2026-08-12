@@ -106,6 +106,7 @@ import {
   renownScore,
   inscribeCost,
   ASH_DEBT,
+  isSearing,
   restAtFlameCost,
   refineAshValue,
   LEDGER,
@@ -1144,7 +1145,7 @@ export function useClanGame() {
      * champion's life unless the clan has prayed for a blessing today. (Damage is
      * submitted separately from the banner's power.)
      */
-    commitBanner: (partyId: string) =>
+    commitBanner: (partyId: string, overdraw = false) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);
         if (!p) return;
@@ -1155,8 +1156,16 @@ export function useClanGame() {
         p.farming = null;
         s.bossCommitAt = { ...(s.bossCommitAt ?? {}), [partyId]: Date.now() };
 
+        // Overdraw reaches past Vigour for a burst (damage handled at the strike),
+        // banking Ash Debt now; and a Searing host is deadlier to field (§3.1/§3.2).
+        const risk =
+          COMMIT_DEATH_RISK *
+          (overdraw ? ASH_DEBT.overdrawRisk : 1) *
+          (isSearing(s) ? ASH_DEBT.searingRisk : 1);
+        if (overdraw) s.ashDebt = (s.ashDebt ?? 0) + ASH_DEBT.overdrawDebt;
+
         const blessed = s.bossBlessing?.day === dayKey();
-        if (!blessed && Math.random() < COMMIT_DEATH_RISK) {
+        if (!blessed && Math.random() < risk) {
           const fated = p.memberIds
             .map((id) => s.members.find((m) => m.id === id))
             .filter((m): m is NonNullable<typeof m> => !!m && !m.isLord);

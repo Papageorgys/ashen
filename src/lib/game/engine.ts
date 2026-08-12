@@ -1289,7 +1289,24 @@ export function rivalOfZone(state: GameState, zoneId: string) {
  * but never touches ordinary farming (a warrior can still swing; it is the
  * *reach past Vigour* that collects). Cleared only by resting at a warded flame.
  */
-export const ASH_DEBT = { deathAccrual: 22, maxSuppression: 0.4, suppressAt: 260, restPerPoint: 3 };
+export const ASH_DEBT = {
+  deathAccrual: 22,
+  maxSuppression: 0.4,
+  suppressAt: 260,
+  restPerPoint: 3,
+  // Overdraw (§3.1): reach past Vigour for a burst now — more debt, more danger.
+  overdrawDamage: 0.55,
+  overdrawDebt: 30,
+  overdrawRisk: 1.7,
+  // Searing (§3.2): carry too much debt and the Ash burns the host outright.
+  searingAt: 150,
+  searingRisk: 1.35,
+};
+
+/** Past this much carried debt, the host is Searing — every charge is deadlier (§3.2). */
+export function isSearing(state: GameState): boolean {
+  return (state.ashDebt ?? 0) >= ASH_DEBT.searingAt;
+}
 
 /** 0 .. maxSuppression — how much the carried Ash Debt shrinks usable host power. */
 export function ashDebtSuppression(state: GameState): number {
