@@ -28,7 +28,14 @@ export interface AtlasLocation {
 }
 
 export type AtlasMapId =
-  "aethyr" | "ember_court" | "hollow_covenant" | "free_holds" | "gilded_compact";
+  | "aethyr"
+  | "ember_court"
+  | "hollow_covenant"
+  | "free_holds"
+  | "gilded_compact"
+  | "verdant_reclamation"
+  | "pale_wardens"
+  | "sunless_choir";
 
 export interface AtlasMap {
   id: AtlasMapId;
@@ -58,7 +65,7 @@ export const ATLAS_TYPE_LABEL: Record<AtlasLocationType, string> = {
   realm: "Realm influence",
   stronghold: "Contested stronghold",
   ruin: "Ruin / ruined keep",
-  holy: "Flooded holy site",
+  holy: "Holy site",
   monument: "Monument",
   poi: "Point of interest",
 };
@@ -124,6 +131,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         x: 19,
         y: 41,
         hue: A.pale,
+        region: "pale_wardens",
         blurb:
           "Grey bastions holding the western marches against the Long Night. Discipline is their creed and vigilance their coin.",
       },
@@ -134,6 +142,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         x: 83,
         y: 44,
         hue: A.verdant,
+        region: "verdant_reclamation",
         blurb:
           "The green reclaiming the ruins of the old world. Druid-circles nurse the forest over the bones of dead empires.",
       },
@@ -155,6 +164,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         x: 52,
         y: 78,
         hue: A.sunless,
+        region: "sunless_choir",
         blurb:
           "Zealots singing in the drowned dark of the southern reaches, where light fails and rites are older than names.",
       },
@@ -544,6 +554,237 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
       },
     ],
   },
+
+  verdant_reclamation: {
+    id: "verdant_reclamation",
+    title: "The Verdant Reclamation",
+    kind: "region",
+    hue: A.verdant,
+    parent: "aethyr",
+    subtitle:
+      "Where stone yields to root and memory to moss — the land reclaims what hands once claimed.",
+    art: "verdant-reclamation.png",
+    locations: [
+      {
+        id: "vr1",
+        name: "Rootbound Ruin",
+        type: "ruin",
+        x: 41,
+        y: 16,
+        level: 8,
+        threat: 60,
+        blurb: "A temple devoured by roots; echoes whisper beneath the stone.",
+      },
+      {
+        id: "vr2",
+        name: "Greenfall Grove",
+        type: "holy",
+        x: 62,
+        y: 25,
+        level: 14,
+        threat: 150,
+        blurb: "A sacred heart of leaf and light, guarded by ancient wards.",
+      },
+      {
+        id: "vr3",
+        name: "Hidden Ford",
+        type: "poi",
+        x: 35,
+        y: 40,
+        level: 18,
+        threat: 200,
+        blurb: "A secret crossing known only to the land and its protectors.",
+      },
+      {
+        id: "vr4",
+        name: "Beast Trail",
+        type: "poi",
+        x: 74,
+        y: 44,
+        level: 24,
+        threat: 320,
+        blurb: "A path for those who move like shadow and claw through the green.",
+      },
+      {
+        id: "vr5",
+        name: "Warden Tree",
+        type: "monument",
+        x: 51,
+        y: 56,
+        level: 30,
+        threat: 480,
+        blurb: "An ancient sentinel that listens, judges, and remembers.",
+      },
+      {
+        id: "vr6",
+        name: "Broken Waystone",
+        type: "ruin",
+        x: 67,
+        y: 63,
+        level: 36,
+        threat: 640,
+        blurb: "A shattered guide, its magic scattered and waiting.",
+      },
+    ],
+  },
+
+  pale_wardens: {
+    id: "pale_wardens",
+    title: "The Pale Wardens",
+    kind: "region",
+    hue: A.pale,
+    parent: "aethyr",
+    subtitle:
+      "A realm of watch and winter. The Wardens hold the line between civilization and the Long Night — their vow endures.",
+    art: "pale-wardens.png",
+    locations: [
+      {
+        id: "pw1",
+        name: "Grey Watch",
+        type: "poi",
+        x: 30,
+        y: 23,
+        level: 10,
+        threat: 100,
+        blurb: "A forward watch above the Frostline. First eyes on the dark beyond.",
+      },
+      {
+        id: "pw2",
+        name: "Black Frontier",
+        type: "ruin",
+        x: 22,
+        y: 47,
+        level: 16,
+        threat: 180,
+        blurb: "Lawless borderlands and broken holds, where the wild presses in.",
+      },
+      {
+        id: "pw3",
+        name: "Warden Bastion",
+        type: "stronghold",
+        seat: true,
+        x: 43,
+        y: 46,
+        level: 28,
+        threat: 420,
+        blurb: "A veteran stronghold and rallying ground for the Pale Wardens.",
+      },
+      {
+        id: "pw4",
+        name: "Cold March",
+        type: "poi",
+        x: 62,
+        y: 42,
+        level: 36,
+        threat: 640,
+        blurb: "Frozen uplands and iron roads. Hard land, harder winters.",
+      },
+      {
+        id: "pw5",
+        name: "Monster Trail",
+        type: "poi",
+        x: 54,
+        y: 71,
+        level: 40,
+        threat: 900,
+        blurb: "Ancient paths of prey and shadow. Few return. None forget.",
+      },
+      {
+        id: "pw6",
+        name: "Lantern Keep",
+        type: "stronghold",
+        x: 36,
+        y: 76,
+        level: 32,
+        threat: 560,
+        blurb: "A beacon on the southern shore. Light against the long dark.",
+      },
+    ],
+  },
+
+  sunless_choir: {
+    id: "sunless_choir",
+    title: "The Sunless Choir",
+    kind: "region",
+    hue: A.sunless,
+    parent: "aethyr",
+    subtitle:
+      "A realm doused in ash and drowned in devotion. The faithful walk endless roads to worship what does not answer.",
+    art: "sunless-choir.png",
+    locations: [
+      {
+        id: "sc_embervault",
+        name: "The Embervault",
+        type: "holy",
+        seat: true,
+        x: 36,
+        y: 85,
+        level: 52,
+        threat: 1900,
+        blurb: "Sunk cathedral-city, heart of the Choir. Its depths remember.",
+      },
+      {
+        id: "sc1",
+        name: "Black Shore",
+        type: "poi",
+        x: 16,
+        y: 32,
+        level: 20,
+        threat: 250,
+        blurb: "Grim coast of jagged rock and unquiet surf.",
+      },
+      {
+        id: "sc2",
+        name: "Ash Chapel",
+        type: "holy",
+        x: 43,
+        y: 18,
+        level: 12,
+        threat: 120,
+        blurb: "Wayside shrine where pilgrims offer breath and blood.",
+      },
+      {
+        id: "sc3",
+        name: "Sunless Gate",
+        type: "monument",
+        x: 78,
+        y: 34,
+        level: 40,
+        threat: 900,
+        blurb: "Monolithic gate into lands that do not return.",
+      },
+      {
+        id: "sc4",
+        name: "Procession Field",
+        type: "poi",
+        x: 51,
+        y: 42,
+        level: 26,
+        threat: 380,
+        blurb: "Where endless processions circle the Hollow Rood.",
+      },
+      {
+        id: "sc5",
+        name: "Pilgrim Road",
+        type: "poi",
+        x: 42,
+        y: 62,
+        level: 30,
+        threat: 480,
+        blurb: "Main artery of devotion, carried over causeways and through silt.",
+      },
+      {
+        id: "sc6",
+        name: "Veiled Spire",
+        type: "monument",
+        x: 67,
+        y: 60,
+        level: 44,
+        threat: 1050,
+        blurb: "A cloaked spire that weeps black rain when the wind speaks its name.",
+      },
+    ],
+  },
 };
 
 /**
@@ -584,6 +825,28 @@ export const ATLAS_ZONE: Record<string, string> = {
   gc4: "saltmere_flats",
   gc5: "ashen_quarry",
   gc6: "obsidian_labyrinth",
+  // Verdant Reclamation
+  vr1: "howling_warren",
+  vr2: "ruined_orchard",
+  vr3: "kingsroad_marches",
+  vr4: "ashen_steppe",
+  vr5: "moonveil_glade",
+  vr6: "obsidian_labyrinth",
+  // Pale Wardens
+  pw1: "briar_downs",
+  pw2: "sunken_crypt",
+  pw3: "ashen_quarry",
+  pw4: "frost_hollow",
+  pw5: "abyss_gate",
+  pw6: "obsidian_labyrinth",
+  // Sunless Choir
+  sc_embervault: "sunless_throne",
+  sc1: "saltmere_flats",
+  sc2: "ruined_orchard",
+  sc3: "abyss_gate",
+  sc4: "ashen_quarry",
+  sc5: "moonveil_glade",
+  sc6: "frozen_hold",
 };
 
 /** The numbered points of interest on a region map (everything but the seat). */
