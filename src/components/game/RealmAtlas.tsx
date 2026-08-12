@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   ATLAS_MAPS,
@@ -10,6 +10,7 @@ import {
   type AtlasMapId,
 } from "@/lib/game/atlas";
 import { ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
+import { RIVALS } from "@/lib/game/rivals";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -150,6 +151,150 @@ export function RealmAtlas({
   const [artFailed, setArtFailed] = useState<Record<string, boolean>>({});
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // ---- pan & zoom ----
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 4;
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    zoomRef.current = zoom;
+    panRef.current = pan;
+  }, [zoom, pan]);
+
+  const clampPan = useCallback((p: { x: number; y: number }, z: number) => {
+    const vp = viewportRef.current;
+    if (!vp) return p;
+    const w = vp.clientWidth;
+    const h = vp.clientHeight;
+    return {
+      x: Math.min(0, Math.max(w * (1 - z), p.x)),
+      y: Math.min(0, Math.max(h * (1 - z), p.y)),
+    };
+  }, []);
+
+  const zoomAt = useCallback(
+    (nextZoom: number, cx: number, cy: number) => {
+      const z0 = zoomRef.current;
+      const nz = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+      const p0 = panRef.current;
+      const np = clampPan({ x: cx - (cx - p0.x) * (nz / z0), y: cy - (cy - p0.y) * (nz / z0) }, nz);
+      setZoom(nz);
+      setPan(np);
+    },
+    [clampPan],
+  );
+
+  const resetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  // wheel-to-zoom: native non-passive listener so we can preventDefault the page scroll
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = vp.getBoundingClientRect();
+      const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+      zoomAt(zoomRef.current * factor, e.clientX - rect.left, e.clientY - rect.top);
+    };
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
+  }, [zoomAt]);
+
+  // active pointers, so one finger pans and two fingers pinch-zoom
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    moved.current = false;
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      if (a && b) pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: zoomRef.current };
+      drag.current = null;
+      for (const id of pointers.current.keys()) e.currentTarget.setPointerCapture(id);
+    } else {
+      drag.current = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y };
+    }
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const vp = viewportRef.current;
+    // two fingers: pinch-zoom toward their midpoint
+    if (pinch.current && pointers.current.size === 2 && vp) {
+      const [a, b] = [...pointers.current.values()];
+      if (!a || !b) return;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const rect = vp.getBoundingClientRect();
+      moved.current = true;
+      zoomAt(
+        (pinch.current.zoom * dist) / pinch.current.dist,
+        (a.x + b.x) / 2 - rect.left,
+        (a.y + b.y) / 2 - rect.top,
+      );
+      return;
+    }
+    // one finger / mouse: pan
+    if (!drag.current) return;
+    const dx = e.clientX - drag.current.x;
+    const dy = e.clientY - drag.current.y;
+    if (Math.hypot(dx, dy) > 4) {
+      moved.current = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    setPan(clampPan({ x: drag.current.px + dx, y: drag.current.py + dy }, zoomRef.current));
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 1) {
+      const [only] = [...pointers.current.values()];
+      if (only) drag.current = { x: only.x, y: only.y, px: panRef.current.x, py: panRef.current.y };
+    } else if (pointers.current.size === 0) {
+      drag.current = null;
+    }
+  };
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const rect = vp.getBoundingClientRect();
+    zoomAt(
+      zoomRef.current < MAX_ZOOM ? zoomRef.current * 1.8 : 1,
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+  };
+  const zoomButton = (dir: 1 | -1) => {
+    const vp = viewportRef.current;
+    const cx = vp ? vp.clientWidth / 2 : 0;
+    const cy = vp ? vp.clientHeight / 2 : 0;
+    zoomAt(zoomRef.current * (dir > 0 ? 1.5 : 1 / 1.5), cx, cy);
+  };
+
+  // keyboard: arrows pan, +/- zoom, 0 resets
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const step = 48;
+    const z = zoomRef.current;
+    if (e.key === "ArrowUp") setPan((p) => clampPan({ x: p.x, y: p.y + step }, z));
+    else if (e.key === "ArrowDown") setPan((p) => clampPan({ x: p.x, y: p.y - step }, z));
+    else if (e.key === "ArrowLeft") setPan((p) => clampPan({ x: p.x + step, y: p.y }, z));
+    else if (e.key === "ArrowRight") setPan((p) => clampPan({ x: p.x - step, y: p.y }, z));
+    else if (e.key === "+" || e.key === "=") zoomButton(1);
+    else if (e.key === "-" || e.key === "_") zoomButton(-1);
+    else if (e.key === "0") resetView();
+    else return;
+    e.preventDefault();
+  };
+
   /** live wiring: only when both state and api are handed in by the game */
   const live = !!(api && state);
   const clock = now ?? Date.now();
@@ -229,6 +374,8 @@ export function RealmAtlas({
     setHeld({});
     setSelectedId(null);
     setCurrentId(id);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
     setStatus(`Charting ${ATLAS_MAPS[id].title}…`);
   }
 
@@ -252,6 +399,23 @@ export function RealmAtlas({
     });
     setStatus(`${loc.name} released — the banner returns to the keep.`);
   }
+
+  // who currently holds Castle Vareth, for its codex entry
+  const castleHolder = state?.castle?.holder;
+  const varethHolder =
+    castleHolder === "player"
+      ? (state?.clanName ?? "your clan")
+      : !castleHolder || castleHolder === "crown"
+        ? "the crown's garrison"
+        : (RIVALS.find((r) => r.id === castleHolder)?.name ?? "a rival house");
+
+  const worldTransform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  const vpEl = viewportRef.current;
+  const miniRect = {
+    left: (-pan.x / ((vpEl?.clientWidth ?? 1) * zoom)) * 100,
+    top: (-pan.y / ((vpEl?.clientHeight ?? 1) * zoom)) * 100,
+    size: (1 / zoom) * 100,
+  };
 
   return (
     <div
@@ -307,10 +471,26 @@ export function RealmAtlas({
       </div>
 
       <div className={cn("grid", selected ? "md:grid-cols-[1fr_20rem]" : "grid-cols-1")}>
-        {/* the map stage */}
-        <div className="relative h-[clamp(300px,calc(100dvh-16rem),680px)] w-full overflow-hidden">
-          {/* art / relief layer */}
-          <div className="absolute inset-0">
+        {/* the map stage — pan with drag, zoom with wheel / double-click / buttons */}
+        <div
+          ref={viewportRef}
+          role="application"
+          tabIndex={0}
+          aria-label={`${map.title} map — drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom`}
+          className={cn(
+            "relative h-[clamp(300px,calc(100dvh-16rem),680px)] w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
+            zoom > 1 && "cursor-grab active:cursor-grabbing",
+          )}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onPointerLeave={onPointerUp}
+          onDoubleClick={onDoubleClick}
+          onKeyDown={onKeyDown}
+        >
+          {/* art / relief layer (pans & zooms) */}
+          <div className="absolute inset-0 origin-top-left" style={{ transform: worldTransform }}>
             {showArt ? (
               <img
                 src={`${MAP_BASE}${map.art}`}
@@ -364,67 +544,124 @@ export function RealmAtlas({
             </p>
           </div>
 
-          {/* hotspots */}
-          {map.locations.map((loc) => {
-            const face = atlasMarker(map, loc);
-            const isSel = selectedId === loc.id;
-            const isRealm = loc.type === "realm";
-            // live vs demo occupancy for the play-mode marker dot
-            const here = live ? partiesAt(zoneOf(loc)?.id) : [];
-            const fighting = live ? here.some((p) => p.run) : held[loc.id];
-            const marchingHere = live ? here.some((p) => p.travel && !p.run) : marching[loc.id];
-            const showDot = mode === "play" && (fighting || marchingHere);
-            return (
-              <div
-                key={loc.id}
-                className="group absolute z-[5] -translate-x-1/2 -translate-y-1/2"
-                style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
-              >
-                {isRealm && (
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full motion-safe:animate-pulse"
-                    style={{
-                      background: `radial-gradient(circle, ${loc.hue}66 0%, transparent 68%)`,
-                    }}
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={() => setSelectedId((s) => (s === loc.id ? null : loc.id))}
-                  aria-label={`${loc.name} — ${ATLAS_TYPE_LABEL[loc.type]}`}
-                  className={cn(
-                    "grid place-items-center border-[1.5px] font-display font-semibold text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold group-hover:scale-110",
-                    isRealm ? "h-8 w-8 text-sm" : "h-6 w-6 text-[11px]",
-                    markerShape(loc.type),
-                    "bg-[radial-gradient(circle_at_50%_35%,#2a2114,#0d0a06)]",
-                    isSel && "scale-110 ring-2 ring-gold",
-                  )}
-                >
-                  <span aria-hidden="true">{face}</span>
-                </button>
-                {/* hold / march dot in play mode */}
-                {showDot && (
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-black",
-                      fighting ? "bg-[#7ea86a]" : "bg-gold motion-safe:animate-ping",
-                    )}
-                  />
-                )}
+          {/* hotspots (pan & zoom with the art) */}
+          <div className="absolute inset-0 origin-top-left" style={{ transform: worldTransform }}>
+            {map.locations.map((loc) => {
+              const face = atlasMarker(map, loc);
+              const isSel = selectedId === loc.id;
+              const isRealm = loc.type === "realm";
+              // live vs demo occupancy for the play-mode marker dot
+              const here = live ? partiesAt(zoneOf(loc)?.id) : [];
+              const fighting = live ? here.some((p) => p.run) : held[loc.id];
+              const marchingHere = live ? here.some((p) => p.travel && !p.run) : marching[loc.id];
+              const showDot = mode === "play" && (fighting || marchingHere);
+              return (
                 <div
-                  className={cn(
-                    "pointer-events-none mt-1 whitespace-nowrap rounded-[2px] bg-black/60 px-1.5 py-px text-center font-display text-[10px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-                    (isSel || mode === "view") && "opacity-100",
-                  )}
-                  style={{ color: "#e7d7ac" }}
+                  key={loc.id}
+                  className="group absolute z-[5] -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
                 >
-                  {loc.name}
+                  {isRealm && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full motion-safe:animate-pulse"
+                      style={{
+                        background: `radial-gradient(circle, ${loc.hue}66 0%, transparent 68%)`,
+                      }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (moved.current) return;
+                      setSelectedId((s) => (s === loc.id ? null : loc.id));
+                    }}
+                    aria-label={`${loc.name} — ${ATLAS_TYPE_LABEL[loc.type]}`}
+                    className={cn(
+                      "grid place-items-center border-[1.5px] font-display font-semibold text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold group-hover:scale-110",
+                      isRealm ? "h-8 w-8 text-sm" : "h-6 w-6 text-[11px]",
+                      markerShape(loc.type),
+                      "bg-[radial-gradient(circle_at_50%_35%,#2a2114,#0d0a06)]",
+                      isSel && "scale-110 ring-2 ring-gold",
+                    )}
+                  >
+                    <span aria-hidden="true">{face}</span>
+                  </button>
+                  {/* hold / march dot in play mode */}
+                  {showDot && (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-black",
+                        fighting ? "bg-[#7ea86a]" : "bg-gold motion-safe:animate-ping",
+                      )}
+                    />
+                  )}
+                  <div
+                    className={cn(
+                      "pointer-events-none mt-1 whitespace-nowrap rounded-[2px] bg-black/60 px-1.5 py-px text-center font-display text-[10px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+                      (isSel || mode === "view") && "opacity-100",
+                    )}
+                    style={{ color: "#e7d7ac" }}
+                  >
+                    {loc.name}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {/* zoom controls */}
+          <div className="absolute bottom-2 left-2 z-10 flex flex-col overflow-hidden rounded-sm border border-white/10 bg-black/70">
+            <button
+              type="button"
+              onClick={() => zoomButton(1)}
+              aria-label="Zoom in"
+              className="h-7 w-7 border-b border-white/10 font-display text-base text-gold transition-colors hover:bg-gold/15"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => zoomButton(-1)}
+              aria-label="Zoom out"
+              className="h-7 w-7 border-b border-white/10 font-display text-base text-gold transition-colors hover:bg-gold/15"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={resetView}
+              aria-label="Reset view"
+              className="h-7 w-7 font-display text-xs text-gold transition-colors hover:bg-gold/15"
+            >
+              ⤢
+            </button>
+          </div>
+
+          {/* minimap: the visible window over the whole map, shown when zoomed */}
+          {zoom > 1 && (
+            <div
+              className="pointer-events-none absolute right-2 top-2 z-10 h-[52px] w-[84px] overflow-hidden rounded-sm border border-white/15 bg-black/70"
+              aria-hidden="true"
+            >
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: `radial-gradient(circle at 42% 34%, ${map.hue}66, #0c0a06 72%)`,
+                }}
+              />
+              <div
+                className="absolute border border-gold bg-gold/20"
+                style={{
+                  left: `${miniRect.left}%`,
+                  top: `${miniRect.top}%`,
+                  width: `${miniRect.size}%`,
+                  height: `${miniRect.size}%`,
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* codex */}
@@ -449,6 +686,12 @@ export function RealmAtlas({
             <p className="text-sm leading-relaxed" style={{ color: "#e7d7ac" }}>
               {selected.blurb}
             </p>
+
+            {live && selected.id === "vareth" && (
+              <p className="text-[12px] text-muted-foreground">
+                Held by <span className="text-gold">{varethHolder}</span>.
+              </p>
+            )}
 
             {mode === "play" && selected.level != null && (
               <div className="grid grid-cols-3 gap-2">
