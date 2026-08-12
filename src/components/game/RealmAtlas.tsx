@@ -207,12 +207,42 @@ export function RealmAtlas({
     return () => vp.removeEventListener("wheel", onWheel);
   }, [zoomAt]);
 
+  // active pointers, so one finger pans and two fingers pinch-zoom
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    drag.current = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y };
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     moved.current = false;
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      if (a && b) pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: zoomRef.current };
+      drag.current = null;
+      for (const id of pointers.current.keys()) e.currentTarget.setPointerCapture(id);
+    } else {
+      drag.current = { x: e.clientX, y: e.clientY, px: panRef.current.x, py: panRef.current.y };
+    }
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const vp = viewportRef.current;
+    // two fingers: pinch-zoom toward their midpoint
+    if (pinch.current && pointers.current.size === 2 && vp) {
+      const [a, b] = [...pointers.current.values()];
+      if (!a || !b) return;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const rect = vp.getBoundingClientRect();
+      moved.current = true;
+      zoomAt(
+        (pinch.current.zoom * dist) / pinch.current.dist,
+        (a.x + b.x) / 2 - rect.left,
+        (a.y + b.y) / 2 - rect.top,
+      );
+      return;
+    }
+    // one finger / mouse: pan
     if (!drag.current) return;
     const dx = e.clientX - drag.current.x;
     const dy = e.clientY - drag.current.y;
@@ -222,8 +252,15 @@ export function RealmAtlas({
     }
     setPan(clampPan({ x: drag.current.px + dx, y: drag.current.py + dy }, zoomRef.current));
   };
-  const onPointerUp = () => {
-    drag.current = null;
+  const onPointerUp = (e: React.PointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 1) {
+      const [only] = [...pointers.current.values()];
+      if (only) drag.current = { x: only.x, y: only.y, px: panRef.current.x, py: panRef.current.y };
+    } else if (pointers.current.size === 0) {
+      drag.current = null;
+    }
   };
   const onDoubleClick = (e: React.MouseEvent) => {
     const vp = viewportRef.current;
@@ -240,6 +277,21 @@ export function RealmAtlas({
     const cx = vp ? vp.clientWidth / 2 : 0;
     const cy = vp ? vp.clientHeight / 2 : 0;
     zoomAt(zoomRef.current * (dir > 0 ? 1.5 : 1 / 1.5), cx, cy);
+  };
+
+  // keyboard: arrows pan, +/- zoom, 0 resets
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const step = 48;
+    const z = zoomRef.current;
+    if (e.key === "ArrowUp") setPan((p) => clampPan({ x: p.x, y: p.y + step }, z));
+    else if (e.key === "ArrowDown") setPan((p) => clampPan({ x: p.x, y: p.y - step }, z));
+    else if (e.key === "ArrowLeft") setPan((p) => clampPan({ x: p.x + step, y: p.y }, z));
+    else if (e.key === "ArrowRight") setPan((p) => clampPan({ x: p.x - step, y: p.y }, z));
+    else if (e.key === "+" || e.key === "=") zoomButton(1);
+    else if (e.key === "-" || e.key === "_") zoomButton(-1);
+    else if (e.key === "0") resetView();
+    else return;
+    e.preventDefault();
   };
 
   /** live wiring: only when both state and api are handed in by the game */
@@ -348,6 +400,12 @@ export function RealmAtlas({
   }
 
   const worldTransform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  const vpEl = viewportRef.current;
+  const miniRect = {
+    left: (-pan.x / ((vpEl?.clientWidth ?? 1) * zoom)) * 100,
+    top: (-pan.y / ((vpEl?.clientHeight ?? 1) * zoom)) * 100,
+    size: (1 / zoom) * 100,
+  };
 
   return (
     <div
@@ -406,15 +464,20 @@ export function RealmAtlas({
         {/* the map stage — pan with drag, zoom with wheel / double-click / buttons */}
         <div
           ref={viewportRef}
+          role="application"
+          tabIndex={0}
+          aria-label={`${map.title} map — drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom`}
           className={cn(
-            "relative h-[clamp(300px,calc(100dvh-16rem),680px)] w-full touch-none select-none overflow-hidden",
+            "relative h-[clamp(300px,calc(100dvh-16rem),680px)] w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
             zoom > 1 && "cursor-grab active:cursor-grabbing",
           )}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
           onPointerLeave={onPointerUp}
           onDoubleClick={onDoubleClick}
+          onKeyDown={onKeyDown}
         >
           {/* art / relief layer (pans & zooms) */}
           <div className="absolute inset-0 origin-top-left" style={{ transform: worldTransform }}>
@@ -565,6 +628,30 @@ export function RealmAtlas({
               ⤢
             </button>
           </div>
+
+          {/* minimap: the visible window over the whole map, shown when zoomed */}
+          {zoom > 1 && (
+            <div
+              className="pointer-events-none absolute right-2 top-2 z-10 h-[52px] w-[84px] overflow-hidden rounded-sm border border-white/15 bg-black/70"
+              aria-hidden="true"
+            >
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: `radial-gradient(circle at 42% 34%, ${map.hue}66, #0c0a06 72%)`,
+                }}
+              />
+              <div
+                className="absolute border border-gold bg-gold/20"
+                style={{
+                  left: `${miniRect.left}%`,
+                  top: `${miniRect.top}%`,
+                  width: `${miniRect.size}%`,
+                  height: `${miniRect.size}%`,
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* codex */}
