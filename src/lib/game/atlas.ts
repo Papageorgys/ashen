@@ -20,12 +20,15 @@ export interface AtlasLocation {
   hue?: string;
   /** drill-down target: the id of the region map this place opens */
   region?: AtlasMapId;
+  /** the realm's seat on a region map — shown with its own glyph, not numbered */
+  seat?: boolean;
   /** play-mode framing (mirrors the zone gate/threat feel) */
   level?: number;
   threat?: number;
 }
 
-export type AtlasMapId = "aethyr" | "ember_court" | "hollow_covenant" | "free_holds";
+export type AtlasMapId =
+  "aethyr" | "ember_court" | "hollow_covenant" | "free_holds" | "gilded_compact";
 
 export interface AtlasMap {
   id: AtlasMapId;
@@ -141,6 +144,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         x: 23,
         y: 60,
         hue: A.gilded,
+        region: "gilded_compact",
         blurb:
           "Merchant princes and the ledger. Every road, toll and debt in the south runs through their counting-houses.",
       },
@@ -215,6 +219,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "vareth",
         name: "Castle Vareth",
         type: "stronghold",
+        seat: true,
         x: 57,
         y: 45,
         level: 40,
@@ -304,6 +309,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "drowned",
         name: "The Drowned Cathedrals",
         type: "holy",
+        seat: true,
         x: 50,
         y: 33,
         level: 36,
@@ -453,6 +459,113 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
       },
     ],
   },
+
+  gilded_compact: {
+    id: "gilded_compact",
+    title: "The Gilded Compact",
+    kind: "region",
+    hue: A.gilded,
+    parent: "aethyr",
+    subtitle:
+      "Merchant princes, tolls and the ledger. Every road, debt and fortune in the south is written in the Compact's books — pay, or be paid in kind.",
+    art: "gilded-compact.png",
+    locations: [
+      {
+        id: "brightmarket",
+        name: "Brightmarket Exchange",
+        type: "stronghold",
+        seat: true,
+        x: 50,
+        y: 44,
+        level: 34,
+        threat: 560,
+        blurb:
+          "The counting-house heart of the Compact. Every ledger in the south balances here, and every fortune is made or unmade over its tables.",
+      },
+      {
+        id: "gc1",
+        name: "Tollward Gate",
+        type: "poi",
+        x: 38,
+        y: 18,
+        level: 6,
+        threat: 50,
+        blurb: "A gilded gate on the northern road. No caravan passes without paying its due.",
+      },
+      {
+        id: "gc2",
+        name: "Caravan Rest",
+        type: "poi",
+        x: 66,
+        y: 24,
+        level: 10,
+        threat: 100,
+        blurb: "A waystation where trains muster and hire guards before the long southern roads.",
+      },
+      {
+        id: "gc3",
+        name: "The Weighbridge",
+        type: "poi",
+        x: 26,
+        y: 40,
+        level: 14,
+        threat: 150,
+        blurb:
+          "Every wagon weighed, every toll assessed. The scales of the Compact never lie — or never admit it.",
+      },
+      {
+        id: "gc4",
+        name: "Auction Yards",
+        type: "poi",
+        x: 72,
+        y: 46,
+        level: 18,
+        threat: 200,
+        blurb: "Spoils of war and debts called due go under the hammer here.",
+      },
+      {
+        id: "gc5",
+        name: "Debtor's Row",
+        type: "ruin",
+        x: 40,
+        y: 60,
+        level: 22,
+        threat: 280,
+        blurb: "Where fortunes ended. The Compact forgives nothing, and forgets less.",
+      },
+      {
+        id: "gc6",
+        name: "The Coin Vaults",
+        type: "stronghold",
+        x: 60,
+        y: 64,
+        level: 26,
+        threat: 380,
+        blurb: "Deep vaults of the merchant princes, guarded better than any castle.",
+      },
+      {
+        id: "gc7",
+        name: "Gildhall Spire",
+        type: "monument",
+        x: 22,
+        y: 62,
+        level: 30,
+        threat: 480,
+        blurb: "The guild's spire, where the Compact's charters and master ledgers are kept.",
+      },
+      {
+        id: "gc8",
+        name: "The Long Ledger",
+        type: "poi",
+        x: 78,
+        y: 70,
+        level: 38,
+        threat: 660,
+        blurb:
+          "A hall of endless accounts. Somewhere in it is written exactly what you owe — and to whom.",
+      },
+    ],
+  },
 };
 
 /**
@@ -485,12 +598,22 @@ export const ATLAS_ZONE: Record<string, string> = {
   fh4: "drowned_chapel",
   fh5: "ashen_quarry",
   fh6: "moonveil_glade",
+  // Gilded Compact
+  brightmarket: "obsidian_labyrinth",
+  gc1: "briar_downs",
+  gc2: "ruined_orchard",
+  gc3: "sunken_crypt",
+  gc4: "kingsroad_marches",
+  gc5: "saltmere_flats",
+  gc6: "ashen_quarry",
+  gc7: "moonveil_glade",
+  gc8: "stormbreak_coast",
 };
 
-/** The six numbered points of interest on a region map, in painting order. */
+/** The numbered points of interest on a region map (everything but the seat). */
 export function numberedLocations(map: AtlasMap): AtlasLocation[] {
   if (map.kind !== "region") return [];
-  return map.locations.filter((l) => l.id !== "vareth" && l.id !== "drowned");
+  return map.locations.filter((l) => !l.seat);
 }
 
 /** The marker face for a location: its painting number (1..6) or a type glyph. */
