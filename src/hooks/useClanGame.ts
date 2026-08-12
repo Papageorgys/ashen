@@ -117,6 +117,8 @@ import {
   insurePayout,
   bountyOn,
   VASSAL_BY_ID,
+  VASSAL,
+  reaffirmCost,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -1248,6 +1250,8 @@ export function useClanGame() {
         if (s.gold < house.cost) return void toast.error(`${house.name} expects a gift of ${house.cost} gold.`);
         s.gold -= house.cost;
         s.vassals.push(houseId);
+        s.vassalLoyalty = s.vassalLoyalty ?? {};
+        s.vassalLoyalty[houseId] = VASSAL.startLoyalty;
         chronicle(
           s,
           "rise",
@@ -1262,7 +1266,22 @@ export function useClanGame() {
       update((s) => {
         if (!s.vassals?.includes(houseId)) return;
         s.vassals = s.vassals.filter((id) => id !== houseId);
+        if (s.vassalLoyalty) delete s.vassalLoyalty[houseId];
         pushLog(s, `${VASSAL_BY_ID[houseId]?.name ?? "A house"} is released from their oath.`, "info");
+      }),
+
+    /** Reaffirm a wavering house's oath with a gift of gold (§8.1). */
+    reaffirmVassal: (houseId: string) =>
+      update((s) => {
+        const house = VASSAL_BY_ID[houseId];
+        if (!house || !s.vassals?.includes(houseId)) return;
+        const cost = reaffirmCost(house);
+        if (s.gold < cost) return void toast.error(`${house.name} expects a gift of ${cost} gold to renew their faith.`);
+        s.gold -= cost;
+        s.vassalLoyalty = s.vassalLoyalty ?? {};
+        s.vassalLoyalty[houseId] = 100;
+        pushLog(s, `A gift of ${cost} gold renews ${house.name}'s oath. Their loyalty stands full.`, "good");
+        toast.success(`${house.name}'s loyalty restored.`);
       }),
 
     /** Borrow gold from the Gilded Compact's Ledger (§6.3), owed back with interest. */

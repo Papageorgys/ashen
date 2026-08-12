@@ -16,6 +16,8 @@ import {
   VASSAL_HOUSES,
   vassalPower,
   vassalTithe,
+  vassalLoyalty,
+  reaffirmCost,
   type GameState,
 } from "@/lib/game/engine";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ export function RealmPanel({
     placeBounty: (rivalId: string, amount: number) => void;
     swearVassal: (houseId: string) => void;
     releaseVassal: (houseId: string) => void;
+    reaffirmVassal: (houseId: string) => void;
   };
 }) {
   const host = clanHostPower(state);
@@ -322,14 +325,47 @@ export function RealmPanel({
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{h.blurb}</p>
+                {sworn && (() => {
+                  const loy = vassalLoyalty(state, h.id);
+                  const wavering = loy < 40;
+                  return (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest">
+                        <span className={wavering ? "text-destructive" : "text-muted-foreground"}>
+                          Loyalty {Math.round(loy)}%{wavering ? " · wavering" : ""}
+                        </span>
+                        {wavering && (
+                          <span className="text-destructive">turns out at half strength</span>
+                        )}
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-sm border border-border/60 bg-secondary">
+                        <div
+                          className={`h-full transition-all ${wavering ? "bg-destructive" : "bg-gold/70"}`}
+                          style={{ width: `${loy}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     {sworn ? "sworn to you" : meetsLevel ? `${h.cost.toLocaleString()}g to swear` : `needs clan Lv ${h.reqLevel}`}
                   </span>
                   {sworn ? (
-                    <Button size="sm" variant="ghost" onClick={() => api.releaseVassal(h.id)}>
-                      Release
-                    </Button>
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => api.reaffirmVassal(h.id)}
+                        disabled={state.gold < reaffirmCost(h) || vassalLoyalty(state, h.id) >= 100}
+                        title={`A gift of ${reaffirmCost(h)}g renews their oath to full loyalty`}
+                      >
+                        Reaffirm {reaffirmCost(h)}g
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => api.releaseVassal(h.id)}>
+                        Release
+                      </Button>
+                    </div>
                   ) : (
                     <Button
                       size="sm"

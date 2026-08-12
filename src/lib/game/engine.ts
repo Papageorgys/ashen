@@ -334,6 +334,8 @@ export interface GameState {
   bounties?: Record<string, number>;
   /** ids of the vassal houses sworn to your banner (§8.1) */
   vassals?: string[];
+  /** each sworn house's loyalty 0..100 (§8.1) — fealty wavers and can be lost */
+  vassalLoyalty?: Record<string, number>;
   /** the current Season of Ash (§1.3) — each Reckoning begins a new one */
   season?: number;
   /** champions lost for good */
@@ -1454,11 +1456,46 @@ export const VASSAL_BY_ID: Record<string, VassalHouse> = Object.fromEntries(
   VASSAL_HOUSES.map((h) => [h.id, h]),
 );
 
+/**
+ * Loyalty (§8.1) — fealty is *freely given*, so it can waver. A sworn house's
+ * loyalty (0..100) drifts up while you keep faith and hold your seat, and drains
+ * when the seat is lost or the host burns with Ash Debt. A wavering house fights
+ * at half strength; a house whose loyalty runs out renounces its oath and rides
+ * home. The lord can reaffirm the bond with a gift of gold — never compel it.
+ */
+export const VASSAL = {
+  startLoyalty: 60,
+  driftUpPerHour: 1.5, // faith kept, the bond steadies
+  lostSeatDrainPerHour: 3, // a lord who cannot hold a seat is a poor liege
+  searingDrainPerHour: 4, // a host burning with Ash Debt frightens its levies
+  renounceAt: 0,
+  reaffirmCostFrac: 0.25, // a gift of gold worth this much of the oath-price
+};
+
+export function vassalLoyalty(state: GameState, id: string): number {
+  const v = state.vassalLoyalty?.[id];
+  return Math.max(0, Math.min(100, v ?? VASSAL.startLoyalty));
+}
+
+/** What a gift to reaffirm a wavering house's oath costs (§8.1). */
+export function reaffirmCost(house: VassalHouse): number {
+  return Math.round(house.cost * VASSAL.reaffirmCostFrac);
+}
+
+/** Loyalty scales a house's turnout: wavering houses hold back (0.5x..1.0x). */
+export function vassalTurnout(loyalty: number): number {
+  return 0.5 + 0.5 * (Math.max(0, Math.min(100, loyalty)) / 100);
+}
+
 export function swornVassals(state: GameState): VassalHouse[] {
   return (state.vassals ?? []).map((id) => VASSAL_BY_ID[id]).filter((h): h is VassalHouse => !!h);
 }
 export function vassalPower(state: GameState): number {
-  return swornVassals(state).reduce((s, h) => s + h.power, 0);
+  // loyalty-weighted: a wavering house turns out at half strength (§8.1)
+  return swornVassals(state).reduce(
+    (s, h) => s + Math.round(h.power * vassalTurnout(vassalLoyalty(state, h.id))),
+    0,
+  );
 }
 export function vassalTithe(state: GameState): number {
   return swornVassals(state).reduce((s, h) => s + h.tithe, 0);
@@ -1535,6 +1572,34 @@ export function realmPulse(state: GameState) {
     if (tithe > 0) {
       if (state.castle?.holder === "player") state.castle.purse += tithe;
       else state.gold += tithe;
+    }
+  }
+
+  // Loyalty drifts (§8.1): faith kept steadies the bond; a lost seat or a searing
+  // host frightens the levies. A house whose loyalty runs out renounces its oath.
+  if (hours > 0 && (state.vassals?.length ?? 0) > 0) {
+    state.vassalLoyalty = state.vassalLoyalty ?? {};
+    const seatHeld = state.castle?.holder === "player";
+    const seatLost = !!state.castle && state.castle.holder !== "player" && state.castle.holder !== "crown";
+    const searing = isSearing(state);
+    let drift = VASSAL.driftUpPerHour;
+    if (seatLost) drift -= VASSAL.lostSeatDrainPerHour;
+    if (searing) drift -= VASSAL.searingDrainPerHour;
+    if (seatHeld) drift += 0.5; // a lord who holds his seat keeps his oaths
+    for (const id of [...(state.vassals ?? [])]) {
+      const cur = state.vassalLoyalty[id] ?? VASSAL.startLoyalty;
+      const next = Math.max(0, Math.min(100, cur + drift * hours));
+      state.vassalLoyalty[id] = next;
+      if (next <= VASSAL.renounceAt) {
+        state.vassals = (state.vassals ?? []).filter((x) => x !== id);
+        delete state.vassalLoyalty[id];
+        const h = VASSAL_BY_ID[id];
+        pushLog(
+          state,
+          `${h?.name ?? "A sworn house"} has renounced its oath and ridden home. Fealty kept no faith.`,
+          "bad",
+        );
+      }
     }
   }
 
