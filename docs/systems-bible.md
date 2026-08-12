@@ -225,6 +225,16 @@ When the Long Night breaks, a **server threat** arrives that no single Banner ca
 
 The seasonal Long Night (§1.3) is where the season's defining legacy is minted: holding a Castle *through* the Night, surviving a Pale Sovereign encounter, being the House that broke the truce and profited, or the Warden line that held and fell. **[OPEN]** The Pale Sovereign's mechanics, and anything confirming *what it is* (Story Bible Q2), are reserved. Foreshadow in systems; explain nothing.
 
+### 5.4 The tide — making the Night *felt* — **[CANON]**
+
+The pressure gauge (§5.1) and the log entries told the player a Long Night was happening; nothing about their farming *changed* while it walked. That is a system on paper, not in the hand. The tide fixes it: for the whole window the Long Night is active, every expedition is played under an altered contract.
+
+- **Deadlier ground.** The dead grow bold: farming death risk is multiplied (×1.6, `LONG_NIGHT_TIDE.deathMult`) for the duration. The Night is a threat you *feel* at the butcher's bill, not a banner you read.
+- **The Ash runs thick.** The swallowed sky sheds Ash on anyone who braves it: gold and character XP come richer (×1.35, `spoilMult`) and each run sheds a tide of raw Ash (+9, `ashTide`) on top. The reward *pulls* against the risk — the Night is a window of opportunity for the bold, not just a tax on the timid.
+- **Holding the line is a Deed.** The first banner to keep the field through a given Night — without being routed — mints a permanent `war`-class Chronicle Deed ("Held the line through the Long Night"). One per Night, so it stays earned. This is the single-player, AI-rival expression of §5.3's "who *held the line beside you* becomes a Deed": here the line is held against the world, and the Chronicle remembers it.
+
+*Implemented v0.3.* Engine `LONG_NIGHT_TIDE` + `longNightTide()`; applied in the expedition resolver; surfaced on the Realm panel's Long Night card.
+
 ---
 
 ## 6 · Economy & the Gilded Compact
@@ -440,7 +450,7 @@ Fealty is sworn to a *person*, never an ideology. A vassal and their lord may ho
 |---|---|---|
 | 0.1 | 11 Aug 2026 | Initial draft systems canon. Establishes the three-tier core loop, siege & territory (vulnerability windows, holding tiers, conquest, anti-turtle Toll, map perturbation), Ash Debt (dual-resource One Law with three discipline costs), zone-tiered death & full-loot with opt-in Ashen Oath, the Long Night as a system, the destruction economy with decaying Ash and the Compact's Ledger, the Legacy system (Chronicle/Inscription split, Deeds, Renown-not-power, inheritance), social tiers, NPE, and a cosmetic-only business model. Six systems questions logged; six Story-Bible questions carried forward. |
 | 0.2 | 11 Aug 2026 | Added **§8.1 Feudal Infrastructure** [CANON]: voluntary tools, never engine-enforced obligation; the third "allegiance" axis (fealty to a lord, not a realm); the tithe/service–protection/share/access bargain; enforcement via reputation, the Ledger, and the siege — never auto-seizure; per-realm expression incl. the Free Holds anti-feudal carve-out; primitives-first build order; anti-calcification; leadership-layer only. Also logged the §8 race-mixed-House rule [CANON]. Married to Story Bible §6.1 (v0.3). F1–F2 reserved. |
-| 0.3 | 12 Aug 2026 | **Depth pass — Ash Debt §3** [CANON]. Gave the One Law an active edge and a punishing tail: **Overdraw** (opt-in on a banner charge — +55% damage now, +30 debt, ×1.7 death risk) turns discipline into a live gamble instead of a passive meter; **Searing** (debt ≥150 burns the host — ×1.35 death risk on every commit until rested) makes a neglected debt actively lethal rather than merely a soft cap. Both *Implemented v0.3* in engine `ASH_DEBT` + `isSearing()`, `commitBanner(partyId, overdraw)`, and the Warfront Ash Debt card. |
+| 0.3 | 12 Aug 2026 | **Depth pass — Ash Debt §3** [CANON]. Gave the One Law an active edge and a punishing tail: **Overdraw** (opt-in on a banner charge — +55% damage now, +30 debt, ×1.7 death risk) turns discipline into a live gamble instead of a passive meter; **Searing** (debt ≥150 burns the host — ×1.35 death risk on every commit until rested) makes a neglected debt actively lethal rather than merely a soft cap. Both *Implemented v0.3* in engine `ASH_DEBT` + `isSearing()`, `commitBanner(partyId, overdraw)`, and the Warfront Ash Debt card. **Depth pass — Long Night §5.4** [CANON]: the Night is now *felt*, not merely logged — an active window multiplies farming death risk (×1.6), pays richer gold/XP (×1.35) and sheds raw Ash (+9/run), and the first un-routed banner to hold the field mints a `war` Deed. *Implemented v0.3* in `LONG_NIGHT_TIDE`/`longNightTide()`, the expedition resolver, and the Realm panel. |
 
 ---
 *Companion to Ashen Legacy Story Bible v0.1. Assign a systems owner before extending. Read §7 first.*

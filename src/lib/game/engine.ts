@@ -323,7 +323,7 @@ export interface GameState {
   /** the host's carried Ash Debt (§3) — accrued in the fight, cleared only by rest */
   ashDebt?: number;
   /** the Long Night (§5) — rising pressure, and the window while it walks the realm */
-  longNight?: { pressure: number; endsAt?: number | undefined };
+  longNight?: { pressure: number; endsAt?: number | undefined; held?: boolean | undefined };
   /** raw Ash (§6.2) — a hot-potato currency that decays if hoarded; refine it or lose it */
   rawAsh?: number;
   /** an outstanding debt to the Gilded Compact's Ledger (§6.3) */
@@ -1339,6 +1339,32 @@ export const LONG_NIGHT = {
 };
 
 /**
+ * The Long Night's bite while it walks (§5). It must be *felt*, not merely
+ * noted in the log: the dead grow bold so the field turns deadlier, but the
+ * upper Ash runs thick — spoils come richer and a tide of raw Ash sheds on any
+ * banner that braves the dark. Holding the line through it mints a Deed. Clear
+ * sky = no multipliers, no tide.
+ */
+export const LONG_NIGHT_TIDE = {
+  deathMult: 1.6, // the dead are bolder in the dark
+  spoilMult: 1.35, // the thick Ash makes gold and glory run richer
+  ashTide: 9, // raw Ash the swallowed sky sheds per run
+};
+
+export interface NightTide {
+  deathMult: number;
+  spoilMult: number;
+  ashTide: number;
+}
+
+/** The active tide, or a no-op tide under a clear sky. */
+export function longNightTide(state: GameState, now: number = Date.now()): NightTide {
+  return longNightActive(state, now)
+    ? { ...LONG_NIGHT_TIDE }
+    : { deathMult: 1, spoilMult: 1, ashTide: 0 };
+}
+
+/**
  * Raw Ash (Systems Bible §6.2) — raw Ash never settles, so it decays if hoarded.
  * It must be spent or refined into a stable store (gold) before it burns off. A
  * hot potato that keeps the economy circulating and punishes dragon-hoarding.
@@ -1443,6 +1469,7 @@ export function realmPulse(state: GameState) {
     if (ln.pressure >= 100) {
       ln.pressure = 0;
       ln.endsAt = now + LONG_NIGHT.durationMs;
+      ln.held = false;
       pushLog(state, "The upper Ash thickens and swallows the sun — the Long Night is upon the realm.", "bad");
       chronicle(
         state,

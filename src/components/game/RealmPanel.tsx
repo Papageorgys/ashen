@@ -5,6 +5,7 @@ import {
   clanHostPower,
   longNightActive,
   longNightPressure,
+  LONG_NIGHT_TIDE,
   refineAshValue,
   loanCeiling,
   siegeReady,
@@ -76,6 +77,20 @@ export function RealmPanel({
             ? "The dead walk and the light-fearing things pour out. Rivals press harder — but who holds the line is remembered."
             : "The upper Ash thickens over the season. No one knows the hour it breaks — only that it will."}
         </p>
+        {night && (
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+            <span className="text-destructive">
+              ×{LONG_NIGHT_TIDE.deathMult.toFixed(1)} death out farming
+            </span>
+            <span className="text-amber-300/90">
+              +{Math.round((LONG_NIGHT_TIDE.spoilMult - 1) * 100)}% gold &amp; XP
+            </span>
+            <span className="text-amber-300/90">+{LONG_NIGHT_TIDE.ashTide} raw Ash / run</span>
+            <span className="text-gold">
+              {state.longNight?.held ? "line held — Deed earned" : "hold the line → a Deed"}
+            </span>
+          </div>
+        )}
       </section>
 
       {/* -------------------------------- raw Ash ------------------------------ */}

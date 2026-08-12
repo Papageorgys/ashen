@@ -107,6 +107,7 @@ import {
   inscribeCost,
   ASH_DEBT,
   isSearing,
+  longNightTide,
   restAtFlameCost,
   refineAshValue,
   LEDGER,
@@ -310,7 +311,10 @@ export function useClanGame() {
           const res = resolveRun(s, party, zoneId);
           party.run = null;
           const lordLed = ledPersonally(s, party);
-          s.gold += Math.round(res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1));
+          // The Long Night runs thick with Ash: braving it pays richer (§5).
+          const tide = longNightTide(s, now);
+          s.gold += Math.round(res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1) * tide.spoilMult);
+          if (tide.ashTide > 0) s.rawAsh = (s.rawAsh ?? 0) + tide.ashTide;
           s.reputation += Math.round(res.rep * keepEffects(s).repMult * (lordLed ? 1.1 : 1));
           const zoneName = ZONE_BY_ID[zoneId]?.name ?? "the field";
           const spoils = res.loot.map((l) => ({
@@ -411,7 +415,7 @@ export function useClanGame() {
 
             // character xp (capped at 52)
             if (m.level < MAX_LEVEL) {
-              m.xp += Math.round(res.xp * (lordLed ? 1 + LORD_BONUS.xp : 1));
+              m.xp += Math.round(res.xp * (lordLed ? 1 + LORD_BONUS.xp : 1) * tide.spoilMult);
               while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
                 m.xp -= xpForLevel(m.level);
                 m.level += 1;
@@ -474,7 +478,8 @@ export function useClanGame() {
               const m = s.members.find((x) => x.id === id);
               if (!m) continue;
               if (!res.fallen.includes(m.id)) continue;
-              const risk = deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0;
+              // the dead are bolder in the dark — the Long Night bites harder (§5)
+              const risk = (deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0) * tide.deathMult;
               if (m.isLord) {
                 // the Lord is dragged out alive, but it costs
                 if (Math.random() < risk) {
@@ -523,6 +528,21 @@ export function useClanGame() {
                 toast.error(`${m.name} is dead.`);
               }
             }
+          }
+
+          // Holding the line through the Long Night is a Deed worth remembering (§5).
+          // The first banner to keep the field while the sky is swallowed earns it,
+          // once per Night — provided it wasn't a rout.
+          if (s.longNight?.endsAt && !s.longNight.held && lostThisRun.length < party.memberIds.length) {
+            s.longNight.held = true;
+            const zoneName2 = ZONE_BY_ID[zoneId]?.name ?? "the field";
+            chronicle(
+              s,
+              "war",
+              "Held the line through the Long Night",
+              `${party.name} kept the field at ${zoneName2} while the upper Ash swallowed the sun. When the light-fearing things poured out, the banner did not come down.`,
+            );
+            pushLog(s, `${party.name} held the line through the Long Night — a Deed for the Chronicle.`, "good");
           }
 
           // ---- Scars & Deeds — the run leaves its mark on those who lived it ----
