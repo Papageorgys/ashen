@@ -16,6 +16,7 @@ import { MarketPanel } from "@/components/game/MarketPanel";
 import { ScriptoriumPanel } from "@/components/game/ScriptoriumPanel";
 import { MusterPanel } from "@/components/game/MusterPanel";
 import { WorldMap } from "@/components/game/WorldMap";
+import { RealmAtlas } from "@/components/game/RealmAtlas";
 import { ClanKeepPanel } from "@/components/game/ClanKeepPanel";
 import { ExpeditionFeed } from "@/components/game/ExpeditionFeed";
 import { useClanGame } from "@/hooks/useClanGame";
@@ -104,7 +105,9 @@ function Founding({ onStart }: { onStart: (f: FoundingT) => void }) {
   return (
     <div className="relative mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-5 px-5 py-12">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">The war for Aethyr</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+          The war for Aethyr
+        </p>
         <h1 className="gilded font-display text-6xl sm:text-7xl">Ashen Legacy</h1>
         <p className="mt-3 max-w-xl text-sm text-muted-foreground">
           You are not a spectator. You take the field yourself — your blade, your face, your arms on
@@ -430,8 +433,7 @@ function Index() {
       setFlourish({
         id: Date.now(),
         title: clanLevel === 1 ? "A Clan is Born" : `Clan Level ${clanLevel}`,
-        subtitle:
-          clanLevel === 1 ? "Your crest flies over Aethyr" : "The banners rise higher",
+        subtitle: clanLevel === 1 ? "Your crest flies over Aethyr" : "The banners rise higher",
       });
     } else if (holdsCastle && !before.holdsCastle) {
       setFlourish({ id: Date.now(), title: "Vareth Falls", subtitle: "The castle is yours" });
@@ -550,15 +552,27 @@ function Index() {
                 <DailyPanel state={state} api={api} />
               </TabsContent>
               <TabsContent value="map" className="mt-0">
-                <section className="space-y-3">
-                  <header>
-                    <h2 className="font-display text-lg text-gold">World Map</h2>
-                    <p className="text-xs text-muted-foreground">
-                      Towns, castles, open experience fields and dungeons — with every banner marked
-                      where it stands right now.
-                    </p>
-                  </header>
-                  <WorldMap state={state} />
+                <section className="space-y-6">
+                  <div className="space-y-3">
+                    <header>
+                      <h2 className="font-display text-lg text-gold">The Living Atlas</h2>
+                      <p className="text-xs text-muted-foreground">
+                        The painted maps of Aethyr, made to walk. Read a place for its lore, drill
+                        from the continent into a realm, or march a banner and hold ground.
+                      </p>
+                    </header>
+                    <RealmAtlas />
+                  </div>
+                  <div className="space-y-3">
+                    <header>
+                      <h2 className="font-display text-lg text-gold">War Table</h2>
+                      <p className="text-xs text-muted-foreground">
+                        Towns, castles, open experience fields and dungeons — with every banner
+                        marked where it stands right now.
+                      </p>
+                    </header>
+                    <WorldMap state={state} />
+                  </div>
                 </section>
               </TabsContent>
               <TabsContent value="realm" className="mt-0">
