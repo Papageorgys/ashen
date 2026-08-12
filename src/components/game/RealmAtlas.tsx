@@ -10,6 +10,7 @@ import {
   type AtlasMapId,
 } from "@/lib/game/atlas";
 import { ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
+import { RIVALS } from "@/lib/game/rivals";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -399,6 +400,15 @@ export function RealmAtlas({
     setStatus(`${loc.name} released — the banner returns to the keep.`);
   }
 
+  // who currently holds Castle Vareth, for its codex entry
+  const castleHolder = state?.castle?.holder;
+  const varethHolder =
+    castleHolder === "player"
+      ? (state?.clanName ?? "your clan")
+      : !castleHolder || castleHolder === "crown"
+        ? "the crown's garrison"
+        : (RIVALS.find((r) => r.id === castleHolder)?.name ?? "a rival house");
+
   const worldTransform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
   const vpEl = viewportRef.current;
   const miniRect = {
@@ -676,6 +686,12 @@ export function RealmAtlas({
             <p className="text-sm leading-relaxed" style={{ color: "#e7d7ac" }}>
               {selected.blurb}
             </p>
+
+            {live && selected.id === "vareth" && (
+              <p className="text-[12px] text-muted-foreground">
+                Held by <span className="text-gold">{varethHolder}</span>.
+              </p>
+            )}
 
             {mode === "play" && selected.level != null && (
               <div className="grid grid-cols-3 gap-2">
