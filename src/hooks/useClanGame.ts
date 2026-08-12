@@ -104,13 +104,23 @@ import {
   rallyReward,
   deedsFromState,
   renownScore,
+  earnedTitles,
+  CLAN_TITLE_BY_ID,
   inscribeCost,
   ASH_DEBT,
+  isSearing,
+  longNightTide,
   restAtFlameCost,
   refineAshValue,
   LEDGER,
   loanCeiling,
+  insurePremium,
+  insured,
+  insurePayout,
+  bountyOn,
   VASSAL_BY_ID,
+  VASSAL,
+  reaffirmCost,
   uid,
   xpForLevel,
   xpForSkillLevel,
@@ -309,7 +319,10 @@ export function useClanGame() {
           const res = resolveRun(s, party, zoneId);
           party.run = null;
           const lordLed = ledPersonally(s, party);
-          s.gold += Math.round(res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1));
+          // The Long Night runs thick with Ash: braving it pays richer (§5).
+          const tide = longNightTide(s, now);
+          s.gold += Math.round(res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1) * tide.spoilMult);
+          if (tide.ashTide > 0) s.rawAsh = (s.rawAsh ?? 0) + tide.ashTide;
           s.reputation += Math.round(res.rep * keepEffects(s).repMult * (lordLed ? 1.1 : 1));
           const zoneName = ZONE_BY_ID[zoneId]?.name ?? "the field";
           const spoils = res.loot.map((l) => ({
@@ -410,7 +423,7 @@ export function useClanGame() {
 
             // character xp (capped at 52)
             if (m.level < MAX_LEVEL) {
-              m.xp += Math.round(res.xp * (lordLed ? 1 + LORD_BONUS.xp : 1));
+              m.xp += Math.round(res.xp * (lordLed ? 1 + LORD_BONUS.xp : 1) * tide.spoilMult);
               while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
                 m.xp -= xpForLevel(m.level);
                 m.level += 1;
@@ -473,7 +486,8 @@ export function useClanGame() {
               const m = s.members.find((x) => x.id === id);
               if (!m) continue;
               if (!res.fallen.includes(m.id)) continue;
-              const risk = deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0;
+              // the dead are bolder in the dark — the Long Night bites harder (§5)
+              const risk = (deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0) * tide.deathMult;
               if (m.isLord) {
                 // the Lord is dragged out alive, but it costs
                 if (Math.random() < risk) {
@@ -513,6 +527,12 @@ export function useClanGame() {
                   `${m.name} died in ${zone.name}. There was no body to bring home.`,
                   "bad",
                 );
+                // the Compact honours a policy in force (§6.3) — full-loot stings less
+                if (insured(s, now)) {
+                  const payout = insurePayout(m.level);
+                  s.gold += payout;
+                  pushLog(s, `The Compact paid out ${payout} gold on ${m.name}'s policy.`, "good");
+                }
                 chronicle(
                   s,
                   "loss",
@@ -522,6 +542,21 @@ export function useClanGame() {
                 toast.error(`${m.name} is dead.`);
               }
             }
+          }
+
+          // Holding the line through the Long Night is a Deed worth remembering (§5).
+          // The first banner to keep the field while the sky is swallowed earns it,
+          // once per Night — provided it wasn't a rout.
+          if (s.longNight?.endsAt && !s.longNight.held && lostThisRun.length < party.memberIds.length) {
+            s.longNight.held = true;
+            const zoneName2 = ZONE_BY_ID[zoneId]?.name ?? "the field";
+            chronicle(
+              s,
+              "war",
+              "Held the line through the Long Night",
+              `${party.name} kept the field at ${zoneName2} while the upper Ash swallowed the sun. When the light-fearing things poured out, the banner did not come down.`,
+            );
+            pushLog(s, `${party.name} held the line through the Long Night — a Deed for the Chronicle.`, "good");
           }
 
           // ---- Scars & Deeds — the run leaves its mark on those who lived it ----
@@ -1130,6 +1165,22 @@ export function useClanGame() {
         toast.success(`Inscribed: ${deed.title}`);
       }),
 
+    /** Wear an earned clan title (§7.5), or bare the clan's name (null). */
+    wearTitle: (titleId: string | null) =>
+      update((s) => {
+        if (titleId === null) {
+          s.title = undefined;
+          toast("The clan wears its name unadorned.");
+          return;
+        }
+        const t = CLAN_TITLE_BY_ID[titleId];
+        if (!t) return;
+        const earned = earnedTitles(s).some((x) => x.id === titleId);
+        if (!earned) return void toast("That honour has not been earned yet.");
+        s.title = titleId;
+        toast.success(`The clan is styled “${t.title}.”`);
+      }),
+
     /* ------------------------------ world boss ------------------------------- */
 
     /** Stamp the strike cooldown after a blow lands on the World Boss. */
@@ -1144,7 +1195,7 @@ export function useClanGame() {
      * champion's life unless the clan has prayed for a blessing today. (Damage is
      * submitted separately from the banner's power.)
      */
-    commitBanner: (partyId: string) =>
+    commitBanner: (partyId: string, overdraw = false) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);
         if (!p) return;
@@ -1155,8 +1206,16 @@ export function useClanGame() {
         p.farming = null;
         s.bossCommitAt = { ...(s.bossCommitAt ?? {}), [partyId]: Date.now() };
 
+        // Overdraw reaches past Vigour for a burst (damage handled at the strike),
+        // banking Ash Debt now; and a Searing host is deadlier to field (§3.1/§3.2).
+        const risk =
+          COMMIT_DEATH_RISK *
+          (overdraw ? ASH_DEBT.overdrawRisk : 1) *
+          (isSearing(s) ? ASH_DEBT.searingRisk : 1);
+        if (overdraw) s.ashDebt = (s.ashDebt ?? 0) + ASH_DEBT.overdrawDebt;
+
         const blessed = s.bossBlessing?.day === dayKey();
-        if (!blessed && Math.random() < COMMIT_DEATH_RISK) {
+        if (!blessed && Math.random() < risk) {
           const fated = p.memberIds
             .map((id) => s.members.find((m) => m.id === id))
             .filter((m): m is NonNullable<typeof m> => !!m && !m.isLord);
@@ -1209,6 +1268,8 @@ export function useClanGame() {
         if (s.gold < house.cost) return void toast.error(`${house.name} expects a gift of ${house.cost} gold.`);
         s.gold -= house.cost;
         s.vassals.push(houseId);
+        s.vassalLoyalty = s.vassalLoyalty ?? {};
+        s.vassalLoyalty[houseId] = VASSAL.startLoyalty;
         chronicle(
           s,
           "rise",
@@ -1223,7 +1284,22 @@ export function useClanGame() {
       update((s) => {
         if (!s.vassals?.includes(houseId)) return;
         s.vassals = s.vassals.filter((id) => id !== houseId);
+        if (s.vassalLoyalty) delete s.vassalLoyalty[houseId];
         pushLog(s, `${VASSAL_BY_ID[houseId]?.name ?? "A house"} is released from their oath.`, "info");
+      }),
+
+    /** Reaffirm a wavering house's oath with a gift of gold (§8.1). */
+    reaffirmVassal: (houseId: string) =>
+      update((s) => {
+        const house = VASSAL_BY_ID[houseId];
+        if (!house || !s.vassals?.includes(houseId)) return;
+        const cost = reaffirmCost(house);
+        if (s.gold < cost) return void toast.error(`${house.name} expects a gift of ${cost} gold to renew their faith.`);
+        s.gold -= cost;
+        s.vassalLoyalty = s.vassalLoyalty ?? {};
+        s.vassalLoyalty[houseId] = 100;
+        pushLog(s, `A gift of ${cost} gold renews ${house.name}'s oath. Their loyalty stands full.`, "good");
+        toast.success(`${house.name}'s loyalty restored.`);
       }),
 
     /** Borrow gold from the Gilded Compact's Ledger (§6.3), owed back with interest. */
@@ -1256,6 +1332,44 @@ export function useClanGame() {
         pushLog(s, `Settled the Compact ledger — ${s.loan.owed} gold. The debt is closed.`, "good");
         toast.success("The ledger is clear.");
         s.loan = undefined;
+      }),
+
+    /** Buy a term of Compact kit-insurance (§4.3, §6.3): a covered fall pays out. */
+    buyInsurance: () =>
+      update((s) => {
+        const now = Date.now();
+        if (insured(s, now))
+          return void toast("A policy is already in force. The Compact will not double-write it.");
+        const premium = insurePremium(s);
+        if (s.gold < premium) return void toast.error(`The Compact asks ${premium} gold to underwrite the host.`);
+        s.gold -= premium;
+        s.insurance = { until: now + LEDGER.insureTermMs, premium };
+        pushLog(
+          s,
+          `The Compact underwrites the host — ${premium} gold. A covered fall now pays out.`,
+          "good",
+        );
+        toast.success("Host insured. The Ledger bears the risk now.");
+      }),
+
+    /** Place a bounty on a rival's head through the Ledger (§6.3). */
+    placeBounty: (rivalId: string, amount: number) =>
+      update((s) => {
+        const r = s.rivals?.find((x) => x.id === rivalId);
+        if (!r) return;
+        const name = RIVAL_BY_ID[rivalId]?.name ?? "the rival";
+        const stake = Math.max(LEDGER.bountyMin, Math.round(amount));
+        if (s.gold < stake) return void toast.error(`You need ${stake} gold to post that bounty.`);
+        s.gold -= stake;
+        const net = Math.round(stake * (1 - LEDGER.bountyCut));
+        s.bounties = s.bounties ?? {};
+        s.bounties[rivalId] = (s.bounties[rivalId] ?? 0) + net;
+        pushLog(
+          s,
+          `A bounty is posted on ${name} — ${net} gold escrowed with the Compact (${stake - net} taken as their cut).`,
+          "info",
+        );
+        toast.success(`Bounty on ${name}: ${net} gold on their head.`);
       }),
 
     /** Refine the raw-Ash hoard into stable gold before it burns off (§6.2). */
@@ -1412,6 +1526,11 @@ export function useClanGame() {
               oath: m.oath,
             });
             pushLog(s, `${m.name} was killed fighting ${name}.`, "bad");
+            if (insured(s, Date.now())) {
+              const payout = insurePayout(m.level);
+              s.gold += payout;
+              pushLog(s, `The Compact paid out ${payout} gold on ${m.name}'s policy.`, "good");
+            }
           }
         }
         if (res.win) {
@@ -1428,6 +1547,20 @@ export function useClanGame() {
             `Their tax collectors were sent home without their banners. +60 reputation.`,
           );
           toast.success(`${zone.name} is free of ${name}.`);
+          // a bounty on this rival's head clears through the Ledger (§6.3)
+          const bounty = bountyOn(s, rivalId);
+          if (bounty > 0 && s.bounties) {
+            const repBonus = Math.round((bounty / 100) * LEDGER.bountyRepPer100);
+            s.gold += bounty;
+            s.reputation += repBonus;
+            delete s.bounties[rivalId];
+            pushLog(
+              s,
+              `The Compact settles the bounty on ${name} — ${bounty} gold and +${repBonus} standing.`,
+              "good",
+            );
+            toast.success(`Bounty claimed: ${bounty} gold, +${repBonus} rep.`);
+          }
         } else {
           r.hostility = Math.min(100, r.hostility + 18);
           s.reputation = Math.max(0, s.reputation - 25);

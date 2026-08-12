@@ -5,12 +5,19 @@ import {
   clanHostPower,
   longNightActive,
   longNightPressure,
+  LONG_NIGHT_TIDE,
   refineAshValue,
   loanCeiling,
+  insurePremium,
+  insured,
+  bountyOn,
+  LEDGER,
   siegeReady,
   VASSAL_HOUSES,
   vassalPower,
   vassalTithe,
+  vassalLoyalty,
+  reaffirmCost,
   type GameState,
 } from "@/lib/game/engine";
 import { Button } from "@/components/ui/button";
@@ -29,8 +36,11 @@ export function RealmPanel({
     setCastleWindow: (startHour: number | null, hours: number) => void;
     takeLoan: (amount: number) => void;
     repayLoan: () => void;
+    buyInsurance: () => void;
+    placeBounty: (rivalId: string, amount: number) => void;
     swearVassal: (houseId: string) => void;
     releaseVassal: (houseId: string) => void;
+    reaffirmVassal: (houseId: string) => void;
   };
 }) {
   const host = clanHostPower(state);
@@ -76,6 +86,20 @@ export function RealmPanel({
             ? "The dead walk and the light-fearing things pour out. Rivals press harder — but who holds the line is remembered."
             : "The upper Ash thickens over the season. No one knows the hour it breaks — only that it will."}
         </p>
+        {night && (
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+            <span className="text-destructive">
+              ×{LONG_NIGHT_TIDE.deathMult.toFixed(1)} death out farming
+            </span>
+            <span className="text-amber-300/90">
+              +{Math.round((LONG_NIGHT_TIDE.spoilMult - 1) * 100)}% gold &amp; XP
+            </span>
+            <span className="text-amber-300/90">+{LONG_NIGHT_TIDE.ashTide} raw Ash / run</span>
+            <span className="text-gold">
+              {state.longNight?.held ? "line held — Deed earned" : "hold the line → a Deed"}
+            </span>
+          </div>
+        )}
       </section>
 
       {/* -------------------------------- raw Ash ------------------------------ */}
@@ -243,6 +267,35 @@ export function RealmPanel({
             ))}
           </div>
         )}
+
+        {/* kit insurance (§4.3, §6.3) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
+          {insured(state) ? (
+            <>
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                <span className="font-display text-emerald-400">Host insured.</span> The Compact bears
+                the risk — a covered fall pays out. Cover ends in{" "}
+                {Math.max(0, ((state.insurance?.until ?? 0) - Date.now()) / 86_400_000).toFixed(1)} days.
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                Underwrite the host against full-loot: pay a premium now, and a champion's fall pays
+                back a share of what was lost.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={api.buyInsurance}
+                disabled={state.gold < insurePremium(state)}
+                title={state.gold < insurePremium(state) ? `Need ${insurePremium(state)} gold` : undefined}
+              >
+                Insure the host — {insurePremium(state).toLocaleString()}g
+              </Button>
+            </>
+          )}
+        </div>
       </section>
 
       {/* -------------------------------- vassals ------------------------------ */}
@@ -272,14 +325,47 @@ export function RealmPanel({
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{h.blurb}</p>
+                {sworn && (() => {
+                  const loy = vassalLoyalty(state, h.id);
+                  const wavering = loy < 40;
+                  return (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] uppercase tracking-widest">
+                        <span className={wavering ? "text-destructive" : "text-muted-foreground"}>
+                          Loyalty {Math.round(loy)}%{wavering ? " · wavering" : ""}
+                        </span>
+                        {wavering && (
+                          <span className="text-destructive">turns out at half strength</span>
+                        )}
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-sm border border-border/60 bg-secondary">
+                        <div
+                          className={`h-full transition-all ${wavering ? "bg-destructive" : "bg-gold/70"}`}
+                          style={{ width: `${loy}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     {sworn ? "sworn to you" : meetsLevel ? `${h.cost.toLocaleString()}g to swear` : `needs clan Lv ${h.reqLevel}`}
                   </span>
                   {sworn ? (
-                    <Button size="sm" variant="ghost" onClick={() => api.releaseVassal(h.id)}>
-                      Release
-                    </Button>
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => api.reaffirmVassal(h.id)}
+                        disabled={state.gold < reaffirmCost(h) || vassalLoyalty(state, h.id) >= 100}
+                        title={`A gift of ${reaffirmCost(h)}g renews their oath to full loyalty`}
+                      >
+                        Reaffirm {reaffirmCost(h)}g
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => api.releaseVassal(h.id)}>
+                        Release
+                      </Button>
+                    </div>
                   ) : (
                     <Button
                       size="sm"
@@ -354,6 +440,36 @@ export function RealmPanel({
                   They hold no ground right now. That will not last.
                 </p>
               )}
+
+              {/* a bounty on their head, escrowed with the Compact (§6.3) */}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2">
+                {bountyOn(state, r.id) > 0 ? (
+                  <span className="text-[11px] text-amber-300/90">
+                    Bounty on their head: {bountyOn(state, r.id).toLocaleString()}g — paid when you
+                    break them.
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    No price on their head yet.
+                  </span>
+                )}
+                <div className="flex gap-1.5">
+                  {[300, 800].map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => api.placeBounty(r.id, a)}
+                      disabled={state.gold < a}
+                      className="rounded-sm border border-border/60 px-2 py-1 text-[11px] transition hover:border-amber-400/60 hover:text-amber-300 disabled:opacity-40"
+                      title={`Escrow ${a}g with the Compact (they take ${Math.round(
+                        LEDGER.bountyCut * 100,
+                      )}%); the rest pays out when this rival is broken`}
+                    >
+                      Post {a}g
+                    </button>
+                  ))}
+                </div>
+              </div>
             </article>
           );
         })}

@@ -1,6 +1,6 @@
 # Ashen Legacy — Systems Bible
 
-**Version 0.2 · Draft canon · 11 August 2026**
+**Version 0.3 · Draft canon · 12 August 2026**
 Canonical systems-design reference for *Ashen Legacy*, the dark-fantasy MMORPG set in Aethyr. Companion to the **Story Bible v0.1**. Where the Story Bible governs *what is true*, this document governs *what the player does*.
 
 > **Precedence.** On matters of fiction, the Story Bible wins. On matters of mechanics, this bible wins. Where a system contradicts the fiction, the system is wrong and gets redesigned — fiction is not retrofitted to excuse a mechanic. The One Law ("Ash always collects") binds both documents equally.
@@ -153,6 +153,10 @@ Every character runs on two meters:
 
 **[CANON] Debt suppresses Vigour.** The more Ash Debt you carry, the smaller your usable Vigour pool. Push your power hard and you burn yourself down — you hit harder now and weaker for the rest of the run. This is *why the strongest mages are rarely the oldest* (Story Bible §4), expressed as a curve a player feels every fight.
 
+**[CANON] Overdraw — the active push.** Debt is not only a punishment for dying; it is a *choice* the player reaches for. On a committed action (v1: charging the World Boss) a warband may **Overdraw** — reach past its Vigour for a burst of power **now** (**[TUNING]** +55% to the blow) in exchange for banked Ash Debt (**[TUNING]** +30) and a sharply higher chance of a champion falling on that charge (**[TUNING]** ×1.7 risk). This is the push-your-luck heartbeat of the One Law: outsized force, paid for after. *Implemented v0.3.*
+
+**[CANON] Searing — the debt that burns.** Past a threshold of carried debt (**[TUNING]** ≥150) the host is **Searing**: the Ash is burning it alive, and every risky action is far deadlier (**[TUNING]** ×1.35 death risk on top of everything else) until the debt is rested off at a warded flame. High debt is not merely "weaker" — it is *dangerous to field*. *Implemented v0.3.*
+
 ### 3.2 The three disciplines pay three different prices — **[CANON]**
 
 Maps directly to the Story Bible's magic table. **Name the cost before the effect** (Story Bible [GUIDANCE]).
@@ -221,6 +225,16 @@ When the Long Night breaks, a **server threat** arrives that no single Banner ca
 
 The seasonal Long Night (§1.3) is where the season's defining legacy is minted: holding a Castle *through* the Night, surviving a Pale Sovereign encounter, being the House that broke the truce and profited, or the Warden line that held and fell. **[OPEN]** The Pale Sovereign's mechanics, and anything confirming *what it is* (Story Bible Q2), are reserved. Foreshadow in systems; explain nothing.
 
+### 5.4 The tide — making the Night *felt* — **[CANON]**
+
+The pressure gauge (§5.1) and the log entries told the player a Long Night was happening; nothing about their farming *changed* while it walked. That is a system on paper, not in the hand. The tide fixes it: for the whole window the Long Night is active, every expedition is played under an altered contract.
+
+- **Deadlier ground.** The dead grow bold: farming death risk is multiplied (×1.6, `LONG_NIGHT_TIDE.deathMult`) for the duration. The Night is a threat you *feel* at the butcher's bill, not a banner you read.
+- **The Ash runs thick.** The swallowed sky sheds Ash on anyone who braves it: gold and character XP come richer (×1.35, `spoilMult`) and each run sheds a tide of raw Ash (+9, `ashTide`) on top. The reward *pulls* against the risk — the Night is a window of opportunity for the bold, not just a tax on the timid.
+- **Holding the line is a Deed.** The first banner to keep the field through a given Night — without being routed — mints a permanent `war`-class Chronicle Deed ("Held the line through the Long Night"). One per Night, so it stays earned. This is the single-player, AI-rival expression of §5.3's "who *held the line beside you* becomes a Deed": here the line is held against the world, and the Chronicle remembers it.
+
+*Implemented v0.3.* Engine `LONG_NIGHT_TIDE` + `longNightTide()`; applied in the expedition resolver; surfaced on the Realm panel's Long Night card.
+
 ---
 
 ## 6 · Economy & the Gilded Compact
@@ -250,6 +264,16 @@ The Gilded Compact is a **player faction whose power is the Ledger**: a suite of
 - **Weekly settlement** (§1.2) — debts, premiums, and bounties clear on a cadence, creating a rhythm of payday and reckoning.
 
 **[GUIDANCE]** The Compact should be able to *win economic storylines without ever winning a siege* — the quiet antagonist of §6 of the Story Bible. A Banner that wins every battle and loses the Ledger loses the war. That asymmetry is the point. **[OPEN] E1 — degree of Compact debt enforcement** (can a debt truly force a Castle to change hands?) reserved until siege and economy have live data; it is potent and exploitable and must not ship un-tuned.
+
+#### 6.3.1 The single-player Ledger — **[CANON]**
+
+In the AI-rival model the Compact is the house, and the player *buys* its instruments. Three now run live, so the Ledger is a working desk, not a single loan button:
+
+- **Loans** — borrow gold against the clan's name, repaid with interest by the weekly settlement; an overdue debt compounds and bleeds standing. (*Shipped v0.2-era.*)
+- **Kit insurance** (§4.3) — a premium buys a term of cover (`insurePremium`, scaling with clan level). While a policy is in force, every champion who falls to full-loot — out farming *or* contesting a rival — pays out a share of their worth (`insurePayout`, scaling with the fallen's level). Full-loot keeps its sting for the uninsured; the disciplined pay the Compact to soften it. This makes death a *financial* decision, not only a tactical one.
+- **Bounties** — escrow gold on a named rival's head. The Compact skims a cut (`bountyCut`) and holds the rest until you break that rival in the field, then settles it in gold *and* standing (`bountyRepPer100`). A bounty turns the AI-rival board into a set of paying contracts — you can fund the war against the clan you most want gone.
+
+*Implemented v0.3.* Engine `LEDGER` (insurance/bounty tuning) + `insurePremium`/`insured`/`insurePayout`/`bountyOn`; actions `buyInsurance`, `placeBounty`; payouts wired into the expedition and `contestRival` resolvers; surfaced on the Realm panel's Ledger card and each rival. **[OPEN]** Contracts & escrow (haul/hold/non-aggression) and player-underwritten insurance remain reserved for a multiplayer pass.
 
 ---
 
@@ -302,6 +326,16 @@ Deeds don't auto-post; a player **inscribes** them, and inscription is an act wi
 Legacy converts to **Renown**: individual and House standing that unlocks **cosmetic, social, and heraldic** rewards — titles, heraldry, monument space, unique visual marks, access to ceremonies — and **never combat power.**
 
 **[CANON] Legacy grants no stats.** The instant legacy buys power, three things die: new players face an un-closable gap, the destruction economy destabilises, and "territory is identity" degrades into "whoever won last season wins forever." Renown makes you *known*, not *stronger*. Guard this line like the game depends on it, because it does.
+
+#### 7.5.1 Wearable titles — Renown made visible — **[CANON]**
+
+Renown was a number and an auto-assigned rank word; it did no *social* work because the player never got to *wear* it. Titles fix that. This section's own promise is that Renown "unlocks titles… and never combat power" — titles are the literal delivery of that clause.
+
+- **Earned, then chosen.** A pool of honorifics (`CLAN_TITLES`) unlocks from two sources: **Renown thresholds** (*Named of Aethyr*, *the Renowned*, *the Storied*, *the Legendary*, *the Immortal*) and **specific Deeds** (*Warden of Vareth* for holding the seat; *Who Held the Long Night* for a §5.4 hold; *the Oathkeeper* for an Oathsworn fall; *Breaker of Houses* for routing rivals a dozen times). Earning a title only grants the *right* to wear it — the leader picks which one the clan displays (`wearTitle`), or wears its name bare.
+- **Worn beside the name.** The chosen title renders next to the clan name in the title bar (`wornTitle`), re-validated against the live record each render so a title lost to a fallen castle or a new season quietly stops showing. It is prestige on the sleeve — pure §7.5 cosmetic, zero stat.
+- **Why it matters.** Titles turn the Legacy screen from a ledger you read into a wardrobe you curate. They give Renown thresholds a *reason to chase* beyond the bar filling, and they make a Deed like holding the Long Night visible to everyone who sees your banner — the social payoff §7.5 always promised.
+
+*Implemented v0.3.* Engine `CLAN_TITLES`/`earnedTitles`/`wornTitle` + `state.title`, action `wearTitle`; a title picker on the Legacy panel and the worn honorific in the title bar.
 
 ### 7.6 Inheritance — permanence beyond one character — **[CANON]**
 
@@ -366,6 +400,17 @@ Fealty is sworn to a *person*, never an ideology. A vassal and their lord may ho
 **Anti-calcification — [GUIDANCE].** Feudalism concentrates power and can freeze into a permanent aristocracy new players can't crack — the same risk map perturbation (§2.6) fights. The voluntary model *is* the primary defence: a lord who cannot protect or reward loses vassals every season, so power must be re-earned, not merely inherited. **[OPEN] F2 — how hard social/economic enforcement should bite, and the catch-up weighting against calcification** reserved for live tuning; too soft and oaths mean nothing, too hard and you have serfdom.
 
 **Leadership-layer only — [CANON].** Feudal systems are dark matter to the new and the solo. A first-week or unaligned player never needs to understand fealty to play; this is infrastructure for House and Banner leaders negotiating power. If onboarding (§9.1) ever has to explain vassalage, the system is overbuilt.
+
+#### 8.1.1 Loyalty — the wavering oath — **[CANON]**
+
+The single-player vassal board began as a shop: pay the oath-price, gain power and tithe forever. That is a purchase, not fealty — and it contradicts the section's own thesis that *the engine offers feudal tools but never enforces obligation, so a lord who cannot protect or reward loses vassals* (§8.1 anti-calcification). Loyalty makes that thesis playable.
+
+- **Loyalty 0..100 per sworn house** (`vassalLoyalty`), starting at 60. It drifts **up** while you keep faith — and further up while you hold your seat — and **drains** when the seat is lost to a rival or the host burns with a Searing Ash Debt (§3). A lord who cannot hold a keep or keep his own host disciplined is, to his levies, a poor liege.
+- **Loyalty is turnout** (`vassalTurnout`): a house's contribution to `vassalPower` scales from 0.5× (wavering) to 1.0× (full faith). A wavering vassal literally turns out at half strength when your castle is stormed — the anti-calcification valve made mechanical, not merely narrated.
+- **Renouncement** (`renounceAt = 0`): a house whose loyalty runs out renounces its oath and rides home, taking its swords and tithe. Fealty freely given is fealty that can be lost.
+- **Reaffirmation** (`reaffirmVassal`, `reaffirmCost` = 25% of the oath-price): the lord's lever. A gift of gold renews a wavering house to full loyalty — the "protect or *reward*" half of the bargain, expressed as a button. Never a compulsion; always a courtship.
+
+*Implemented v0.3.* Engine `VASSAL` (loyalty tuning) + `vassalLoyalty`/`vassalTurnout`/`reaffirmCost`, loyalty-weighted `vassalPower`, drift & renouncement in `realmPulse`, action `reaffirmVassal`; surfaced as a loyalty bar and Reaffirm button on each sworn house in the Realm panel.
 
 ---
 
@@ -436,6 +481,7 @@ Fealty is sworn to a *person*, never an ideology. A vassal and their lord may ho
 |---|---|---|
 | 0.1 | 11 Aug 2026 | Initial draft systems canon. Establishes the three-tier core loop, siege & territory (vulnerability windows, holding tiers, conquest, anti-turtle Toll, map perturbation), Ash Debt (dual-resource One Law with three discipline costs), zone-tiered death & full-loot with opt-in Ashen Oath, the Long Night as a system, the destruction economy with decaying Ash and the Compact's Ledger, the Legacy system (Chronicle/Inscription split, Deeds, Renown-not-power, inheritance), social tiers, NPE, and a cosmetic-only business model. Six systems questions logged; six Story-Bible questions carried forward. |
 | 0.2 | 11 Aug 2026 | Added **§8.1 Feudal Infrastructure** [CANON]: voluntary tools, never engine-enforced obligation; the third "allegiance" axis (fealty to a lord, not a realm); the tithe/service–protection/share/access bargain; enforcement via reputation, the Ledger, and the siege — never auto-seizure; per-realm expression incl. the Free Holds anti-feudal carve-out; primitives-first build order; anti-calcification; leadership-layer only. Also logged the §8 race-mixed-House rule [CANON]. Married to Story Bible §6.1 (v0.3). F1–F2 reserved. |
+| 0.3 | 12 Aug 2026 | **Depth pass — Ash Debt §3** [CANON]. Gave the One Law an active edge and a punishing tail: **Overdraw** (opt-in on a banner charge — +55% damage now, +30 debt, ×1.7 death risk) turns discipline into a live gamble instead of a passive meter; **Searing** (debt ≥150 burns the host — ×1.35 death risk on every commit until rested) makes a neglected debt actively lethal rather than merely a soft cap. Both *Implemented v0.3* in engine `ASH_DEBT` + `isSearing()`, `commitBanner(partyId, overdraw)`, and the Warfront Ash Debt card. **Depth pass — Long Night §5.4** [CANON]: the Night is now *felt*, not merely logged — an active window multiplies farming death risk (×1.6), pays richer gold/XP (×1.35) and sheds raw Ash (+9/run), and the first un-routed banner to hold the field mints a `war` Deed. *Implemented v0.3* in `LONG_NIGHT_TIDE`/`longNightTide()`, the expedition resolver, and the Realm panel. **Depth pass — the Ledger §6.3.1** [CANON]: the Compact grew from a lone loan button into a working desk — **kit insurance** (premium buys a term of cover; a covered full-loot fall out farming or contesting pays out a share of the champion's worth) and **bounties** (escrow gold on a rival's head, minus the Compact's cut, paid out in gold and standing when you break them). *Implemented v0.3* in `LEDGER`/`insurePremium`/`insured`/`insurePayout`/`bountyOn`, actions `buyInsurance`/`placeBounty`, the expedition + `contestRival` resolvers, and the Realm panel. **Depth pass — Vassal loyalty §8.1.1** [CANON]: the vassal shop became fealty that can waver — per-house **loyalty** (0..100) drifts up on faith kept and a held seat, drains on a lost seat or a Searing host, scales turnout 0.5×..1.0× (so `vassalPower` is loyalty-weighted), and a house at zero **renounces** its oath. The lord's lever is **reaffirmation** (a gift of gold renews loyalty to full). *Implemented v0.3* in `VASSAL`/`vassalLoyalty`/`vassalTurnout`/`reaffirmCost`, `realmPulse` drift, action `reaffirmVassal`, and the Realm panel. **Depth pass — Wearable titles §7.5.1** [CANON]: Renown made visible — a pool of honorifics unlocks from Renown thresholds and specific Deeds (Warden of Vareth, Who Held the Long Night, the Oathkeeper, Breaker of Houses), the leader chooses which the clan wears, and it renders beside the clan name (re-validated live). Pure §7.5 cosmetic, zero stat. *Implemented v0.3* in `CLAN_TITLES`/`earnedTitles`/`wornTitle`/`state.title`, action `wearTitle`, the Legacy panel picker, and the title bar. |
 
 ---
 *Companion to Ashen Legacy Story Bible v0.1. Assign a systems owner before extending. Read §7 first.*

@@ -320,16 +320,24 @@ export interface GameState {
   chronicle?: ChronicleEntry[];
   /** ids of Deeds the clan has inscribed at the Founders' Monument (Legacy §7.4) */
   inscribed?: string[];
+  /** the id of the wearable clan title the leader has chosen to display (§7.5) */
+  title?: string | undefined;
   /** the host's carried Ash Debt (§3) — accrued in the fight, cleared only by rest */
   ashDebt?: number;
   /** the Long Night (§5) — rising pressure, and the window while it walks the realm */
-  longNight?: { pressure: number; endsAt?: number | undefined };
+  longNight?: { pressure: number; endsAt?: number | undefined; held?: boolean | undefined };
   /** raw Ash (§6.2) — a hot-potato currency that decays if hoarded; refine it or lose it */
   rawAsh?: number;
   /** an outstanding debt to the Gilded Compact's Ledger (§6.3) */
   loan?: { principal: number; owed: number; dueAt: number } | undefined;
+  /** a Compact kit-insurance policy in force (§4.3, §6.3) — a covered fall pays out */
+  insurance?: { until: number; premium: number } | undefined;
+  /** gold escrowed on rivals' heads through the Ledger (§6.3): rivalId → net bounty */
+  bounties?: Record<string, number>;
   /** ids of the vassal houses sworn to your banner (§8.1) */
   vassals?: string[];
+  /** each sworn house's loyalty 0..100 (§8.1) — fealty wavers and can be lost */
+  vassalLoyalty?: Record<string, number>;
   /** the current Season of Ash (§1.3) — each Reckoning begins a new one */
   season?: number;
   /** champions lost for good */
@@ -1149,6 +1157,76 @@ export function renownRank(score: number): { title: string; next: { title: strin
   return { title: cur.title, next, floor: cur.at };
 }
 
+/**
+ * Wearable clan titles (§7.5) — Renown made *visible*. A rank is a number the
+ * clan reaches; a title is an honorific the clan *wears*, chosen by the leader
+ * and shown beside the clan's name. Titles are earned by Renown thresholds and
+ * by specific Deeds, but — like Renown itself — grant no stat. Prestige worn on
+ * the sleeve, never power ([CANON] §7.5).
+ */
+export interface ClanTitle {
+  id: string;
+  /** the honorific as worn, e.g. "Storied of Aethyr" */
+  title: string;
+  /** how it is earned — shown in the picker */
+  desc: string;
+  unlocked: (state: GameState, ctx: { score: number; deeds: DeedRecord[] }) => boolean;
+}
+
+export const CLAN_TITLES: ClanTitle[] = [
+  { id: "named", title: "Named of Aethyr", desc: "Reach 120 Renown.", unlocked: (_s, c) => c.score >= 120 },
+  { id: "renowned", title: "the Renowned", desc: "Reach 350 Renown.", unlocked: (_s, c) => c.score >= 350 },
+  { id: "storied", title: "the Storied", desc: "Reach 800 Renown.", unlocked: (_s, c) => c.score >= 800 },
+  { id: "legendary", title: "the Legendary", desc: "Reach 1600 Renown.", unlocked: (_s, c) => c.score >= 1600 },
+  { id: "immortal", title: "the Immortal", desc: "Reach 3200 Renown.", unlocked: (_s, c) => c.score >= 3200 },
+  {
+    id: "warden_vareth",
+    title: "Warden of Vareth",
+    desc: "Hold Castle Vareth.",
+    unlocked: (s) => s.castle?.holder === "player",
+  },
+  {
+    id: "nightholder",
+    title: "Who Held the Long Night",
+    desc: "Hold the line through a Long Night.",
+    unlocked: (_s, c) => c.deeds.some((d) => d.title.startsWith("Held the line through the Long Night")),
+  },
+  {
+    id: "oathkeeper",
+    title: "the Oathkeeper",
+    desc: "Have an Oathsworn champion fall in your name.",
+    unlocked: (s) => (s.memorial ?? []).some((f) => f.oath),
+  },
+  {
+    id: "housebreaker",
+    title: "Breaker of Houses",
+    desc: "Rout rival clans 12 times over.",
+    unlocked: (s) => (s.rivals ?? []).reduce((n, r) => n + (r.routed ?? 0), 0) >= 12,
+  },
+];
+
+export const CLAN_TITLE_BY_ID: Record<string, ClanTitle> = Object.fromEntries(
+  CLAN_TITLES.map((t) => [t.id, t]),
+);
+
+/** Which titles the clan has earned the right to wear, given its record. */
+export function earnedTitles(state: GameState): ClanTitle[] {
+  const deeds = deedsFromState(state);
+  const score = renownScore(deeds);
+  const ctx = { score, deeds };
+  return CLAN_TITLES.filter((t) => t.unlocked(state, ctx));
+}
+
+/** The honorific the clan currently wears, or "" — validated it is still earned. */
+export function wornTitle(state: GameState): string {
+  if (!state.title) return "";
+  const t = CLAN_TITLE_BY_ID[state.title];
+  if (!t) return "";
+  return t.unlocked(state, { deeds: deedsFromState(state), score: renownScore(deedsFromState(state)) })
+    ? t.title
+    : "";
+}
+
 /** What it costs in gold to carve a Deed into the Monument (§7.4 — being remembered is paid for). */
 export function inscribeCost(deed: DeedRecord): number {
   return 40 + deed.weight * 4;
@@ -1289,7 +1367,24 @@ export function rivalOfZone(state: GameState, zoneId: string) {
  * but never touches ordinary farming (a warrior can still swing; it is the
  * *reach past Vigour* that collects). Cleared only by resting at a warded flame.
  */
-export const ASH_DEBT = { deathAccrual: 22, maxSuppression: 0.4, suppressAt: 260, restPerPoint: 3 };
+export const ASH_DEBT = {
+  deathAccrual: 22,
+  maxSuppression: 0.4,
+  suppressAt: 260,
+  restPerPoint: 3,
+  // Overdraw (§3.1): reach past Vigour for a burst now — more debt, more danger.
+  overdrawDamage: 0.55,
+  overdrawDebt: 30,
+  overdrawRisk: 1.7,
+  // Searing (§3.2): carry too much debt and the Ash burns the host outright.
+  searingAt: 150,
+  searingRisk: 1.35,
+};
+
+/** Past this much carried debt, the host is Searing — every charge is deadlier (§3.2). */
+export function isSearing(state: GameState): boolean {
+  return (state.ashDebt ?? 0) >= ASH_DEBT.searingAt;
+}
 
 /** 0 .. maxSuppression — how much the carried Ash Debt shrinks usable host power. */
 export function ashDebtSuppression(state: GameState): number {
@@ -1322,6 +1417,32 @@ export const LONG_NIGHT = {
 };
 
 /**
+ * The Long Night's bite while it walks (§5). It must be *felt*, not merely
+ * noted in the log: the dead grow bold so the field turns deadlier, but the
+ * upper Ash runs thick — spoils come richer and a tide of raw Ash sheds on any
+ * banner that braves the dark. Holding the line through it mints a Deed. Clear
+ * sky = no multipliers, no tide.
+ */
+export const LONG_NIGHT_TIDE = {
+  deathMult: 1.6, // the dead are bolder in the dark
+  spoilMult: 1.35, // the thick Ash makes gold and glory run richer
+  ashTide: 9, // raw Ash the swallowed sky sheds per run
+};
+
+export interface NightTide {
+  deathMult: number;
+  spoilMult: number;
+  ashTide: number;
+}
+
+/** The active tide, or a no-op tide under a clear sky. */
+export function longNightTide(state: GameState, now: number = Date.now()): NightTide {
+  return longNightActive(state, now)
+    ? { ...LONG_NIGHT_TIDE }
+    : { deathMult: 1, spoilMult: 1, ashTide: 0 };
+}
+
+/**
  * Raw Ash (Systems Bible §6.2) — raw Ash never settles, so it decays if hoarded.
  * It must be spent or refined into a stable store (gold) before it burns off. A
  * hot potato that keeps the economy circulating and punishes dragon-hoarding.
@@ -1340,11 +1461,42 @@ export const LEDGER = {
   maxLoanPerLevel: 400, // borrowing cap scales with clan level
   overdueCompound: 0.06, // per-hour interest once overdue
   overdueRepDrip: 2, // reputation lost per hour once overdue
+  // Kit insurance (§4.3, §6.3): a premium buys a term of cover, and a covered
+  // fall pays out a fraction of the lost champion's worth — full-loot stings
+  // less if you paid the Compact first.
+  insureTermMs: 3 * 86_400_000,
+  insurePremiumPerLevel: 45,
+  insurePayoutPerLevel: 55,
+  // Bounties (§6.3): escrow gold on a rival's head; the Compact skims a cut and
+  // holds the rest until the mark is broken, then pays out in gold and standing.
+  bountyCut: 0.15,
+  bountyMin: 150,
+  bountyRepPer100: 6,
 };
 
 /** The most gold the Compact will advance a clan of this standing. */
 export function loanCeiling(state: GameState): number {
   return Math.max(500, state.clanLevel * LEDGER.maxLoanPerLevel);
+}
+
+/** The premium the Compact asks to underwrite the host for a term (§6.3). */
+export function insurePremium(state: GameState): number {
+  return Math.max(150, Math.round(state.clanLevel * LEDGER.insurePremiumPerLevel));
+}
+
+/** Is a Compact kit-insurance policy currently in force? */
+export function insured(state: GameState, now: number = Date.now()): boolean {
+  return !!state.insurance && now < state.insurance.until;
+}
+
+/** What the Compact pays out for a covered champion of this level (§4.3). */
+export function insurePayout(level: number): number {
+  return Math.round(Math.max(1, level) * LEDGER.insurePayoutPerLevel);
+}
+
+/** Net gold escrowed on a rival's head, after the Compact's cut. */
+export function bountyOn(state: GameState, rivalId: string): number {
+  return state.bounties?.[rivalId] ?? 0;
 }
 
 /**
@@ -1376,11 +1528,46 @@ export const VASSAL_BY_ID: Record<string, VassalHouse> = Object.fromEntries(
   VASSAL_HOUSES.map((h) => [h.id, h]),
 );
 
+/**
+ * Loyalty (§8.1) — fealty is *freely given*, so it can waver. A sworn house's
+ * loyalty (0..100) drifts up while you keep faith and hold your seat, and drains
+ * when the seat is lost or the host burns with Ash Debt. A wavering house fights
+ * at half strength; a house whose loyalty runs out renounces its oath and rides
+ * home. The lord can reaffirm the bond with a gift of gold — never compel it.
+ */
+export const VASSAL = {
+  startLoyalty: 60,
+  driftUpPerHour: 1.5, // faith kept, the bond steadies
+  lostSeatDrainPerHour: 3, // a lord who cannot hold a seat is a poor liege
+  searingDrainPerHour: 4, // a host burning with Ash Debt frightens its levies
+  renounceAt: 0,
+  reaffirmCostFrac: 0.25, // a gift of gold worth this much of the oath-price
+};
+
+export function vassalLoyalty(state: GameState, id: string): number {
+  const v = state.vassalLoyalty?.[id];
+  return Math.max(0, Math.min(100, v ?? VASSAL.startLoyalty));
+}
+
+/** What a gift to reaffirm a wavering house's oath costs (§8.1). */
+export function reaffirmCost(house: VassalHouse): number {
+  return Math.round(house.cost * VASSAL.reaffirmCostFrac);
+}
+
+/** Loyalty scales a house's turnout: wavering houses hold back (0.5x..1.0x). */
+export function vassalTurnout(loyalty: number): number {
+  return 0.5 + 0.5 * (Math.max(0, Math.min(100, loyalty)) / 100);
+}
+
 export function swornVassals(state: GameState): VassalHouse[] {
   return (state.vassals ?? []).map((id) => VASSAL_BY_ID[id]).filter((h): h is VassalHouse => !!h);
 }
 export function vassalPower(state: GameState): number {
-  return swornVassals(state).reduce((s, h) => s + h.power, 0);
+  // loyalty-weighted: a wavering house turns out at half strength (§8.1)
+  return swornVassals(state).reduce(
+    (s, h) => s + Math.round(h.power * vassalTurnout(vassalLoyalty(state, h.id))),
+    0,
+  );
 }
 export function vassalTithe(state: GameState): number {
   return swornVassals(state).reduce((s, h) => s + h.tithe, 0);
@@ -1426,6 +1613,7 @@ export function realmPulse(state: GameState) {
     if (ln.pressure >= 100) {
       ln.pressure = 0;
       ln.endsAt = now + LONG_NIGHT.durationMs;
+      ln.held = false;
       pushLog(state, "The upper Ash thickens and swallows the sun — the Long Night is upon the realm.", "bad");
       chronicle(
         state,
@@ -1456,6 +1644,34 @@ export function realmPulse(state: GameState) {
     if (tithe > 0) {
       if (state.castle?.holder === "player") state.castle.purse += tithe;
       else state.gold += tithe;
+    }
+  }
+
+  // Loyalty drifts (§8.1): faith kept steadies the bond; a lost seat or a searing
+  // host frightens the levies. A house whose loyalty runs out renounces its oath.
+  if (hours > 0 && (state.vassals?.length ?? 0) > 0) {
+    state.vassalLoyalty = state.vassalLoyalty ?? {};
+    const seatHeld = state.castle?.holder === "player";
+    const seatLost = !!state.castle && state.castle.holder !== "player" && state.castle.holder !== "crown";
+    const searing = isSearing(state);
+    let drift = VASSAL.driftUpPerHour;
+    if (seatLost) drift -= VASSAL.lostSeatDrainPerHour;
+    if (searing) drift -= VASSAL.searingDrainPerHour;
+    if (seatHeld) drift += 0.5; // a lord who holds his seat keeps his oaths
+    for (const id of [...(state.vassals ?? [])]) {
+      const cur = state.vassalLoyalty[id] ?? VASSAL.startLoyalty;
+      const next = Math.max(0, Math.min(100, cur + drift * hours));
+      state.vassalLoyalty[id] = next;
+      if (next <= VASSAL.renounceAt) {
+        state.vassals = (state.vassals ?? []).filter((x) => x !== id);
+        delete state.vassalLoyalty[id];
+        const h = VASSAL_BY_ID[id];
+        pushLog(
+          state,
+          `${h?.name ?? "A sworn house"} has renounced its oath and ridden home. Fealty kept no faith.`,
+          "bad",
+        );
+      }
     }
   }
 

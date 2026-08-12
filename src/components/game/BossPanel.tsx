@@ -9,6 +9,8 @@ import {
   dayKey,
   ashDebtSuppression,
   restAtFlameCost,
+  isSearing,
+  ASH_DEBT,
   type GameState,
   type Party,
 } from "@/lib/game/engine";
@@ -61,13 +63,15 @@ export function BossPanel({
   const cooldownLeft = (p: Party) =>
     Math.max(0, COMMIT_COOLDOWN_MS - (now - (state.bossCommitAt?.[p.id] ?? 0)));
 
-  const commit = async (p: Party) => {
+  const commit = async (p: Party, overdraw = false) => {
     if (busy || boss.defeated || p.memberIds.length === 0 || cooldownLeft(p) > 0) return;
     setBusy(p.id);
     // Ash Debt (§3) shrinks the blow the host can land — reach past it and you rest weaker.
-    const dmg = Math.round(partyPower(state, p) * (1 - ashDebtSuppression(state)));
+    let dmg = Math.round(partyPower(state, p) * (1 - ashDebtSuppression(state)));
+    // Overdraw reaches past Vigour for a burst — bigger blow now, banked as debt (§3.1).
+    if (overdraw) dmg = Math.round(dmg * (1 + ASH_DEBT.overdrawDamage));
     const ok = await boss.strike(dmg, who);
-    if (ok) api.commitBanner(p.id);
+    if (ok) api.commitBanner(p.id, overdraw);
     setBusy(null);
   };
 
@@ -138,15 +142,32 @@ export function BossPanel({
 
       {/* Ash Debt — the One Law with teeth (§3) */}
       {(state.ashDebt ?? 0) > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-sm border border-amber-500/40 bg-amber-500/5 p-3">
-          <Skull className="h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+        <div
+          className={`flex flex-wrap items-center gap-2 rounded-sm border p-3 ${
+            isSearing(state)
+              ? "border-destructive/60 bg-destructive/10"
+              : "border-amber-500/40 bg-amber-500/5"
+          }`}
+        >
+          <Skull
+            className={`h-4 w-4 shrink-0 ${isSearing(state) ? "text-destructive" : "text-amber-400"}`}
+            aria-hidden
+          />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-widest text-amber-300/90">
+            <div
+              className={`text-[10px] uppercase tracking-widest ${
+                isSearing(state) ? "text-destructive" : "text-amber-300/90"
+              }`}
+            >
               Ash Debt — {Math.round(state.ashDebt ?? 0)}
+              {isSearing(state) ? " · Searing" : ""}
             </div>
             <div className="text-[11px] text-muted-foreground">
               The host fights at −{Math.round(ashDebtSuppression(state) * 100)}% against the boss and
-              in siege until it rests. The Ash always collects.
+              in siege until it rests.
+              {isSearing(state)
+                ? " The Ash is burning them alive — every charge is far deadlier. Rest now."
+                : " The Ash always collects."}
             </div>
           </div>
           <Button
@@ -229,6 +250,16 @@ export function BossPanel({
                   >
                     {cd > 0 ? `${Math.ceil(cd / 1000)}s` : "Charge"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 shrink-0 border-amber-500/50 px-2 text-amber-300 hover:text-amber-200"
+                    disabled={cd > 0 || !!busy || !myId}
+                    onClick={() => commit(p, true)}
+                    title={`Reach past Vigour: +${Math.round(ASH_DEBT.overdrawDamage * 100)}% damage now, +${ASH_DEBT.overdrawDebt} Ash Debt and higher risk`}
+                  >
+                    Overdraw
+                  </Button>
                 </div>
               );
             })
@@ -236,7 +267,9 @@ export function BossPanel({
           <p className="text-[10px] text-muted-foreground">
             {blessed
               ? "Your host is warded — charge freely."
-              : "Each charge risks one champion's life. The Lord never falls here."}
+              : `Each charge risks one champion's life; the Lord never falls here. Overdraw hits +${Math.round(
+                  ASH_DEBT.overdrawDamage * 100,
+                )}% harder now but banks ${ASH_DEBT.overdrawDebt} Ash Debt and risks more.`}
           </p>
         </div>
       )}

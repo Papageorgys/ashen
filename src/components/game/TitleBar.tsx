@@ -13,7 +13,7 @@ import { ClanCrest } from "@/components/game/ClanCrest";
 import { Counter } from "@/components/game/Counter";
 import { DEFAULT_CREST } from "@/lib/game/identity";
 import { MAX_PARTY_SIZE } from "@/lib/game/data";
-import { maxParties, scoreClan, type GameState } from "@/lib/game/engine";
+import { maxParties, scoreClan, wornTitle, type GameState } from "@/lib/game/engine";
 import { CASTLE } from "@/lib/game/rivals";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -52,6 +52,11 @@ export function TitleBar({
           <div className="min-w-0">
             <h1 className="gilded truncate font-display text-xl leading-tight sm:text-2xl">
               {founded ? state.clanName : `${state.leaderName}'s Company`}
+              {founded && wornTitle(state) ? (
+                <span className="ml-2 align-middle text-sm text-gold/80">
+                  {wornTitle(state)}
+                </span>
+              ) : null}
             </h1>
             <p className="truncate text-[11px] text-muted-foreground">
               {state.motto ? `“${state.motto}” · ` : ""}
