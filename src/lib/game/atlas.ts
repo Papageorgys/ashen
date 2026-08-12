@@ -20,12 +20,15 @@ export interface AtlasLocation {
   hue?: string;
   /** drill-down target: the id of the region map this place opens */
   region?: AtlasMapId;
+  /** the realm's seat on a region map — shown with its own glyph, not numbered */
+  seat?: boolean;
   /** play-mode framing (mirrors the zone gate/threat feel) */
   level?: number;
   threat?: number;
 }
 
-export type AtlasMapId = "aethyr" | "ember_court" | "hollow_covenant" | "free_holds";
+export type AtlasMapId =
+  "aethyr" | "ember_court" | "hollow_covenant" | "free_holds" | "gilded_compact";
 
 export interface AtlasMap {
   id: AtlasMapId;
@@ -141,6 +144,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         x: 23,
         y: 60,
         hue: A.gilded,
+        region: "gilded_compact",
         blurb:
           "Merchant princes and the ledger. Every road, toll and debt in the south runs through their counting-houses.",
       },
@@ -215,6 +219,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "vareth",
         name: "Castle Vareth",
         type: "stronghold",
+        seat: true,
         x: 57,
         y: 45,
         level: 40,
@@ -304,6 +309,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "drowned",
         name: "The Drowned Cathedrals",
         type: "holy",
+        seat: true,
         x: 50,
         y: 33,
         level: 36,
@@ -453,6 +459,91 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
       },
     ],
   },
+
+  gilded_compact: {
+    id: "gilded_compact",
+    title: "The Gilded Compact",
+    kind: "region",
+    hue: A.gilded,
+    parent: "aethyr",
+    subtitle:
+      "Realm of coin, contract and caravan. Where ledgers outweigh lords and oaths are sealed in gold — mercantile houses, free cities and hired hands bound beneath the ledger's law.",
+    art: "gilded-compact.png",
+    locations: [
+      {
+        id: "gc_founders",
+        name: "The Founders' Monument",
+        type: "monument",
+        seat: true,
+        x: 79,
+        y: 50,
+        level: 36,
+        threat: 640,
+        blurb:
+          "The ringed seat of the Compact, where its founders are enshrined. Oaths sworn beneath it outlast the houses that swore them.",
+      },
+      {
+        id: "gc1",
+        name: "Toll Gate of Brasslight",
+        type: "poi",
+        x: 18,
+        y: 41,
+        level: 6,
+        threat: 50,
+        blurb: "Tariff gate and customs keep where every road pays.",
+      },
+      {
+        id: "gc2",
+        name: "Market Ruin of Ten Scales",
+        type: "ruin",
+        x: 47,
+        y: 24,
+        level: 16,
+        threat: 180,
+        blurb: "Collapsed bazaar of debts unpaid and deals undone.",
+      },
+      {
+        id: "gc3",
+        name: "Duskroad Caravanserai",
+        type: "poi",
+        x: 48,
+        y: 40,
+        level: 10,
+        threat: 100,
+        blurb: "Wayfarer's rest and exchange beneath ancient coin vaults.",
+      },
+      {
+        id: "gc4",
+        name: "Coin Wharf of Ledgermere",
+        type: "poi",
+        x: 44,
+        y: 73,
+        level: 22,
+        threat: 280,
+        blurb: "Deepwater quay of tally and tide, where ships are weighed in coin.",
+      },
+      {
+        id: "gc5",
+        name: "Quarry Hollow of Ledgerstone",
+        type: "poi",
+        x: 55,
+        y: 17,
+        level: 26,
+        threat: 380,
+        blurb: "Source of pale stone marked with the Compact seal.",
+      },
+      {
+        id: "gc6",
+        name: "Ledger Keep of Accordance",
+        type: "stronghold",
+        x: 72,
+        y: 48,
+        level: 30,
+        threat: 500,
+        blurb: "Vault of ledgers, oaths, and arbitration beyond appeal.",
+      },
+    ],
+  },
 };
 
 /**
@@ -485,12 +576,20 @@ export const ATLAS_ZONE: Record<string, string> = {
   fh4: "drowned_chapel",
   fh5: "ashen_quarry",
   fh6: "moonveil_glade",
+  // Gilded Compact
+  gc_founders: "frost_hollow",
+  gc1: "briar_downs",
+  gc2: "sunken_crypt",
+  gc3: "ruined_orchard",
+  gc4: "saltmere_flats",
+  gc5: "ashen_quarry",
+  gc6: "obsidian_labyrinth",
 };
 
-/** The six numbered points of interest on a region map, in painting order. */
+/** The numbered points of interest on a region map (everything but the seat). */
 export function numberedLocations(map: AtlasMap): AtlasLocation[] {
   if (map.kind !== "region") return [];
-  return map.locations.filter((l) => l.id !== "vareth" && l.id !== "drowned");
+  return map.locations.filter((l) => !l.seat);
 }
 
 /** The marker face for a location: its painting number (1..6) or a type glyph. */

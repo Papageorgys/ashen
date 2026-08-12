@@ -11,6 +11,7 @@ relief plate, so the app builds and runs either way.
 | `ember-court.png`     | The Ember Court (region)            |
 | `hollow-covenant.png` | The Hollow Covenant (region)        |
 | `free-holds.png`      | The Free Holds (region)             |
+| `gilded-compact.png`  | The Gilded Compact (region)         |
 
 `.jpg`/`.webp` work too — just update the `art` field for that map in
 `src/lib/game/atlas.ts` to match the filename.
