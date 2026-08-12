@@ -455,6 +455,38 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
   },
 };
 
+/**
+ * Which real game zone each atlas place deploys to, so play-mode marches move an
+ * actual banner. The atlas places are lore points of interest, so this is a
+ * deliberate, level-matched mapping onto the mechanical ZONES (see data.ts);
+ * ids are unique within each region map.
+ */
+export const ATLAS_ZONE: Record<string, string> = {
+  // Ember Court
+  vareth: "abyss_gate",
+  ec1: "howling_warren",
+  ec2: "ruined_orchard",
+  ec3: "ashen_steppe",
+  ec4: "sunken_crypt",
+  ec5: "saltmere_flats",
+  ec6: "emberwood",
+  // Hollow Covenant
+  drowned: "frost_hollow",
+  hc1: "millpond_reeds",
+  hc2: "sunken_crypt",
+  hc3: "drowned_chapel",
+  hc4: "saltmere_flats",
+  hc5: "moonveil_glade",
+  hc6: "obsidian_labyrinth",
+  // Free Holds
+  fh1: "briar_downs",
+  fh2: "kingsroad_marches",
+  fh3: "howling_warren",
+  fh4: "drowned_chapel",
+  fh5: "ashen_quarry",
+  fh6: "moonveil_glade",
+};
+
 /** The six numbered points of interest on a region map, in painting order. */
 export function numberedLocations(map: AtlasMap): AtlasLocation[] {
   if (map.kind !== "region") return [];

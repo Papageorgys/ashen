@@ -561,7 +561,7 @@ function Index() {
                         from the continent into a realm, or march a banner and hold ground.
                       </p>
                     </header>
-                    <RealmAtlas />
+                    <RealmAtlas state={state} api={api} now={now} />
                   </div>
                   <div className="space-y-3">
                     <header>

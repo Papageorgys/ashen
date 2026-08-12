@@ -3,11 +3,15 @@ import { cn } from "@/lib/utils";
 import {
   ATLAS_MAPS,
   ATLAS_TYPE_LABEL,
+  ATLAS_ZONE,
   atlasMarker,
   type AtlasLocation,
   type AtlasMap,
   type AtlasMapId,
 } from "@/lib/game/atlas";
+import { ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
+import type { GameState, Party } from "@/lib/game/engine";
+import type { ClanApi } from "@/hooks/useClanGame";
 
 /**
  * RealmAtlas — the four painted maps of Aethyr, made interactive.
@@ -124,7 +128,19 @@ function markerShape(type: AtlasLocation["type"]) {
   }
 }
 
-export function RealmAtlas({ className }: { className?: string }) {
+export function RealmAtlas({
+  state,
+  api,
+  now,
+  className,
+}: {
+  /** live game state — when supplied with `api`, play mode deploys real banners */
+  state?: GameState;
+  api?: ClanApi;
+  /** ticking clock so marching/fighting banners show live progress */
+  now?: number;
+  className?: string;
+}) {
   const [currentId, setCurrentId] = useState<AtlasMapId>("aethyr");
   const [mode, setMode] = useState<Mode>("view");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -134,6 +150,10 @@ export function RealmAtlas({ className }: { className?: string }) {
   const [artFailed, setArtFailed] = useState<Record<string, boolean>>({});
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  /** live wiring: only when both state and api are handed in by the game */
+  const live = !!(api && state);
+  const clock = now ?? Date.now();
+
   const map = ATLAS_MAPS[currentId];
   const selected = useMemo(
     () => map.locations.find((l) => l.id === selectedId) ?? null,
@@ -141,6 +161,65 @@ export function RealmAtlas({ className }: { className?: string }) {
   );
   const crumbs = map.parent ? [ATLAS_MAPS[map.parent], map] : [map];
   const showArt = map.art && !artFailed[currentId];
+
+  /** the real zone an atlas place deploys to (region play only) */
+  const zoneOf = (loc: AtlasLocation) => ZONE_BY_ID[ATLAS_ZONE[loc.id] ?? ""];
+
+  const levelOf = useMemo(() => {
+    const m = new Map<string, number>();
+    state?.members.forEach((mem) => m.set(mem.id, mem.level));
+    return m;
+  }, [state?.members]);
+
+  const partyFloor = (p: Party) =>
+    p.memberIds.length ? Math.min(...p.memberIds.map((id) => levelOf.get(id) ?? 1)) : 1;
+
+  const currentZoneOf = (p: Party) => p.run?.zoneId ?? p.travel?.zoneId ?? p.farming ?? null;
+
+  /** banners standing on a given zone right now */
+  const partiesAt = (zoneId: string | undefined): Party[] =>
+    !zoneId || !state ? [] : state.parties.filter((p) => currentZoneOf(p) === zoneId);
+
+  /** rested banners that could march to a zone (have blades, meet its gate) */
+  const deployable = (zoneId: string | undefined): Party[] => {
+    const zone = zoneId ? ZONE_BY_ID[zoneId] : undefined;
+    if (!zone || !state) return [];
+    return state.parties.filter(
+      (p) =>
+        p.memberIds.length > 0 &&
+        !p.run &&
+        !p.travel &&
+        !p.farming &&
+        partyFloor(p) >= zone.reqLevel,
+    );
+  };
+
+  /** live march progress 0..100 for a banner on the map */
+  const progressOf = (p: Party): number => {
+    if (p.travel) {
+      const total = travelMsTo(p.travel.zoneId);
+      return Math.min(100, Math.max(0, 100 - ((p.travel.arrivesAt - clock) / total) * 100));
+    }
+    if (p.run) {
+      const dur = ZONE_BY_ID[p.run.zoneId]?.durationMs ?? 1;
+      return Math.min(100, Math.max(0, 100 - ((p.run.endsAt - clock) / dur) * 100));
+    }
+    return 0;
+  };
+
+  // the selected place resolved against live state
+  const selZone = selected && live ? zoneOf(selected) : undefined;
+  const selHere = selZone ? partiesAt(selZone.id) : [];
+  const selDeployable = selZone ? deployable(selZone.id) : [];
+
+  function marchLive(zoneId: string, party: Party, name: string) {
+    api?.sendParty(party.id, zoneId);
+    setStatus(`${party.name} marches on ${name}.`);
+  }
+  function recallLive(party: Party) {
+    api?.recallParty(party.id);
+    setStatus(`${party.name} recalled to the clan keep.`);
+  }
 
   function goTo(id: AtlasMapId) {
     // clear any marches from the map we're leaving
@@ -290,6 +369,11 @@ export function RealmAtlas({ className }: { className?: string }) {
             const face = atlasMarker(map, loc);
             const isSel = selectedId === loc.id;
             const isRealm = loc.type === "realm";
+            // live vs demo occupancy for the play-mode marker dot
+            const here = live ? partiesAt(zoneOf(loc)?.id) : [];
+            const fighting = live ? here.some((p) => p.run) : held[loc.id];
+            const marchingHere = live ? here.some((p) => p.travel && !p.run) : marching[loc.id];
+            const showDot = mode === "play" && (fighting || marchingHere);
             return (
               <div
                 key={loc.id}
@@ -320,12 +404,12 @@ export function RealmAtlas({ className }: { className?: string }) {
                   <span aria-hidden="true">{face}</span>
                 </button>
                 {/* hold / march dot in play mode */}
-                {mode === "play" && (held[loc.id] || marching[loc.id]) && (
+                {showDot && (
                   <span
                     aria-hidden="true"
                     className={cn(
                       "pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-black",
-                      held[loc.id] ? "bg-[#7ea86a]" : "bg-gold motion-safe:animate-ping",
+                      fighting ? "bg-[#7ea86a]" : "bg-gold motion-safe:animate-ping",
                     )}
                   />
                 )}
@@ -369,9 +453,12 @@ export function RealmAtlas({ className }: { className?: string }) {
             {mode === "play" && selected.level != null && (
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  ["Level", `${selected.level}+`],
-                  ["Threat", `${selected.threat}`],
-                  ["Hold", held[selected.id] ? "Yours" : "Open"],
+                  ["Level", `${selZone ? selZone.reqLevel : selected.level}+`],
+                  ["Threat", `${selZone ? selZone.threat : selected.threat}`],
+                  [
+                    live ? "Banners" : "Hold",
+                    live ? `${selHere.length}` : held[selected.id] ? "Yours" : "Open",
+                  ],
                 ].map(([label, value]) => (
                   <div
                     key={label}
@@ -388,6 +475,76 @@ export function RealmAtlas({ className }: { className?: string }) {
               </div>
             )}
 
+            {/* live play: which zone this maps to, banners here, and who can march */}
+            {mode === "play" && live && selZone && (
+              <div className="flex flex-col gap-2">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Field: <span className="text-gold">{selZone.name}</span>
+                  {selZone.kind === "dungeon" ? " · dungeon" : " · experience field"}
+                </div>
+
+                {selHere.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {selHere.map((p) => {
+                      const pct = progressOf(p);
+                      return (
+                        <div
+                          key={p.id}
+                          className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2 py-1.5"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-display text-xs text-gold">{p.name}</div>
+                            <div className="mt-0.5 h-[3px] w-full bg-white/10">
+                              <span
+                                className="block h-full bg-gold motion-safe:transition-[width]"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                            {p.travel ? "Marching" : "Fighting"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => recallLive(p)}
+                            className="shrink-0 rounded-sm border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] text-gold transition hover:border-gold"
+                          >
+                            Recall
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selDeployable.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      March a rested banner
+                    </div>
+                    {selDeployable.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => marchLive(selZone.id, p, selected.name)}
+                        className="flex items-center justify-between gap-2 rounded-sm border border-gold bg-gradient-to-b from-gold to-[#c69a3e] px-2.5 py-1.5 font-display text-xs uppercase tracking-[0.1em] text-[#120d05] transition hover:brightness-110"
+                      >
+                        <span className="truncate">March {p.name}</span>
+                        <span className="shrink-0 opacity-70">Lv {partyFloor(p)}+</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  selHere.length === 0 && (
+                    <p className="text-[11px] italic text-muted-foreground">
+                      No rested banner meets the Lv {selZone.reqLevel} gate — muster or level a
+                      warband, then march it from here.
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+
             <div className="mt-auto flex flex-col gap-2 pt-2">
               {selected.region && (
                 <button
@@ -398,7 +555,9 @@ export function RealmAtlas({ className }: { className?: string }) {
                   Enter {selected.name} ▸
                 </button>
               )}
+              {/* demo march (no live state wired) keeps the standalone prototype usable */}
               {mode === "play" &&
+                !live &&
                 selected.level != null &&
                 !selected.region &&
                 (held[selected.id] ? (
@@ -429,7 +588,9 @@ export function RealmAtlas({ className }: { className?: string }) {
         <span className="flex-1 italic">
           {status ||
             (mode === "play"
-              ? "Play mode — pick a place and march a banner; hold it to earn."
+              ? live
+                ? "Play mode — pick a field and march one of your rested banners; it deploys for real."
+                : "Play mode — pick a place and march a banner; hold it to earn."
               : "View mode — click any marked place to read its lore, or enter a realm.")}
         </span>
         <span className="flex flex-wrap gap-3 text-[9px] uppercase tracking-[0.1em]">
