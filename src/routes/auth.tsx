@@ -13,16 +13,16 @@ import { Toaster } from "@/components/ui/sonner";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Enter the Realm — Clan Leader" },
+      { title: "Ashen Legacy — Enter the Realm" },
       {
         name: "description",
         content:
-          "Sign in to carry your company across devices, claim your clan name on the realm ladder and stand among every other clan in the Ashen Realm.",
+          "Sign in to carry your company across devices, claim your clan name on the realm ladder and stand among every other clan in Aethyr.",
       },
-      { property: "og:title", content: "Enter the Realm — Clan Leader" },
+      { property: "og:title", content: "Ashen Legacy — Enter the Realm" },
       {
         property: "og:description",
-        content: "Sign in or raise a new banner in the Ashen Realm.",
+        content: "Sign in or raise a new banner in Aethyr.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -100,8 +100,8 @@ function AuthPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-5 px-5 py-12">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Banners of the</p>
-        <h1 className="gilded font-display text-4xl">Ashen Realm</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">The war for Aethyr</p>
+        <h1 className="gilded font-display text-4xl">Ashen Legacy</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           The realm is open only to sworn lords. Sign in or raise a new banner to take the road,
           keep your company across devices and stand on the ladder beside every other clan.
