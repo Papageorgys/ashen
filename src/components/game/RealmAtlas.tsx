@@ -468,6 +468,36 @@ export function RealmAtlas({
             </button>
           ))}
         </div>
+        <div
+          className="inline-flex overflow-hidden rounded-sm border border-white/10"
+          role="group"
+          aria-label="Zoom"
+        >
+          <button
+            type="button"
+            onClick={() => zoomButton(-1)}
+            aria-label="Zoom out"
+            className="px-2 py-1 font-display text-sm text-gold transition-colors hover:bg-gold/15"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            onClick={resetView}
+            aria-label="Reset view"
+            className="border-x border-white/10 px-2 py-1 font-display text-xs text-gold transition-colors hover:bg-gold/15"
+          >
+            ⤢
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomButton(1)}
+            aria-label="Zoom in"
+            className="px-2 py-1 font-display text-sm text-gold transition-colors hover:bg-gold/15"
+          >
+            +
+          </button>
+        </div>
       </div>
 
       <div className={cn("grid", selected ? "md:grid-cols-[1fr_20rem]" : "grid-cols-1")}>
@@ -534,15 +564,17 @@ export function RealmAtlas({
             />
           </svg>
 
-          {/* cartouche */}
-          <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[46%] rounded-sm border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-sm">
-            <h3 className="font-display text-base uppercase tracking-[0.12em] text-gold">
-              {map.title}
-            </h3>
-            <p className="mt-1 text-[11px] italic leading-snug text-muted-foreground">
-              {map.subtitle}
-            </p>
-          </div>
+          {/* cartouche — only over the relief plate; the paintings carry their own */}
+          {!showArt && (
+            <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[46%] rounded-sm border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-sm">
+              <h3 className="font-display text-base uppercase tracking-[0.12em] text-gold">
+                {map.title}
+              </h3>
+              <p className="mt-1 text-[11px] italic leading-snug text-muted-foreground">
+                {map.subtitle}
+              </p>
+            </div>
+          )}
 
           {/* hotspots (pan & zoom with the art) */}
           <div className="absolute inset-0 origin-top-left" style={{ transform: worldTransform }}>
@@ -564,7 +596,10 @@ export function RealmAtlas({
                   {isRealm && (
                     <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute left-1/2 top-1/2 h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full motion-safe:animate-pulse"
+                      className={cn(
+                        "pointer-events-none absolute left-1/2 top-1/2 h-11 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100",
+                        isSel && "opacity-100",
+                      )}
                       style={{
                         background: `radial-gradient(circle, ${loc.hue}66 0%, transparent 68%)`,
                       }}
@@ -578,8 +613,8 @@ export function RealmAtlas({
                     }}
                     aria-label={`${loc.name} — ${ATLAS_TYPE_LABEL[loc.type]}`}
                     className={cn(
-                      "grid place-items-center border-[1.5px] font-display font-semibold text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold group-hover:scale-110",
-                      isRealm ? "h-8 w-8 text-sm" : "h-6 w-6 text-[11px]",
+                      "grid place-items-center border font-display font-semibold text-gold shadow-[0_1px_3px_oklch(0_0_0/0.7)] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold group-hover:scale-125",
+                      isRealm ? "h-5 w-5 text-[11px]" : "h-4 w-4 text-[9px]",
                       markerShape(loc.type),
                       "bg-[radial-gradient(circle_at_50%_35%,#2a2114,#0d0a06)]",
                       isSel && "scale-110 ring-2 ring-gold",
@@ -592,15 +627,15 @@ export function RealmAtlas({
                     <span
                       aria-hidden="true"
                       className={cn(
-                        "pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-black",
+                        "pointer-events-none absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-black",
                         fighting ? "bg-[#7ea86a]" : "bg-gold motion-safe:animate-ping",
                       )}
                     />
                   )}
                   <div
                     className={cn(
-                      "pointer-events-none mt-1 whitespace-nowrap rounded-[2px] bg-black/60 px-1.5 py-px text-center font-display text-[10px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-                      (isSel || mode === "view") && "opacity-100",
+                      "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-[2px] bg-black/75 px-1.5 py-px text-center font-display text-[10px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
+                      isSel && "opacity-100",
                     )}
                     style={{ color: "#e7d7ac" }}
                   >
@@ -609,34 +644,6 @@ export function RealmAtlas({
                 </div>
               );
             })}
-          </div>
-
-          {/* zoom controls */}
-          <div className="absolute bottom-2 left-2 z-10 flex flex-col overflow-hidden rounded-sm border border-white/10 bg-black/70">
-            <button
-              type="button"
-              onClick={() => zoomButton(1)}
-              aria-label="Zoom in"
-              className="h-7 w-7 border-b border-white/10 font-display text-base text-gold transition-colors hover:bg-gold/15"
-            >
-              +
-            </button>
-            <button
-              type="button"
-              onClick={() => zoomButton(-1)}
-              aria-label="Zoom out"
-              className="h-7 w-7 border-b border-white/10 font-display text-base text-gold transition-colors hover:bg-gold/15"
-            >
-              −
-            </button>
-            <button
-              type="button"
-              onClick={resetView}
-              aria-label="Reset view"
-              className="h-7 w-7 font-display text-xs text-gold transition-colors hover:bg-gold/15"
-            >
-              ⤢
-            </button>
           </div>
 
           {/* minimap: the visible window over the whole map, shown when zoomed */}
