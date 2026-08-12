@@ -68,17 +68,17 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Clan Leader — Banners of the Ashen Realm" },
+      { title: "Ashen Legacy — Clan Leader" },
       {
         name: "description",
         content:
-          "Lead a fantasy MMO clan: recruit sworn blades, raise your clan level, forge gear from raid drops and field as many full warbands of five as you can.",
+          "Ashen Legacy: lead a dark-fantasy MMO clan across Aethyr — recruit sworn blades, raise your clan level, forge gear from raid drops and field as many full warbands of five as you can.",
       },
-      { property: "og:title", content: "Clan Leader — Banners of the Ashen Realm" },
+      { property: "og:title", content: "Ashen Legacy — Clan Leader" },
       {
         property: "og:description",
         content:
-          "Recruit, level, loot and forge. Build the mightiest clan in the Ashen Realm, one warband of five at a time.",
+          "Recruit, level, loot and forge. Build the mightiest clan in Aethyr, one warband of five at a time.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -104,8 +104,8 @@ function Founding({ onStart }: { onStart: (f: FoundingT) => void }) {
   return (
     <div className="relative mx-auto flex min-h-dvh max-w-3xl flex-col justify-center gap-5 px-5 py-12">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Banners of the</p>
-        <h1 className="gilded font-display text-6xl sm:text-7xl">Ashen Realm</h1>
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">The war for Aethyr</p>
+        <h1 className="gilded font-display text-6xl sm:text-7xl">Ashen Legacy</h1>
         <p className="mt-3 max-w-xl text-sm text-muted-foreground">
           You are not a spectator. You take the field yourself — your blade, your face, your arms on
           the banner. Champions who fall in the deep places do not come back.
@@ -431,7 +431,7 @@ function Index() {
         id: Date.now(),
         title: clanLevel === 1 ? "A Clan is Born" : `Clan Level ${clanLevel}`,
         subtitle:
-          clanLevel === 1 ? "Your crest flies over the Ashen Realm" : "The banners rise higher",
+          clanLevel === 1 ? "Your crest flies over Aethyr" : "The banners rise higher",
       });
     } else if (holdsCastle && !before.holdsCastle) {
       setFlourish({ id: Date.now(), title: "Vareth Falls", subtitle: "The castle is yours" });

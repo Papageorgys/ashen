@@ -24,7 +24,7 @@ export function WorldPanel({ signedIn, myId }: { signedIn: boolean; myId?: strin
         <div>
           <h2 className="font-display text-lg text-gold">The Realm Ladder</h2>
           <p className="text-xs text-muted-foreground">
-            Every clan in the Ashen Realm, ranked by full banners then reputation. Refreshes every
+            Every clan in Aethyr, ranked by full banners then reputation. Refreshes every
             half minute.
           </p>
         </div>
