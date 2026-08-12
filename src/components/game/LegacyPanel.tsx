@@ -4,6 +4,8 @@ import {
   renownScore,
   renownRank,
   inscribeCost,
+  CLAN_TITLES,
+  earnedTitles,
   DEED_LABEL,
   type DeedClass,
   type GameState,
@@ -40,12 +42,17 @@ export function LegacyPanel({
   api,
 }: {
   state: GameState;
-  api: { inscribeDeed: (id: string) => void; declareReckoning: () => void };
+  api: {
+    inscribeDeed: (id: string) => void;
+    declareReckoning: () => void;
+    wearTitle: (titleId: string | null) => void;
+  };
 }) {
   const deeds = useMemo(() => deedsFromState(state), [state]);
   const score = renownScore(deeds);
   const rank = renownRank(score);
   const inscribed = new Set(state.inscribed ?? []);
+  const earned = useMemo(() => new Set(earnedTitles(state).map((t) => t.id)), [state]);
 
   const span = rank.next ? rank.next.at - rank.floor : 1;
   const into = Math.min(1, Math.max(0, (score - rank.floor) / span));
@@ -81,6 +88,55 @@ export function LegacyPanel({
               ? `${rank.next.at - score} renown until “${rank.next.title}.”`
               : "The highest renown in the realm. Your name will not be forgotten."}
           </p>
+        </div>
+      </section>
+
+      {/* ------------------------------ worn titles ---------------------------- */}
+      <section className="panel rounded-sm p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="font-display text-lg text-gold">Titles</h3>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            worn beside your name · never a stat
+          </span>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Earn honorifics by Renown and by Deeds, then choose which the clan wears.
+        </p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {CLAN_TITLES.map((t) => {
+            const has = earned.has(t.id);
+            const worn = state.title === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                disabled={!has}
+                onClick={() => api.wearTitle(worn ? null : t.id)}
+                className={`rounded-sm border p-2 text-left transition ${
+                  worn
+                    ? "border-gold/60 bg-gold/10"
+                    : has
+                      ? "border-border/60 hover:border-gold/50"
+                      : "border-border/40 opacity-50"
+                }`}
+                title={has ? (worn ? "Worn — click to remove" : "Click to wear") : t.desc}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`font-display text-sm ${worn ? "text-gold" : "text-foreground"}`}>
+                    “{t.title}”
+                  </span>
+                  {worn ? (
+                    <span className="text-[9px] uppercase tracking-widest text-gold">worn</span>
+                  ) : has ? (
+                    <span className="text-[9px] uppercase tracking-widest text-emerald-400">earned</span>
+                  ) : (
+                    <span className="text-[9px] uppercase tracking-widest text-muted-foreground">locked</span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{t.desc}</p>
+              </button>
+            );
+          })}
         </div>
       </section>
 

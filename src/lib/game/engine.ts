@@ -320,6 +320,8 @@ export interface GameState {
   chronicle?: ChronicleEntry[];
   /** ids of Deeds the clan has inscribed at the Founders' Monument (Legacy §7.4) */
   inscribed?: string[];
+  /** the id of the wearable clan title the leader has chosen to display (§7.5) */
+  title?: string | undefined;
   /** the host's carried Ash Debt (§3) — accrued in the fight, cleared only by rest */
   ashDebt?: number;
   /** the Long Night (§5) — rising pressure, and the window while it walks the realm */
@@ -1153,6 +1155,76 @@ export function renownRank(score: number): { title: string; next: { title: strin
   const cur = RENOWN_RANKS[idx]!;
   const next = idx + 1 < RENOWN_RANKS.length ? RENOWN_RANKS[idx + 1]! : null;
   return { title: cur.title, next, floor: cur.at };
+}
+
+/**
+ * Wearable clan titles (§7.5) — Renown made *visible*. A rank is a number the
+ * clan reaches; a title is an honorific the clan *wears*, chosen by the leader
+ * and shown beside the clan's name. Titles are earned by Renown thresholds and
+ * by specific Deeds, but — like Renown itself — grant no stat. Prestige worn on
+ * the sleeve, never power ([CANON] §7.5).
+ */
+export interface ClanTitle {
+  id: string;
+  /** the honorific as worn, e.g. "Storied of Aethyr" */
+  title: string;
+  /** how it is earned — shown in the picker */
+  desc: string;
+  unlocked: (state: GameState, ctx: { score: number; deeds: DeedRecord[] }) => boolean;
+}
+
+export const CLAN_TITLES: ClanTitle[] = [
+  { id: "named", title: "Named of Aethyr", desc: "Reach 120 Renown.", unlocked: (_s, c) => c.score >= 120 },
+  { id: "renowned", title: "the Renowned", desc: "Reach 350 Renown.", unlocked: (_s, c) => c.score >= 350 },
+  { id: "storied", title: "the Storied", desc: "Reach 800 Renown.", unlocked: (_s, c) => c.score >= 800 },
+  { id: "legendary", title: "the Legendary", desc: "Reach 1600 Renown.", unlocked: (_s, c) => c.score >= 1600 },
+  { id: "immortal", title: "the Immortal", desc: "Reach 3200 Renown.", unlocked: (_s, c) => c.score >= 3200 },
+  {
+    id: "warden_vareth",
+    title: "Warden of Vareth",
+    desc: "Hold Castle Vareth.",
+    unlocked: (s) => s.castle?.holder === "player",
+  },
+  {
+    id: "nightholder",
+    title: "Who Held the Long Night",
+    desc: "Hold the line through a Long Night.",
+    unlocked: (_s, c) => c.deeds.some((d) => d.title.startsWith("Held the line through the Long Night")),
+  },
+  {
+    id: "oathkeeper",
+    title: "the Oathkeeper",
+    desc: "Have an Oathsworn champion fall in your name.",
+    unlocked: (s) => (s.memorial ?? []).some((f) => f.oath),
+  },
+  {
+    id: "housebreaker",
+    title: "Breaker of Houses",
+    desc: "Rout rival clans 12 times over.",
+    unlocked: (s) => (s.rivals ?? []).reduce((n, r) => n + (r.routed ?? 0), 0) >= 12,
+  },
+];
+
+export const CLAN_TITLE_BY_ID: Record<string, ClanTitle> = Object.fromEntries(
+  CLAN_TITLES.map((t) => [t.id, t]),
+);
+
+/** Which titles the clan has earned the right to wear, given its record. */
+export function earnedTitles(state: GameState): ClanTitle[] {
+  const deeds = deedsFromState(state);
+  const score = renownScore(deeds);
+  const ctx = { score, deeds };
+  return CLAN_TITLES.filter((t) => t.unlocked(state, ctx));
+}
+
+/** The honorific the clan currently wears, or "" — validated it is still earned. */
+export function wornTitle(state: GameState): string {
+  if (!state.title) return "";
+  const t = CLAN_TITLE_BY_ID[state.title];
+  if (!t) return "";
+  return t.unlocked(state, { deeds: deedsFromState(state), score: renownScore(deedsFromState(state)) })
+    ? t.title
+    : "";
 }
 
 /** What it costs in gold to carve a Deed into the Monument (§7.4 — being remembered is paid for). */

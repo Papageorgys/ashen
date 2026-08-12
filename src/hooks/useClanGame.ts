@@ -104,6 +104,8 @@ import {
   rallyReward,
   deedsFromState,
   renownScore,
+  earnedTitles,
+  CLAN_TITLE_BY_ID,
   inscribeCost,
   ASH_DEBT,
   isSearing,
@@ -1161,6 +1163,22 @@ export function useClanGame() {
           `“${deed.title}” is carved into the stone for ${cost} gold. The Ash always collects — even for remembrance.`,
         );
         toast.success(`Inscribed: ${deed.title}`);
+      }),
+
+    /** Wear an earned clan title (§7.5), or bare the clan's name (null). */
+    wearTitle: (titleId: string | null) =>
+      update((s) => {
+        if (titleId === null) {
+          s.title = undefined;
+          toast("The clan wears its name unadorned.");
+          return;
+        }
+        const t = CLAN_TITLE_BY_ID[titleId];
+        if (!t) return;
+        const earned = earnedTitles(s).some((x) => x.id === titleId);
+        if (!earned) return void toast("That honour has not been earned yet.");
+        s.title = titleId;
+        toast.success(`The clan is styled “${t.title}.”`);
       }),
 
     /* ------------------------------ world boss ------------------------------- */
