@@ -8,6 +8,10 @@ import {
   LONG_NIGHT_TIDE,
   refineAshValue,
   loanCeiling,
+  insurePremium,
+  insured,
+  bountyOn,
+  LEDGER,
   siegeReady,
   VASSAL_HOUSES,
   vassalPower,
@@ -30,6 +34,8 @@ export function RealmPanel({
     setCastleWindow: (startHour: number | null, hours: number) => void;
     takeLoan: (amount: number) => void;
     repayLoan: () => void;
+    buyInsurance: () => void;
+    placeBounty: (rivalId: string, amount: number) => void;
     swearVassal: (houseId: string) => void;
     releaseVassal: (houseId: string) => void;
   };
@@ -258,6 +264,35 @@ export function RealmPanel({
             ))}
           </div>
         )}
+
+        {/* kit insurance (§4.3, §6.3) */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
+          {insured(state) ? (
+            <>
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                <span className="font-display text-emerald-400">Host insured.</span> The Compact bears
+                the risk — a covered fall pays out. Cover ends in{" "}
+                {Math.max(0, ((state.insurance?.until ?? 0) - Date.now()) / 86_400_000).toFixed(1)} days.
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                Underwrite the host against full-loot: pay a premium now, and a champion's fall pays
+                back a share of what was lost.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={api.buyInsurance}
+                disabled={state.gold < insurePremium(state)}
+                title={state.gold < insurePremium(state) ? `Need ${insurePremium(state)} gold` : undefined}
+              >
+                Insure the host — {insurePremium(state).toLocaleString()}g
+              </Button>
+            </>
+          )}
+        </div>
       </section>
 
       {/* -------------------------------- vassals ------------------------------ */}
@@ -369,6 +404,36 @@ export function RealmPanel({
                   They hold no ground right now. That will not last.
                 </p>
               )}
+
+              {/* a bounty on their head, escrowed with the Compact (§6.3) */}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2">
+                {bountyOn(state, r.id) > 0 ? (
+                  <span className="text-[11px] text-amber-300/90">
+                    Bounty on their head: {bountyOn(state, r.id).toLocaleString()}g — paid when you
+                    break them.
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    No price on their head yet.
+                  </span>
+                )}
+                <div className="flex gap-1.5">
+                  {[300, 800].map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => api.placeBounty(r.id, a)}
+                      disabled={state.gold < a}
+                      className="rounded-sm border border-border/60 px-2 py-1 text-[11px] transition hover:border-amber-400/60 hover:text-amber-300 disabled:opacity-40"
+                      title={`Escrow ${a}g with the Compact (they take ${Math.round(
+                        LEDGER.bountyCut * 100,
+                      )}%); the rest pays out when this rival is broken`}
+                    >
+                      Post {a}g
+                    </button>
+                  ))}
+                </div>
+              </div>
             </article>
           );
         })}

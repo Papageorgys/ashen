@@ -328,6 +328,10 @@ export interface GameState {
   rawAsh?: number;
   /** an outstanding debt to the Gilded Compact's Ledger (§6.3) */
   loan?: { principal: number; owed: number; dueAt: number } | undefined;
+  /** a Compact kit-insurance policy in force (§4.3, §6.3) — a covered fall pays out */
+  insurance?: { until: number; premium: number } | undefined;
+  /** gold escrowed on rivals' heads through the Ledger (§6.3): rivalId → net bounty */
+  bounties?: Record<string, number>;
   /** ids of the vassal houses sworn to your banner (§8.1) */
   vassals?: string[];
   /** the current Season of Ash (§1.3) — each Reckoning begins a new one */
@@ -1383,11 +1387,42 @@ export const LEDGER = {
   maxLoanPerLevel: 400, // borrowing cap scales with clan level
   overdueCompound: 0.06, // per-hour interest once overdue
   overdueRepDrip: 2, // reputation lost per hour once overdue
+  // Kit insurance (§4.3, §6.3): a premium buys a term of cover, and a covered
+  // fall pays out a fraction of the lost champion's worth — full-loot stings
+  // less if you paid the Compact first.
+  insureTermMs: 3 * 86_400_000,
+  insurePremiumPerLevel: 45,
+  insurePayoutPerLevel: 55,
+  // Bounties (§6.3): escrow gold on a rival's head; the Compact skims a cut and
+  // holds the rest until the mark is broken, then pays out in gold and standing.
+  bountyCut: 0.15,
+  bountyMin: 150,
+  bountyRepPer100: 6,
 };
 
 /** The most gold the Compact will advance a clan of this standing. */
 export function loanCeiling(state: GameState): number {
   return Math.max(500, state.clanLevel * LEDGER.maxLoanPerLevel);
+}
+
+/** The premium the Compact asks to underwrite the host for a term (§6.3). */
+export function insurePremium(state: GameState): number {
+  return Math.max(150, Math.round(state.clanLevel * LEDGER.insurePremiumPerLevel));
+}
+
+/** Is a Compact kit-insurance policy currently in force? */
+export function insured(state: GameState, now: number = Date.now()): boolean {
+  return !!state.insurance && now < state.insurance.until;
+}
+
+/** What the Compact pays out for a covered champion of this level (§4.3). */
+export function insurePayout(level: number): number {
+  return Math.round(Math.max(1, level) * LEDGER.insurePayoutPerLevel);
+}
+
+/** Net gold escrowed on a rival's head, after the Compact's cut. */
+export function bountyOn(state: GameState, rivalId: string): number {
+  return state.bounties?.[rivalId] ?? 0;
 }
 
 /**

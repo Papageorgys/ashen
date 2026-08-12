@@ -112,6 +112,10 @@ import {
   refineAshValue,
   LEDGER,
   loanCeiling,
+  insurePremium,
+  insured,
+  insurePayout,
+  bountyOn,
   VASSAL_BY_ID,
   uid,
   xpForLevel,
@@ -519,6 +523,12 @@ export function useClanGame() {
                   `${m.name} died in ${zone.name}. There was no body to bring home.`,
                   "bad",
                 );
+                // the Compact honours a policy in force (§6.3) — full-loot stings less
+                if (insured(s, now)) {
+                  const payout = insurePayout(m.level);
+                  s.gold += payout;
+                  pushLog(s, `The Compact paid out ${payout} gold on ${m.name}'s policy.`, "good");
+                }
                 chronicle(
                   s,
                   "loss",
@@ -1287,6 +1297,44 @@ export function useClanGame() {
         s.loan = undefined;
       }),
 
+    /** Buy a term of Compact kit-insurance (§4.3, §6.3): a covered fall pays out. */
+    buyInsurance: () =>
+      update((s) => {
+        const now = Date.now();
+        if (insured(s, now))
+          return void toast("A policy is already in force. The Compact will not double-write it.");
+        const premium = insurePremium(s);
+        if (s.gold < premium) return void toast.error(`The Compact asks ${premium} gold to underwrite the host.`);
+        s.gold -= premium;
+        s.insurance = { until: now + LEDGER.insureTermMs, premium };
+        pushLog(
+          s,
+          `The Compact underwrites the host — ${premium} gold. A covered fall now pays out.`,
+          "good",
+        );
+        toast.success("Host insured. The Ledger bears the risk now.");
+      }),
+
+    /** Place a bounty on a rival's head through the Ledger (§6.3). */
+    placeBounty: (rivalId: string, amount: number) =>
+      update((s) => {
+        const r = s.rivals?.find((x) => x.id === rivalId);
+        if (!r) return;
+        const name = RIVAL_BY_ID[rivalId]?.name ?? "the rival";
+        const stake = Math.max(LEDGER.bountyMin, Math.round(amount));
+        if (s.gold < stake) return void toast.error(`You need ${stake} gold to post that bounty.`);
+        s.gold -= stake;
+        const net = Math.round(stake * (1 - LEDGER.bountyCut));
+        s.bounties = s.bounties ?? {};
+        s.bounties[rivalId] = (s.bounties[rivalId] ?? 0) + net;
+        pushLog(
+          s,
+          `A bounty is posted on ${name} — ${net} gold escrowed with the Compact (${stake - net} taken as their cut).`,
+          "info",
+        );
+        toast.success(`Bounty on ${name}: ${net} gold on their head.`);
+      }),
+
     /** Refine the raw-Ash hoard into stable gold before it burns off (§6.2). */
     refineAsh: () =>
       update((s) => {
@@ -1441,6 +1489,11 @@ export function useClanGame() {
               oath: m.oath,
             });
             pushLog(s, `${m.name} was killed fighting ${name}.`, "bad");
+            if (insured(s, Date.now())) {
+              const payout = insurePayout(m.level);
+              s.gold += payout;
+              pushLog(s, `The Compact paid out ${payout} gold on ${m.name}'s policy.`, "good");
+            }
           }
         }
         if (res.win) {
@@ -1457,6 +1510,20 @@ export function useClanGame() {
             `Their tax collectors were sent home without their banners. +60 reputation.`,
           );
           toast.success(`${zone.name} is free of ${name}.`);
+          // a bounty on this rival's head clears through the Ledger (§6.3)
+          const bounty = bountyOn(s, rivalId);
+          if (bounty > 0 && s.bounties) {
+            const repBonus = Math.round((bounty / 100) * LEDGER.bountyRepPer100);
+            s.gold += bounty;
+            s.reputation += repBonus;
+            delete s.bounties[rivalId];
+            pushLog(
+              s,
+              `The Compact settles the bounty on ${name} — ${bounty} gold and +${repBonus} standing.`,
+              "good",
+            );
+            toast.success(`Bounty claimed: ${bounty} gold, +${repBonus} rep.`);
+          }
         } else {
           r.hostility = Math.min(100, r.hostility + 18);
           s.reputation = Math.max(0, s.reputation - 25);
