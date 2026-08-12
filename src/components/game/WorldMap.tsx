@@ -403,7 +403,7 @@ export function WorldMap({
       <div
         className="relative h-[clamp(280px,calc(100dvh-14rem),640px)] w-full bg-map-parchment"
         role={interactive ? "application" : undefined}
-        aria-label={interactive ? "War table: deploy banners across the Ashen Realm" : undefined}
+        aria-label={interactive ? "War table: deploy banners across Aethyr" : undefined}
       >
         <AtlasTerrain />
         <AtlasMotifs />
@@ -502,9 +502,11 @@ export function WorldMap({
         {/* cartouche */}
         <div className="pointer-events-none absolute left-3 top-3 border border-map-ink/50 bg-map-parchment/70 px-2 py-1">
           <div className="font-display text-[11px] uppercase tracking-[0.28em] text-map-ink">
-            The Ashen Realm
+            Aethyr
           </div>
-          <div className="text-[9px] italic text-map-ink-soft">drawn for the clan council</div>
+          <div className="text-[9px] italic text-map-ink-soft">
+            three centuries after the Ash — drawn for the clan council
+          </div>
         </div>
 
         {/* the clan keep: home square for resting banners */}
