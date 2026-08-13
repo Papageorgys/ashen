@@ -670,7 +670,10 @@ export function RealmAtlas({
           tabIndex={0}
           aria-label={`${map.title} map — drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom`}
           className={cn(
-            "relative h-[clamp(300px,calc(100dvh-16rem),680px)] w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
+            // 4:3 box matching the paintings, so the whole map fits (no crop) and
+            // the percent-based hotspots line up exactly with the art. max-w is
+            // max-h*4/3 so the box stays 4:3 when height-capped, centred otherwise.
+            "relative mx-auto aspect-[4/3] w-full max-h-[68dvh] max-w-[90dvh] touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
             zoom > 1 && "cursor-grab active:cursor-grabbing",
           )}
           onPointerDown={onPointerDown}
@@ -834,7 +837,7 @@ export function RealmAtlas({
           {/* minimap: the visible window over the whole map, shown when zoomed */}
           {zoom > 1 && (
             <div
-              className="pointer-events-none absolute right-2 top-2 z-10 h-[52px] w-[84px] overflow-hidden rounded-sm border border-white/15 bg-black/70"
+              className="pointer-events-none absolute right-2 top-2 z-10 h-[63px] w-[84px] overflow-hidden rounded-sm border border-white/15 bg-black/70"
               aria-hidden="true"
             >
               <div
