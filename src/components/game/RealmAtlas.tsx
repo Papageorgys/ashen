@@ -28,6 +28,9 @@ import type { ClanApi } from "@/hooks/useClanGame";
 type Mode = "view" | "play";
 
 const MAP_BASE = `${import.meta.env.BASE_URL}maps/`;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+const FLY_MS = 620;
 
 /** dark-relief fallback drawn when a painting file is absent */
 function ReliefPlate({ map }: { map: AtlasMap }) {
@@ -129,6 +132,65 @@ function markerShape(type: AtlasLocation["type"]) {
   }
 }
 
+type Transit = { toId: AtlasMapId; kind: "enter" | "exit"; focal?: { x: number; y: number } };
+
+/** the incoming map, animated over the top during a fly-in / fly-out */
+function TransitionOverlay({
+  transit: t,
+  artFailed,
+  viewportRef,
+  onArtError,
+}: {
+  transit: Transit;
+  artFailed: Record<string, boolean>;
+  viewportRef: React.RefObject<HTMLDivElement | null>;
+  onArtError: (id: AtlasMapId) => void;
+}) {
+  const tMap = ATLAS_MAPS[t.toId];
+  const tArt = tMap.art && !artFailed[t.toId];
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const vp = viewportRef.current;
+    const w = vp?.clientWidth ?? 1;
+    const h = vp?.clientHeight ?? 1;
+    el.style.transition = "none";
+    el.style.opacity = "0";
+    if (t.kind === "enter") {
+      el.style.transformOrigin = "center";
+      el.style.transform = "scale(1.12)";
+    } else {
+      const fx = (t.focal?.x ?? 50) / 100;
+      const fy = (t.focal?.y ?? 50) / 100;
+      el.style.transformOrigin = "top left";
+      el.style.transform = `translate(${w / 2 - fx * w * MAX_ZOOM}px, ${h / 2 - fy * h * MAX_ZOOM}px) scale(${MAX_ZOOM})`;
+    }
+    const id = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        el.style.transition = `opacity ${FLY_MS}ms ease, transform ${FLY_MS}ms cubic-bezier(.4,0,.2,1)`;
+        el.style.opacity = "1";
+        el.style.transform = t.kind === "enter" ? "scale(1)" : "translate(0px,0px) scale(1)";
+      }),
+    );
+    return () => cancelAnimationFrame(id);
+  }, [t, viewportRef]);
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0 z-[8]" aria-hidden="true">
+      {tArt ? (
+        <img
+          src={`${MAP_BASE}${tMap.art}`}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => onArtError(t.toId)}
+        />
+      ) : (
+        <ReliefPlate map={tMap} />
+      )}
+    </div>
+  );
+}
+
 export function RealmAtlas({
   state,
   api,
@@ -152,8 +214,6 @@ export function RealmAtlas({
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // ---- pan & zoom ----
-  const MIN_ZOOM = 1;
-  const MAX_ZOOM = 4;
   const viewportRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -165,6 +225,16 @@ export function RealmAtlas({
     zoomRef.current = zoom;
     panRef.current = pan;
   }, [zoom, pan]);
+
+  // ---- google-maps-style level transitions (fly into / out of a realm) ----
+  const [flying, setFlying] = useState(false);
+  const [transit, setTransit] = useState<Transit | null>(null);
+  const currentIdRef = useRef(currentId);
+  useEffect(() => {
+    currentIdRef.current = currentId;
+  }, [currentId]);
+  const animating = useRef(false);
+  const requestZoomRef = useRef<(factor: number, cx: number, cy: number) => void>(() => {});
 
   const clampPan = useCallback((p: { x: number; y: number }, z: number) => {
     const vp = viewportRef.current;
@@ -202,11 +272,11 @@ export function RealmAtlas({
       e.preventDefault();
       const rect = vp.getBoundingClientRect();
       const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
-      zoomAt(zoomRef.current * factor, e.clientX - rect.left, e.clientY - rect.top);
+      requestZoomRef.current(factor, e.clientX - rect.left, e.clientY - rect.top);
     };
     vp.addEventListener("wheel", onWheel, { passive: false });
     return () => vp.removeEventListener("wheel", onWheel);
-  }, [zoomAt]);
+  }, []);
 
   // active pointers, so one finger pans and two fingers pinch-zoom
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -236,8 +306,9 @@ export function RealmAtlas({
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
       const rect = vp.getBoundingClientRect();
       moved.current = true;
-      zoomAt(
-        (pinch.current.zoom * dist) / pinch.current.dist,
+      const target = (pinch.current.zoom * dist) / pinch.current.dist;
+      requestZoomRef.current(
+        target / zoomRef.current,
         (a.x + b.x) / 2 - rect.left,
         (a.y + b.y) / 2 - rect.top,
       );
@@ -265,19 +336,23 @@ export function RealmAtlas({
   };
   const onDoubleClick = (e: React.MouseEvent) => {
     const vp = viewportRef.current;
-    if (!vp) return;
+    if (!vp || animating.current) return;
     const rect = vp.getBoundingClientRect();
-    zoomAt(
-      zoomRef.current < MAX_ZOOM ? zoomRef.current * 1.8 : 1,
-      e.clientX - rect.left,
-      e.clientY - rect.top,
-    );
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    // double-clicking a realm on the continent flies straight in
+    const cur = ATLAS_MAPS[currentIdRef.current];
+    if (cur.kind === "continent") {
+      const realm = realmNearFocal(cx, cy);
+      if (realm?.region) return enterRegion(realm);
+    }
+    zoomAt(zoomRef.current < MAX_ZOOM ? zoomRef.current * 1.8 : 1, cx, cy);
   };
   const zoomButton = (dir: 1 | -1) => {
     const vp = viewportRef.current;
     const cx = vp ? vp.clientWidth / 2 : 0;
     const cy = vp ? vp.clientHeight / 2 : 0;
-    zoomAt(zoomRef.current * (dir > 0 ? 1.5 : 1 / 1.5), cx, cy);
+    requestZoomRef.current(dir > 0 ? 1.5 : 1 / 1.5, cx, cy);
   };
 
   // keyboard: arrows pan, +/- zoom, 0 resets
@@ -366,8 +441,8 @@ export function RealmAtlas({
     setStatus(`${party.name} recalled to the clan keep.`);
   }
 
-  function goTo(id: AtlasMapId) {
-    // clear any marches from the map we're leaving
+  /** swap the visible map and reset the view — called at the end of a fly */
+  function commitMap(id: AtlasMapId) {
     Object.values(timers.current).forEach(clearTimeout);
     timers.current = {};
     setMarching({});
@@ -376,8 +451,95 @@ export function RealmAtlas({
     setCurrentId(id);
     setZoom(1);
     setPan({ x: 0, y: 0 });
-    setStatus(`Charting ${ATLAS_MAPS[id].title}…`);
   }
+
+  /** the continent realm whose marker is nearest a viewport point (or null) */
+  function realmNearFocal(cx: number, cy: number): AtlasLocation | null {
+    const vp = viewportRef.current;
+    if (!vp) return null;
+    const z = zoomRef.current;
+    const p = panRef.current;
+    const mx = ((cx - p.x) / (vp.clientWidth * z)) * 100;
+    const my = ((cy - p.y) / (vp.clientHeight * z)) * 100;
+    let best: AtlasLocation | null = null;
+    let bestD = Infinity;
+    for (const loc of ATLAS_MAPS.aethyr.locations) {
+      if (!loc.region) continue;
+      const d = Math.hypot(loc.x - mx, loc.y - my);
+      if (d < bestD) {
+        bestD = d;
+        best = loc;
+      }
+    }
+    return bestD <= 30 ? best : null;
+  }
+
+  /** fly the continent down into a realm's detailed map */
+  function enterRegion(realm: AtlasLocation) {
+    if (animating.current || !realm.region) return;
+    animating.current = true;
+    setSelectedId(null);
+    setFlying(true);
+    const vp = viewportRef.current;
+    if (vp) {
+      const w = vp.clientWidth;
+      const h = vp.clientHeight;
+      setZoom(MAX_ZOOM);
+      setPan(
+        clampPan(
+          { x: w / 2 - (realm.x / 100) * w * MAX_ZOOM, y: h / 2 - (realm.y / 100) * h * MAX_ZOOM },
+          MAX_ZOOM,
+        ),
+      );
+    }
+    setTransit({ toId: realm.region, kind: "enter" });
+    setStatus(`Entering ${realm.name}…`);
+    window.setTimeout(() => {
+      commitMap(realm.region!);
+      setTransit(null);
+      setFlying(false);
+      animating.current = false;
+    }, FLY_MS);
+  }
+
+  /** fly a region back up to the continent, framed on the realm we came from */
+  function exitToParent() {
+    if (animating.current) return;
+    const cur = ATLAS_MAPS[currentIdRef.current];
+    const parentId = cur.parent;
+    if (!parentId) return;
+    animating.current = true;
+    setSelectedId(null);
+    setFlying(false);
+    const parentLoc = ATLAS_MAPS[parentId].locations.find((l) => l.region === cur.id);
+    setTransit({
+      toId: parentId,
+      kind: "exit",
+      focal: parentLoc ? { x: parentLoc.x, y: parentLoc.y } : { x: 50, y: 50 },
+    });
+    setStatus(`Returning to ${ATLAS_MAPS[parentId].title}…`);
+    window.setTimeout(() => {
+      commitMap(parentId);
+      setTransit(null);
+      animating.current = false;
+    }, FLY_MS);
+  }
+
+  /** central zoom router: extremes fly between levels, otherwise plain zoom */
+  function requestZoom(factor: number, cx: number, cy: number) {
+    if (animating.current) return;
+    const z = zoomRef.current;
+    const cur = ATLAS_MAPS[currentIdRef.current];
+    if (factor > 1 && cur.kind === "continent" && z >= MAX_ZOOM - 0.02) {
+      const realm = realmNearFocal(cx, cy);
+      if (realm?.region) return enterRegion(realm);
+    }
+    if (factor < 1 && cur.parent && z <= MIN_ZOOM + 0.02) {
+      return exitToParent();
+    }
+    zoomAt(z * factor, cx, cy);
+  }
+  requestZoomRef.current = requestZoom;
 
   function march(loc: AtlasLocation) {
     if (held[loc.id] || marching[loc.id]) return;
@@ -435,7 +597,7 @@ export function RealmAtlas({
                 <button
                   type="button"
                   disabled={last}
-                  onClick={() => goTo(m.id)}
+                  onClick={() => exitToParent()}
                   aria-current={last ? "true" : undefined}
                   className={cn(
                     "font-display text-sm tracking-wide",
@@ -520,7 +682,13 @@ export function RealmAtlas({
           onKeyDown={onKeyDown}
         >
           {/* art / relief layer (pans & zooms) */}
-          <div className="absolute inset-0 origin-top-left" style={{ transform: worldTransform }}>
+          <div
+            className="absolute inset-0 origin-top-left"
+            style={{
+              transform: worldTransform,
+              transition: flying ? `transform ${FLY_MS}ms cubic-bezier(.4,0,.2,1)` : "none",
+            }}
+          >
             {showArt ? (
               <img
                 src={`${MAP_BASE}${map.art}`}
@@ -577,7 +745,14 @@ export function RealmAtlas({
           )}
 
           {/* hotspots (pan & zoom with the art) */}
-          <div className="absolute inset-0 origin-top-left" style={{ transform: worldTransform }}>
+          <div
+            className="absolute inset-0 origin-top-left"
+            style={{
+              transform: worldTransform,
+              transition: flying ? `transform ${FLY_MS}ms cubic-bezier(.4,0,.2,1)` : "none",
+              pointerEvents: transit ? "none" : undefined,
+            }}
+          >
             {map.locations.map((loc) => {
               const face = atlasMarker(map, loc);
               const isSel = selectedId === loc.id;
@@ -645,6 +820,16 @@ export function RealmAtlas({
               );
             })}
           </div>
+
+          {/* fly-in / fly-out overlay: cross-fades the incoming map over the top */}
+          {transit && (
+            <TransitionOverlay
+              transit={transit}
+              artFailed={artFailed}
+              viewportRef={viewportRef}
+              onArtError={(id) => setArtFailed((a) => ({ ...a, [id]: true }))}
+            />
+          )}
 
           {/* minimap: the visible window over the whole map, shown when zoomed */}
           {zoom > 1 && (
@@ -799,7 +984,7 @@ export function RealmAtlas({
               {selected.region && (
                 <button
                   type="button"
-                  onClick={() => goTo(selected.region!)}
+                  onClick={() => enterRegion(selected)}
                   className="w-full rounded-sm border border-forge-ember bg-forge-ember/80 py-2 font-display text-sm uppercase tracking-[0.12em] text-[#160d06] transition hover:brightness-110"
                 >
                   Enter {selected.name} ▸
