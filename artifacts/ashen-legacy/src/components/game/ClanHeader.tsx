@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { MAX_PARTY_SIZE } from "@/lib/game/data";
 import {
@@ -63,21 +62,52 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
     <header className="panel-ornate rounded-sm p-4">
       <div className="flex flex-wrap items-end gap-4">
 
-        <div className="min-w-56 flex-1 space-y-1">
+        <div className="min-w-56 flex-1 space-y-2">
           {req ? (
             <>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>
-                  Reputation {state.reputation}/{req.rep}
-                </span>
-                <span>
-                  Gold {state.gold}/{req.gold}
-                </span>
+              {/* Reputation bar */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-muted-foreground">Reputation</span>
+                  <span className="tabular-nums text-foreground/80">
+                    {state.reputation.toLocaleString()} / {req.rep.toLocaleString()}
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-sm bg-secondary">
+                  <div
+                    className="h-full bg-gold bar-fill"
+                    style={{ width: `${repPct}%` }}
+                    role="progressbar"
+                    aria-valuenow={Math.round(repPct)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Reputation ${state.reputation} of ${req.rep}`}
+                  />
+                </div>
               </div>
-              <Progress value={Math.min(repPct, goldPct)} />
+              {/* Gold bar */}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-muted-foreground">Gold</span>
+                  <span className="tabular-nums text-foreground/80">
+                    {state.gold.toLocaleString()} / {req.gold.toLocaleString()}
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-sm bg-secondary">
+                  <div
+                    className="h-full bg-primary bar-fill"
+                    style={{ width: `${goldPct}%` }}
+                    role="progressbar"
+                    aria-valuenow={Math.round(goldPct)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Gold ${state.gold} of ${req.gold}`}
+                  />
+                </div>
+              </div>
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Your clan stands at its peak. Fill every banner with {MAX_PARTY_SIZE} sworn blades.
             </p>
           )}

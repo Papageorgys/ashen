@@ -47,10 +47,10 @@ export function ClassTag({ classId }: { classId: string }) {
 export function StatBlock({ member }: { member: Member }) {
   const stats = memberStats(member);
   return (
-    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+    <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
       {(Object.keys(STAT_LABEL) as (keyof Stats)[]).map((k) => (
         <span key={k}>
-          {STAT_LABEL[k]} <span className="text-foreground">{stats[k]}</span>
+          {STAT_LABEL[k]} <span className="font-medium text-foreground">{stats[k]}</span>
         </span>
       ))}
     </div>
@@ -60,21 +60,22 @@ export function StatBlock({ member }: { member: Member }) {
 export function Vitals({ member }: { member: Member }) {
   const hp = Math.round((member.hp / maxHp(member)) * 100);
   const mp = Math.round((member.mp / maxMp(member)) * 100);
+  const hpColor = hp > 50 ? "bg-emerald-500" : hp > 25 ? "bg-amber-400" : "bg-destructive";
   return (
-    <div className="mt-1 space-y-0.5">
-      <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-24 overflow-hidden rounded-sm bg-secondary">
-          <div className="h-full bg-destructive" style={{ width: `${hp}%` }} />
+    <div className="mt-1.5 space-y-1">
+      <div className="flex items-center gap-2">
+        <div className="h-2 w-28 overflow-hidden rounded-sm bg-secondary" role="progressbar" aria-valuenow={hp} aria-valuemin={0} aria-valuemax={100} aria-label="HP">
+          <div className={`h-full bar-fill ${hpColor}`} style={{ width: `${hp}%` }} />
         </div>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground tabular-nums">
           HP {Math.round(member.hp)}/{maxHp(member)}
         </span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <div className="h-1.5 w-24 overflow-hidden rounded-sm bg-secondary">
-          <div className="h-full bg-primary" style={{ width: `${mp}%` }} />
+      <div className="flex items-center gap-2">
+        <div className="h-2 w-28 overflow-hidden rounded-sm bg-secondary" role="progressbar" aria-valuenow={mp} aria-valuemin={0} aria-valuemax={100} aria-label="MP">
+          <div className="h-full bar-fill bg-primary" style={{ width: `${mp}%` }} />
         </div>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground tabular-nums">
           MP {Math.round(member.mp)}/{maxMp(member)}
         </span>
       </div>
@@ -89,20 +90,20 @@ function Passives({ member }: { member: Member }) {
       {memberPassives(member).map((p) => (
         <HoverCard key={p.name} openDelay={120}>
           <HoverCardTrigger asChild>
-            <span className="cursor-help rounded-sm border border-primary/40 px-1.5 py-0.5 text-[10px] text-primary">
+            <span className="chip cursor-help border-primary/40 text-primary transition-colors hover:border-primary/70">
               {p.name}
             </span>
           </HoverCardTrigger>
-          <HoverCardContent className="w-56 border-border bg-card p-3 text-xs">
+          <HoverCardContent className="w-60 border-border bg-card p-3">
             <div className="font-display text-sm text-primary">{p.name}</div>
-            <p className="mt-1 text-muted-foreground">{p.desc}</p>
+            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{p.desc}</p>
           </HoverCardContent>
         </HoverCard>
       ))}
       {arm.worn && arm.mult !== 1 && (
         <span
           className={cn(
-            "rounded-sm border px-1.5 py-0.5 text-[10px]",
+            "chip",
             arm.mult > 1 ? "border-gold/50 text-gold" : "border-destructive/50 text-destructive",
           )}
         >
@@ -110,7 +111,7 @@ function Passives({ member }: { member: Member }) {
         </span>
       )}
       {member.craftMastery && (
-        <span className="rounded-sm border border-gold/50 px-1.5 py-0.5 text-[10px] text-gold">
+        <span className="chip border-gold/50 text-gold">
           {CRAFT_MASTERY_LABEL[member.craftMastery]}
         </span>
       )}
@@ -165,7 +166,7 @@ export function MemberCard({
         api.equip(member.id, item as never);
       }}
       className={cn(
-        "panel cursor-pointer rounded-sm px-3 py-2 transition-colors hover:border-primary/60",
+        "panel panel-lift cursor-pointer rounded-sm px-3 py-2",
         api && "cursor-grab active:cursor-grabbing",
         compact ? "py-1.5" : "",
         down && "opacity-60 ring-1 ring-destructive/50",
@@ -193,22 +194,22 @@ export function MemberCard({
               Lv {member.level}
               {member.level >= MAX_LEVEL ? " (max)" : ""}
             </span>
-            {down && <span className="text-[10px] uppercase text-destructive">fallen</span>}
+            {down && <span className="text-xs uppercase tracking-wide text-destructive font-medium">fallen</span>}
           </div>
           {member.profession && (
-            <div className="text-[10px] uppercase tracking-widest text-primary/80">
+            <div className="text-xs uppercase tracking-widest text-primary/80">
               {PROFESSION_BY_ID[member.profession]?.name}
             </div>
           )}
           {member.title && (
-            <div className="text-[10px] italic text-gold/80">{member.title}</div>
+            <div className="text-xs italic text-gold/80">{member.title}</div>
           )}
           {!compact && member.marks && member.marks.length > 0 && (
             <div
-              className="truncate text-[10px] italic text-muted-foreground/90"
+              className="truncate text-xs italic text-muted-foreground/90"
               title={member.marks[0]!.text}
             >
-              “{member.marks[0]!.text}”
+              "{member.marks[0]!.text}"
             </div>
           )}
           <ClassTag classId={member.classId} />
