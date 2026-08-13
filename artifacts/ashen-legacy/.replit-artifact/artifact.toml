@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Ashen Legacy"
+description = "A dark-fantasy browser game where you lead a clan across the realm of Aethyr. Recruit sworn blades, raise your clan level, forge gear from raid drops, and field full warbands. Features a world map, daily contracts, a live boss fight, a marketplace, and a real-time clan ladder — all persisted via Supabase auth."
+version = "1.0.0"
+id = "artifacts/ashen-legacy"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22215
+
+[services.development]
+run = "pnpm --filter @workspace/ashen-legacy run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ashen-legacy", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ashen-legacy/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22215"
+BASE_PATH = "/"

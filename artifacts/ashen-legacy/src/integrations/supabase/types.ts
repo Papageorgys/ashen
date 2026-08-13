@@ -1,0 +1,331 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
+  public: {
+    Tables: {
+      chat_messages: {
+        Row: {
+          body: string
+          channel: string
+          clan_name: string
+          created_at: string
+          crest: Json | null
+          id: string
+          leader_name: string
+          region: string | null
+          user_id: string
+        }
+        Insert: {
+          body: string
+          channel?: string
+          clan_name?: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          leader_name?: string
+          region?: string | null
+          user_id: string
+        }
+        Update: {
+          body?: string
+          channel?: string
+          clan_name?: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          leader_name?: string
+          region?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      direct_messages: {
+        Row: {
+          body: string
+          created_at: string
+          crest: Json | null
+          id: string
+          recipient_id: string
+          sender_clan_name: string
+          sender_id: string
+          sender_leader_name: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          recipient_id: string
+          sender_clan_name?: string
+          sender_id: string
+          sender_leader_name?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          crest?: Json | null
+          id?: string
+          recipient_id?: string
+          sender_clan_name?: string
+          sender_id?: string
+          sender_leader_name?: string
+        }
+        Relationships: []
+      }
+      game_saves: {
+        Row: {
+          created_at: string
+          state: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          state: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          state?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ladder: {
+        Row: {
+          clan_level: number
+          clan_name: string
+          created_at: string
+          crest: Json | null
+          full_banners: number
+          holds_castle: boolean
+          leader_name: string
+          members: number
+          motto: string
+          reputation: number
+          score: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clan_level?: number
+          clan_name?: string
+          created_at?: string
+          crest?: Json | null
+          full_banners?: number
+          holds_castle?: boolean
+          leader_name?: string
+          members?: number
+          motto?: string
+          reputation?: number
+          score?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clan_level?: number
+          clan_name?: string
+          created_at?: string
+          crest?: Json | null
+          full_banners?: number
+          holds_castle?: boolean
+          leader_name?: string
+          members?: number
+          motto?: string
+          reputation?: number
+          score?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      world_boss_contributions: {
+        Row: {
+          clan_name: string
+          crest: Json | null
+          damage: number
+          event_id: string
+          leader_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clan_name?: string
+          crest?: Json | null
+          damage?: number
+          event_id: string
+          leader_name?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clan_name?: string
+          crest?: Json | null
+          damage?: number
+          event_id?: string
+          leader_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      strike_world_boss: {
+        Args: {
+          p_clan_name: string
+          p_crest: Json
+          p_damage: number
+          p_event_id: string
+          p_leader_name: string
+        }
+        Returns: number
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
