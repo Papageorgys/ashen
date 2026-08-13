@@ -277,15 +277,7 @@ function PartyCard({
   );
 }
 
-export function PartyBoard({
-  state,
-  api,
-  now,
-}: {
-  state: GameState;
-  api: ClanApi;
-  now: number;
-}) {
+export function PartyBoard({ state, api, now }: { state: GameState; api: ClanApi; now: number }) {
   const unassigned = state.members.filter(
     (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
   );
