@@ -11,6 +11,8 @@ import {
 } from "@/lib/game/atlas";
 import { ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
 import { RIVALS } from "@/lib/game/rivals";
+import { useMapManifest } from "@/lib/game/mapAssets";
+import { MapCanvas } from "./MapCanvas";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -148,6 +150,7 @@ function TransitionOverlay({
 }) {
   const tMap = ATLAS_MAPS[t.toId];
   const tArt = tMap.art && !artFailed[t.toId];
+  const tManifest = useMapManifest(t.toId);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -177,7 +180,9 @@ function TransitionOverlay({
   }, [t, viewportRef]);
   return (
     <div ref={ref} className="pointer-events-none absolute inset-0 z-[8]" aria-hidden="true">
-      {tArt ? (
+      {tManifest ? (
+        <MapCanvas id={t.toId} manifest={tManifest} zoom={1} maxZoom={MAX_ZOOM} />
+      ) : tArt ? (
         <img
           src={`${MAP_BASE}${tMap.art}`}
           alt=""
@@ -381,6 +386,8 @@ export function RealmAtlas({
   );
   const crumbs = map.parent ? [ATLAS_MAPS[map.parent], map] : [map];
   const showArt = map.art && !artFailed[currentId];
+  // optional layered/grid/tiled manifest; null → single-image fallback
+  const manifest = useMapManifest(currentId);
 
   /** the real zone an atlas place deploys to (region play only) */
   const zoneOf = (loc: AtlasLocation) => ZONE_BY_ID[ATLAS_ZONE[loc.id] ?? ""];
@@ -692,7 +699,15 @@ export function RealmAtlas({
               transition: flying ? `transform ${FLY_MS}ms cubic-bezier(.4,0,.2,1)` : "none",
             }}
           >
-            {showArt ? (
+            {manifest ? (
+              <MapCanvas
+                id={currentId}
+                manifest={manifest}
+                zoom={zoom}
+                maxZoom={MAX_ZOOM}
+                interactive
+              />
+            ) : showArt ? (
               <img
                 src={`${MAP_BASE}${map.art}`}
                 alt={`${map.title} — atlas painting`}
