@@ -16,7 +16,6 @@ import { MarketPanel } from "@/components/game/MarketPanel";
 import { ScriptoriumPanel } from "@/components/game/ScriptoriumPanel";
 import { MusterPanel } from "@/components/game/MusterPanel";
 import { WorldMap } from "@/components/game/WorldMap";
-import { RealmAtlas } from "@/components/game/RealmAtlas";
 import { ClanKeepPanel } from "@/components/game/ClanKeepPanel";
 import { ExpeditionFeed } from "@/components/game/ExpeditionFeed";
 import { useClanGame } from "@/hooks/useClanGame";
@@ -49,7 +48,6 @@ import {
   Flag,
   Globe2,
   Hammer,
-  Map,
   PawPrint,
   Package,
   Skull,
@@ -79,7 +77,6 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Command",
     items: [
       { value: "banners", label: "War Table", icon: Swords, hint: "Deploy your banners" },
-      { value: "map", label: "Map", icon: Map, hint: "The realm and where your banners stand" },
       {
         value: "bestiary",
         label: "Bestiary",
@@ -512,7 +509,15 @@ export default function IndexPage() {
             <ClanHeader state={state} api={api} />
             <div className="stage-enter" key={activeTab}>
               <TabsContent value="banners" className="mt-0">
-                <PartyBoard state={state} api={api} now={now} onOpenKeep={() => setTab("keep")} />
+                <div className="space-y-5">
+                  <WorldMap
+                    state={state}
+                    api={api}
+                    now={now}
+                    onOpenKeep={() => setTab("keep")}
+                  />
+                  <PartyBoard state={state} api={api} now={now} onOpenKeep={() => setTab("keep")} />
+                </div>
               </TabsContent>
               <TabsContent value="keep" className="mt-0">
                 <ClanKeepPanel state={state} api={api} />
@@ -528,35 +533,6 @@ export default function IndexPage() {
               </TabsContent>
               <TabsContent value="daily" className="mt-0">
                 <DailyPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="map" className="mt-0">
-                <section className="space-y-6">
-                  <div className="space-y-3">
-                    <header>
-                      <h2 className="font-display text-lg text-gold">The Living Atlas</h2>
-                      <p className="text-xs text-muted-foreground">
-                        The painted maps of Aethyr, made to walk. Read a place for its lore, drill
-                        from the continent into a realm, or march a banner and hold ground.
-                      </p>
-                    </header>
-                    <RealmAtlas state={state} api={api} now={now} />
-                  </div>
-                  <div className="space-y-3">
-                    <header>
-                      <h2 className="font-display text-lg text-gold">War Table</h2>
-                      <p className="text-xs text-muted-foreground">
-                        Towns, castles, open experience fields and dungeons — with every banner
-                        marked where it stands right now.
-                      </p>
-                    </header>
-                    <WorldMap
-                      state={state}
-                      api={api}
-                      now={now}
-                      onOpenKeep={() => setTab("keep")}
-                    />
-                  </div>
-                </section>
               </TabsContent>
               <TabsContent value="realm" className="mt-0">
                 <RealmPanel state={state} api={api} />

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LANDMARKS, ZONES, ZONE_POS, ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
 import { RIVAL_BY_ID, RIVALS } from "@/lib/game/rivals";
 import type { GameState, Party } from "@/lib/game/engine";
@@ -6,236 +6,10 @@ import { surgeZones, SURGE_XP_PCT, SURGE_REP_PCT } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import { cn } from "@/lib/utils";
 import { DRAG_BANNER as DRAG_MIME } from "@/lib/game/dnd";
-import { AtlasTerrain } from "./AtlasTerrain";
-import { AtlasMotifs } from "./AtlasMotifs";
-import { AtlasCapitals } from "./AtlasCapitals";
 
 /** Where a banner piece stands when it is not in the field: the clan keep. */
 const HOME = { x: 35, y: 46 };
 const HOME_TARGET = "__home";
-
-/** Hand-inked forest clumps (percent coords on the 100x62 plate). */
-const TREES = [
-  { x: 12, y: 60 },
-  { x: 16, y: 66 },
-  { x: 20, y: 72 },
-  { x: 27, y: 80 },
-  { x: 31, y: 74 },
-  { x: 34, y: 66 },
-  { x: 44, y: 72 },
-  { x: 48, y: 78 },
-  { x: 52, y: 82 },
-  { x: 20, y: 46 },
-  { x: 24, y: 40 },
-  { x: 36, y: 40 },
-  { x: 60, y: 74 },
-  { x: 66, y: 78 },
-  { x: 72, y: 80 },
-  { x: 8, y: 50 },
-  { x: 62, y: 46 },
-  { x: 56, y: 52 },
-  { x: 14, y: 38 },
-  { x: 40, y: 86 },
-];
-
-/** Mountain ranges: each entry is a ridge line of chevrons. */
-const RANGES: { x: number; y: number; n: number; s: number }[] = [
-  { x: 62, y: 18, n: 6, s: 1.0 },
-  { x: 74, y: 11, n: 5, s: 0.85 },
-  { x: 82, y: 42, n: 5, s: 0.9 },
-  { x: 46, y: 13, n: 4, s: 0.75 },
-  { x: 88, y: 26, n: 4, s: 0.7 },
-];
-
-/** Old kingsroads between the settled places (percent coords). */
-const ROADS: [number, number, number, number][] = [
-  [30, 52, 42, 18],
-  [30, 52, 52, 30],
-  [52, 30, 68, 68],
-  [52, 30, 82, 36],
-  [30, 52, 38, 78],
-  [68, 68, 88, 52],
-];
-
-const COAST =
-  "M5 31 C 6 22, 11 15, 19 12 C 24 10, 26 13, 30 12 C 33 11, 33 7, 38 7 C 44 7, 46 11, 51 10 C 55 9, 57 4, 64 5 C 72 6, 74 11, 80 12 C 89 13, 96 19, 95 27 C 94 33, 89 33, 89 37 C 89 42, 94 44, 92 49 C 89 55, 80 57, 73 55 C 67 53, 66 58, 59 59 C 52 60, 49 56, 43 57 C 37 58, 35 61, 29 59 C 22 57, 21 52, 16 50 C 10 47, 4 40, 5 31 Z";
-
-function Ridge({ x, y, n, s }: { x: number; y: number; n: number; s: number }) {
-  const yy = y * 0.62;
-  return (
-    <g className="text-map-ink" stroke="currentColor" strokeWidth={0.18 * s} fill="none">
-      {Array.from({ length: n }).map((_, i) => {
-        const px = x + i * 2.6 * s - n * 1.3 * s;
-        const py = yy + (i % 2 === 0 ? 0 : 0.9 * s);
-        const h = (i % 2 === 0 ? 2.6 : 1.9) * s;
-        const w = 2.0 * s;
-        return (
-          <g key={i}>
-            <path
-              d={`M${px - w} ${py} L${px} ${py - h} L${px + w} ${py}`}
-              fill="currentColor"
-              fillOpacity="0.06"
-            />
-            {/* hatching on the shaded flank */}
-            <path
-              d={`M${px + 0.25} ${py - h + 0.5} L${px + w * 0.75} ${py - 0.2}`}
-              strokeWidth={0.1 * s}
-            />
-            <path
-              d={`M${px + 0.6} ${py - h + 1.1} L${px + w * 0.85} ${py - 0.1}`}
-              strokeWidth={0.1 * s}
-            />
-          </g>
-        );
-      })}
-    </g>
-  );
-}
-
-function Grove({ x, y }: { x: number; y: number }) {
-  const yy = y * 0.62;
-  return (
-    <g className="text-map-forest" fill="currentColor" fillOpacity="0.5">
-      <circle cx={x} cy={yy} r="0.75" />
-      <circle cx={x + 1.2} cy={yy + 0.5} r="0.6" />
-      <circle cx={x - 1.1} cy={yy + 0.55} r="0.55" />
-      <circle cx={x + 0.2} cy={yy + 1.1} r="0.5" />
-    </g>
-  );
-}
-
-/** The inked plate never changes — keep it out of every game tick's re-render. */
-const MapPlate = memo(function MapPlate() {
-  return (
-    <svg
-      className="absolute inset-0 h-full w-full"
-      viewBox="0 0 100 62"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <defs>
-        <filter id="foxing">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="n" />
-          <feColorMatrix in="n" type="saturate" values="0" />
-          <feComponentTransfer>
-            <feFuncA type="linear" slope="0.16" />
-          </feComponentTransfer>
-        </filter>
-        <radialGradient id="agedEdge" cx="50%" cy="50%" r="72%">
-          <stop offset="55%" stopColor="var(--map-parchment)" stopOpacity="0" />
-          <stop offset="100%" stopColor="var(--map-parchment-dark)" stopOpacity="0.95" />
-        </radialGradient>
-        <pattern id="seaHatch" width="2" height="1.6" patternUnits="userSpaceOnUse">
-          <path
-            d="M0 1.3 H2"
-            stroke="var(--map-sea)"
-            strokeWidth="0.12"
-            strokeOpacity="0.55"
-            fill="none"
-          />
-        </pattern>
-        <clipPath id="landClip">
-          <path d={COAST} />
-        </clipPath>
-      </defs>
-
-      {/* parchment + sea hatching */}
-      <rect x="0" y="0" width="100" height="62" fill="var(--map-parchment)" />
-      <rect x="0" y="0" width="100" height="62" fill="url(#seaHatch)" />
-
-      {/* coastal fringe: repeated offset outlines like an engraved chart */}
-      {[0.9, 1.9, 3.0].map((o, i) => (
-        <path
-          key={o}
-          d={COAST}
-          fill="none"
-          stroke="var(--map-sea)"
-          strokeOpacity={0.42 - i * 0.11}
-          strokeWidth={0.22}
-          transform={`translate(${50 - 50 * (1 + o / 100)} ${31 - 31 * (1 + o / 100)}) scale(${1 + o / 100})`}
-        />
-      ))}
-
-      {/* landmass */}
-      <path
-        d={COAST}
-        fill="var(--map-land)"
-        fillOpacity="0.85"
-        stroke="var(--map-ink)"
-        strokeWidth="0.35"
-      />
-
-      <g clipPath="url(#landClip)">
-        {/* rivers */}
-        <path
-          d="M40 12 C 42 22, 34 28, 36 36 C 38 46, 30 50, 24 58"
-          fill="none"
-          stroke="var(--map-sea)"
-          strokeWidth="0.4"
-          strokeLinecap="round"
-          strokeOpacity="0.85"
-        />
-        <path
-          d="M78 16 C 74 26, 80 32, 76 42 C 73 50, 78 54, 84 57"
-          fill="none"
-          stroke="var(--map-sea)"
-          strokeWidth="0.32"
-          strokeLinecap="round"
-          strokeOpacity="0.8"
-        />
-
-        {/* kingsroads */}
-        {ROADS.map(([x1, y1, x2, y2]) => (
-          <line
-            key={`${x1}-${y1}-${x2}-${y2}`}
-            x1={x1}
-            y1={y1 * 0.62}
-            x2={x2}
-            y2={y2 * 0.62}
-            stroke="var(--map-road)"
-            strokeOpacity="0.6"
-            strokeWidth="0.22"
-            strokeDasharray="1.1 1.0"
-          />
-        ))}
-
-        {TREES.map((t) => (
-          <Grove key={`t${t.x}-${t.y}`} {...t} />
-        ))}
-        {RANGES.map((r) => (
-          <Ridge key={`r${r.x}-${r.y}`} {...r} />
-        ))}
-      </g>
-
-      {/* foxing + aged edges */}
-      <rect x="0" y="0" width="100" height="62" filter="url(#foxing)" opacity="0.5" />
-      <rect x="0" y="0" width="100" height="62" fill="url(#agedEdge)" />
-
-      {/* engraved frame */}
-      <rect
-        x="1"
-        y="0.8"
-        width="98"
-        height="60.4"
-        fill="none"
-        stroke="var(--map-ink)"
-        strokeOpacity="0.6"
-        strokeWidth="0.35"
-      />
-      <rect
-        x="2"
-        y="1.8"
-        width="96"
-        height="58.4"
-        fill="none"
-        stroke="var(--map-ink)"
-        strokeOpacity="0.35"
-        strokeWidth="0.15"
-      />
-    </svg>
-  );
-});
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-map-parchment";
@@ -401,14 +175,19 @@ export function WorldMap({
       )}
     >
       <div
-        className="relative h-[clamp(280px,calc(100dvh-14rem),640px)] w-full bg-map-parchment"
+        className="relative h-[clamp(280px,calc(100dvh-14rem),640px)] w-full bg-[#0c0a06]"
         role={interactive ? "application" : undefined}
         aria-label={interactive ? "War table: deploy banners across Aethyr" : undefined}
       >
-        <AtlasTerrain />
-        <AtlasMotifs />
+        {/* Aethyr painting — the same artwork the RealmAtlas uses, now the war table base */}
+        <img
+          src={`${import.meta.env.BASE_URL}maps/aethyr.png`}
+          alt="The continent of Aethyr"
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
 
-        {/* aged-atlas overlay: kingsroads, vignette and engraved frame over the relief */}
+        {/* vignette + gold engraved frame over the painting */}
         <svg
           className="pointer-events-none absolute inset-0 h-full w-full"
           viewBox="0 0 100 62"
@@ -418,46 +197,22 @@ export function WorldMap({
         >
           <defs>
             <radialGradient id="mapVignette" cx="50%" cy="50%" r="74%">
-              <stop offset="60%" stopColor="var(--map-parchment-dark)" stopOpacity="0" />
-              <stop offset="100%" stopColor="var(--map-parchment-dark)" stopOpacity="0.6" />
+              <stop offset="58%" stopColor="#000" stopOpacity="0" />
+              <stop offset="100%" stopColor="#000" stopOpacity="0.62" />
             </radialGradient>
           </defs>
-          {ROADS.map(([x1, y1, x2, y2]) => (
-            <line
-              key={`${x1}-${y1}-${x2}-${y2}`}
-              x1={x1}
-              y1={y1 * 0.62}
-              x2={x2}
-              y2={y2 * 0.62}
-              stroke="var(--map-road)"
-              strokeOpacity="0.5"
-              strokeWidth="0.22"
-              strokeDasharray="1.1 1.0"
-            />
-          ))}
           <rect x="0" y="0" width="100" height="62" fill="url(#mapVignette)" />
           <rect
-            x="1"
-            y="0.8"
-            width="98"
-            height="60.4"
+            x="0.7"
+            y="0.7"
+            width="98.6"
+            height="60.6"
             fill="none"
-            stroke="var(--map-ink)"
-            strokeOpacity="0.6"
-            strokeWidth="0.35"
-          />
-          <rect
-            x="2"
-            y="1.8"
-            width="96"
-            height="58.4"
-            fill="none"
-            stroke="var(--map-ink)"
-            strokeOpacity="0.35"
-            strokeWidth="0.15"
+            stroke="#d8b45a"
+            strokeOpacity="0.45"
+            strokeWidth="0.3"
           />
         </svg>
-        <AtlasCapitals />
 
         {/* hour of high activity */}
         <div className="pointer-events-none absolute left-2 top-2 z-20 max-w-[70%] rounded-sm border border-gold/50 bg-card/85 px-2 py-1 shadow-sm">
@@ -481,7 +236,7 @@ export function WorldMap({
             viewBox="0 0 46 46"
             aria-hidden="true"
             focusable="false"
-            className="text-map-ink"
+            className="text-[#d8b45a]"
           >
             <circle cx="23" cy="23" r="18" fill="none" stroke="currentColor" strokeWidth="0.6" />
             <circle cx="23" cy="23" r="14" fill="none" stroke="currentColor" strokeWidth="0.3" />
@@ -491,7 +246,8 @@ export function WorldMap({
               x="23"
               y="4.6"
               textAnchor="middle"
-              className="fill-map-ink font-display"
+              fill="currentColor"
+              fontFamily="Georgia, serif"
               fontSize="5"
             >
               N
@@ -500,11 +256,11 @@ export function WorldMap({
         </div>
 
         {/* cartouche — bottom-left so it doesn't overlap the activity strip */}
-        <div className="pointer-events-none absolute bottom-3 left-3 border border-map-ink/50 bg-map-parchment/70 px-2 py-1">
-          <div className="font-display text-[11px] uppercase tracking-[0.28em] text-map-ink">
+        <div className="pointer-events-none absolute bottom-3 left-3 rounded-sm border border-[#d8b45a]/40 bg-black/60 px-2 py-1 backdrop-blur-sm">
+          <div className="font-display text-[11px] uppercase tracking-[0.28em] text-[#e7d7ac]">
             Aethyr
           </div>
-          <div className="text-[9px] italic text-map-ink-soft">
+          <div className="text-[9px] italic text-[#8a7a55]">
             three centuries after the Ash — drawn for the clan council
           </div>
         </div>
@@ -525,12 +281,12 @@ export function WorldMap({
                   : "Clan Keep"
             }
             className={cn(
-              "flex h-7 w-7 items-center justify-center border border-map-ink/70 bg-map-parchment text-[13px] text-map-ink motion-safe:transition-transform",
+              "flex h-7 w-7 items-center justify-center border border-[#d8b45a]/70 bg-black/70 text-[13px] text-[#e7d7ac] shadow-[0_1px_4px_oklch(0_0_0/0.7)] backdrop-blur-sm motion-safe:transition-transform",
               focusRing,
               (interactive && picked) || onOpenKeep
                 ? "cursor-pointer group-hover:scale-110"
                 : "cursor-default",
-              hover === HOME_TARGET && "scale-125 border-map-ink bg-primary/40",
+              hover === HOME_TARGET && "scale-125 border-[#d8b45a] bg-primary/40",
             )}
             {...dropProps(null)}
             onClick={() => {
@@ -541,7 +297,7 @@ export function WorldMap({
             <span aria-hidden="true">♔</span>
           </button>
 
-          <div className="pointer-events-none mt-0.5 whitespace-nowrap text-center font-display text-[9px] uppercase tracking-widest text-map-ink">
+          <div className="pointer-events-none mt-0.5 whitespace-nowrap text-center font-display text-[9px] uppercase tracking-widest text-[#e7d7ac] [text-shadow:0_1px_3px_oklch(0_0_0/0.9)]">
             Clan Keep
           </div>
         </div>
@@ -574,7 +330,6 @@ export function WorldMap({
               )}
               <button
                 type="button"
-
                 aria-describedby={tipId}
                 aria-label={`${z.name} — ${dungeon ? "dungeon" : "experience field"}, level ${z.reqLevel} and up${
                   picked
@@ -584,11 +339,11 @@ export function WorldMap({
                     : ""
                 }`}
                 className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] motion-safe:transition-transform group-hover:scale-110",
+                  "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] shadow-[0_1px_4px_oklch(0_0_0/0.7)] backdrop-blur-sm motion-safe:transition-transform group-hover:scale-110",
                   focusRing,
                   dungeon
-                    ? "border-destructive/70 bg-map-parchment text-destructive"
-                    : "border-map-ink/70 bg-map-parchment text-map-ink",
+                    ? "border-destructive/70 bg-black/70 text-destructive"
+                    : "border-[#d8b45a]/70 bg-black/70 text-[#e7d7ac]",
                   ts === "ok" && "ring-1 ring-primary/60",
                   ts === "blocked" && "opacity-45",
                   hover === z.id &&
@@ -612,7 +367,7 @@ export function WorldMap({
                 <span
                   aria-hidden="true"
                   title={`Claimed by ${claimDef.name}`}
-                  className="pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-map-ink/60"
+                  className="pointer-events-none absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-[#d8b45a]/60"
                   style={{ background: claimDef.color }}
                 />
               )}
@@ -638,7 +393,7 @@ export function WorldMap({
                   </p>
                 )}
               </div>
-              <div className="pointer-events-none mt-0.5 whitespace-nowrap text-center font-display text-[9px] italic text-map-ink-soft">
+              <div className="pointer-events-none mt-0.5 whitespace-nowrap text-center font-display text-[9px] italic text-[#e7d7ac] [text-shadow:0_1px_3px_oklch(0_0_0/0.9)]">
                 {z.name}
               </div>
             </div>
@@ -660,11 +415,11 @@ export function WorldMap({
                 aria-label={`${l.name}, ${l.kind === "castle" ? "castle" : "town"}`}
                 aria-describedby={tipId}
                 className={cn(
-                  "flex h-6 w-6 items-center justify-center border text-[11px] motion-safe:transition-transform group-hover:scale-110",
+                  "flex h-6 w-6 items-center justify-center border text-[11px] shadow-[0_1px_4px_oklch(0_0_0/0.7)] backdrop-blur-sm motion-safe:transition-transform group-hover:scale-110",
                   focusRing,
                   l.kind === "castle"
-                    ? "border-map-ink bg-map-parchment text-map-ink"
-                    : "rounded-full border-map-ink/60 bg-map-parchment text-map-ink-soft",
+                    ? "border-[#d8b45a] bg-black/70 text-[#e7d7ac]"
+                    : "rounded-full border-[#d8b45a]/60 bg-black/70 text-[#b09a68]",
                 )}
               >
                 <span aria-hidden="true">{l.kind === "castle" ? "♜" : "⌂"}</span>
@@ -690,7 +445,7 @@ export function WorldMap({
                   </p>
                 )}
               </div>
-              <div className="pointer-events-none mt-0.5 whitespace-nowrap text-center font-display text-[9px] uppercase tracking-wider text-map-ink">
+              <div className="pointer-events-none mt-0.5 whitespace-nowrap text-center font-display text-[9px] uppercase tracking-wider text-[#e7d7ac] [text-shadow:0_1px_3px_oklch(0_0_0/0.9)]">
                 {l.name}
               </div>
             </div>
@@ -742,13 +497,13 @@ export function WorldMap({
                 }
               }}
               className={cn(
-                "relative flex items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 font-display text-[9px] shadow-sm motion-safe:transition-transform",
+                "relative flex items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 font-display text-[9px] shadow-[0_1px_4px_oklch(0_0_0/0.7)] backdrop-blur-sm motion-safe:transition-transform",
                 focusRing,
                 traveling
-                  ? "border-dashed border-map-ink/80 bg-map-parchment/90 text-map-ink"
+                  ? "border-dashed border-[#d8b45a]/80 bg-black/75 text-[#e7d7ac]"
                   : zoneId
-                    ? "border-map-ink bg-primary/70 text-map-ink"
-                    : "border-map-ink/70 bg-map-parchment text-map-ink",
+                    ? "border-[#d8b45a] bg-primary/70 text-[#e7d7ac]"
+                    : "border-[#d8b45a]/70 bg-black/75 text-[#e7d7ac]",
                 interactive && "cursor-grab active:cursor-grabbing hover:scale-110",
                 picked === party.id && "scale-110 ring-2 ring-primary",
               )}
@@ -760,12 +515,12 @@ export function WorldMap({
               {(fighting || traveling) && (
                 <span
                   aria-hidden="true"
-                  className="absolute inset-x-0 bottom-0 h-[2px] bg-map-ink/20"
+                  className="absolute inset-x-0 bottom-0 h-[2px] bg-white/10"
                 >
                   <span
                     className={cn(
                       "block h-full motion-safe:transition-[width] motion-safe:duration-200",
-                      traveling ? "bg-map-road" : "bg-gold",
+                      traveling ? "bg-[#d8b45a]" : "bg-gold",
                     )}
                     style={{ width: `${pct}%` }}
                   />
@@ -777,7 +532,7 @@ export function WorldMap({
       </div>
 
       {interactive && (
-        <div className="border-t border-map-ink/40 bg-map-parchment px-3 py-1.5 text-[11px] italic text-map-ink-soft">
+        <div className="border-t border-white/10 bg-[#17130d] px-3 py-1.5 text-[11px] italic text-muted-foreground">
           <p aria-live="polite" className="min-h-[1.1em]">
             {status ||
               (picked
