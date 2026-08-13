@@ -65,6 +65,10 @@ export default function AuthPage() {
     }
   }
 
+  // Google OAuth is disabled in this Supabase project.
+  // To enable it: Supabase dashboard → Authentication → Providers → Google.
+  const GOOGLE_ENABLED = false;
+
   async function google() {
     setRememberSession(remember);
     const { error } = await supabase.auth.signInWithOAuth({
@@ -118,9 +122,11 @@ export default function AuthPage() {
         <Button type="submit" disabled={busy} className="w-full">
           {mode === "in" ? "Sign in" : "Raise a new banner"}
         </Button>
-        <Button type="button" variant="outline" className="w-full" onClick={google}>
-          Continue with Google
-        </Button>
+        {GOOGLE_ENABLED && (
+          <Button type="button" variant="outline" className="w-full" onClick={google}>
+            Continue with Google
+          </Button>
+        )}
         <button
           type="button"
           className="w-full text-xs text-muted-foreground underline-offset-4 hover:underline"
