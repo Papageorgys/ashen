@@ -499,8 +499,8 @@ export function WorldMap({
           </svg>
         </div>
 
-        {/* cartouche */}
-        <div className="pointer-events-none absolute left-3 top-3 border border-map-ink/50 bg-map-parchment/70 px-2 py-1">
+        {/* cartouche — bottom-left so it doesn't overlap the activity strip */}
+        <div className="pointer-events-none absolute bottom-3 left-3 border border-map-ink/50 bg-map-parchment/70 px-2 py-1">
           <div className="font-display text-[11px] uppercase tracking-[0.28em] text-map-ink">
             Aethyr
           </div>

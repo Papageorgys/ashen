@@ -549,7 +549,12 @@ export default function IndexPage() {
                         marked where it stands right now.
                       </p>
                     </header>
-                    <WorldMap state={state} />
+                    <WorldMap
+                      state={state}
+                      api={api}
+                      now={now}
+                      onOpenKeep={() => setTab("keep")}
+                    />
                   </div>
                 </section>
               </TabsContent>
