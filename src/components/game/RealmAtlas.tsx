@@ -676,11 +676,15 @@ export function RealmAtlas({
           role="application"
           tabIndex={0}
           aria-label={`${map.title} map — drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom`}
+          style={{
+            aspectRatio: `${map.aspect ?? 4 / 3}`,
+            maxHeight: "68dvh",
+            maxWidth: `calc(68dvh * ${map.aspect ?? 4 / 3})`,
+          }}
           className={cn(
-            // 4:3 box matching the paintings, so the whole map fits (no crop) and
-            // the percent-based hotspots line up exactly with the art. max-w is
-            // max-h*4/3 so the box stays 4:3 when height-capped, centred otherwise.
-            "relative mx-auto aspect-[4/3] w-full max-h-[68dvh] max-w-[90dvh] touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
+            // box matches each map's own ratio, so the whole map fits (no crop)
+            // and the percent-based hotspots line up exactly with the art
+            "relative mx-auto w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
             zoom > 1 && "cursor-grab active:cursor-grabbing",
           )}
           onPointerDown={onPointerDown}
