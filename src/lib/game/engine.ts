@@ -242,6 +242,9 @@ export interface Party {
   travel?: { zoneId: string; arrivesAt: number } | null;
   /** zone the banner keeps farming; cleared on recall */
   farming?: string | null;
+  /** the atlas point it was marched from, so it's drawn exactly there — not on
+   * every map that happens to paint the same game zone */
+  atlasLoc?: string | undefined;
   /** battle stance chosen for this banner's fights (default steady) */
   stance?: Stance;
 }
