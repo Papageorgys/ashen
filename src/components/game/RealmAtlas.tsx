@@ -262,7 +262,9 @@ export function RealmAtlas({
   onOpenTool?: (tab: string) => void;
 }) {
   const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
-  const [mode, setMode] = useState<Mode>("view");
+  // the war table (live: state + api wired) opens ready to command; the standalone
+  // atlas opens in view mode for browsing lore
+  const [mode, setMode] = useState<Mode>(() => (api && state ? "play" : "view"));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [held, setHeld] = useState<Record<string, boolean>>({});
   const [marching, setMarching] = useState<Record<string, boolean>>({});
