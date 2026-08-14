@@ -67,6 +67,7 @@ import {
   type BestiaryEntry,
   type Encounter,
   type Monster,
+  type MonsterFamily,
 } from "./monsters";
 
 import {
@@ -238,6 +239,8 @@ export interface Party {
   travel?: { zoneId: string; arrivesAt: number } | null;
   /** zone the banner keeps farming; cleared on recall */
   farming?: string | null;
+  /** battle stance chosen for this banner's fights (default steady) */
+  stance?: Stance;
 }
 
 export interface LogEntry {
@@ -1103,7 +1106,14 @@ export function deedsFromState(state: GameState): DeedRecord[] {
   for (const c of state.chronicle ?? []) {
     const map = CHRON_DEED[c.kind];
     if (!map) continue;
-    out.push({ id: `chr:${c.id}`, cls: map.cls, title: c.title, text: c.text, weight: map.weight, at: c.at });
+    out.push({
+      id: `chr:${c.id}`,
+      cls: map.cls,
+      title: c.title,
+      text: c.text,
+      weight: map.weight,
+      at: c.at,
+    });
   }
   for (const f of state.memorial ?? []) {
     const base = 60 + Math.round(f.level * 1.5) + (f.wasLord ? 80 : 0);
@@ -1125,7 +1135,14 @@ export function deedsFromState(state: GameState): DeedRecord[] {
   for (const m of state.members ?? []) {
     for (const mk of m.marks ?? []) {
       if (mk.kind !== "slayer") continue; // first of the clan to fell a kind — a "First"
-      out.push({ id: `mark:${m.id}:${mk.id}`, cls: "first", title: mk.text, text: `${m.name} — ${mk.where ?? "the field"}.`, weight: 70, at: mk.at });
+      out.push({
+        id: `mark:${m.id}:${mk.id}`,
+        cls: "first",
+        title: mk.text,
+        text: `${m.name} — ${mk.where ?? "the field"}.`,
+        weight: 70,
+        at: mk.at,
+      });
     }
   }
   return out.sort((a, b) => b.at - a.at);
@@ -1149,7 +1166,11 @@ export function renownScore(deeds: DeedRecord[]): number {
   return deeds.reduce((s, d) => s + d.weight, 0);
 }
 
-export function renownRank(score: number): { title: string; next: { title: string; at: number } | null; floor: number } {
+export function renownRank(score: number): {
+  title: string;
+  next: { title: string; at: number } | null;
+  floor: number;
+} {
   let idx = 0;
   for (let i = 0; i < RENOWN_RANKS.length; i++) if (score >= RENOWN_RANKS[i]!.at) idx = i;
   const cur = RENOWN_RANKS[idx]!;
@@ -1174,11 +1195,36 @@ export interface ClanTitle {
 }
 
 export const CLAN_TITLES: ClanTitle[] = [
-  { id: "named", title: "Named of Aethyr", desc: "Reach 120 Renown.", unlocked: (_s, c) => c.score >= 120 },
-  { id: "renowned", title: "the Renowned", desc: "Reach 350 Renown.", unlocked: (_s, c) => c.score >= 350 },
-  { id: "storied", title: "the Storied", desc: "Reach 800 Renown.", unlocked: (_s, c) => c.score >= 800 },
-  { id: "legendary", title: "the Legendary", desc: "Reach 1600 Renown.", unlocked: (_s, c) => c.score >= 1600 },
-  { id: "immortal", title: "the Immortal", desc: "Reach 3200 Renown.", unlocked: (_s, c) => c.score >= 3200 },
+  {
+    id: "named",
+    title: "Named of Aethyr",
+    desc: "Reach 120 Renown.",
+    unlocked: (_s, c) => c.score >= 120,
+  },
+  {
+    id: "renowned",
+    title: "the Renowned",
+    desc: "Reach 350 Renown.",
+    unlocked: (_s, c) => c.score >= 350,
+  },
+  {
+    id: "storied",
+    title: "the Storied",
+    desc: "Reach 800 Renown.",
+    unlocked: (_s, c) => c.score >= 800,
+  },
+  {
+    id: "legendary",
+    title: "the Legendary",
+    desc: "Reach 1600 Renown.",
+    unlocked: (_s, c) => c.score >= 1600,
+  },
+  {
+    id: "immortal",
+    title: "the Immortal",
+    desc: "Reach 3200 Renown.",
+    unlocked: (_s, c) => c.score >= 3200,
+  },
   {
     id: "warden_vareth",
     title: "Warden of Vareth",
@@ -1189,7 +1235,8 @@ export const CLAN_TITLES: ClanTitle[] = [
     id: "nightholder",
     title: "Who Held the Long Night",
     desc: "Hold the line through a Long Night.",
-    unlocked: (_s, c) => c.deeds.some((d) => d.title.startsWith("Held the line through the Long Night")),
+    unlocked: (_s, c) =>
+      c.deeds.some((d) => d.title.startsWith("Held the line through the Long Night")),
   },
   {
     id: "oathkeeper",
@@ -1222,7 +1269,10 @@ export function wornTitle(state: GameState): string {
   if (!state.title) return "";
   const t = CLAN_TITLE_BY_ID[state.title];
   if (!t) return "";
-  return t.unlocked(state, { deeds: deedsFromState(state), score: renownScore(deedsFromState(state)) })
+  return t.unlocked(state, {
+    deeds: deedsFromState(state),
+    score: renownScore(deedsFromState(state)),
+  })
     ? t.title
     : "";
 }
@@ -1518,10 +1568,42 @@ export interface VassalHouse {
 }
 
 export const VASSAL_HOUSES: VassalHouse[] = [
-  { id: "kessel", name: "House Kessel", blurb: "Fen-folk levies — modest swords, a steady tithe.", power: 500, tithe: 16, cost: 900, reqLevel: 3 },
-  { id: "vantar", name: "House Vantar", blurb: "Border knights who ride for a lord, not a crown.", power: 950, tithe: 11, cost: 1600, reqLevel: 4 },
-  { id: "dromm", name: "House Dromm", blurb: "Grim veterans of the Sunless War — heavy, and proud.", power: 1500, tithe: 7, cost: 2600, reqLevel: 6 },
-  { id: "ashfeld", name: "House Ashfeld", blurb: "Ash-gatherers turned sellsword — they pay their way.", power: 700, tithe: 22, cost: 1400, reqLevel: 5 },
+  {
+    id: "kessel",
+    name: "House Kessel",
+    blurb: "Fen-folk levies — modest swords, a steady tithe.",
+    power: 500,
+    tithe: 16,
+    cost: 900,
+    reqLevel: 3,
+  },
+  {
+    id: "vantar",
+    name: "House Vantar",
+    blurb: "Border knights who ride for a lord, not a crown.",
+    power: 950,
+    tithe: 11,
+    cost: 1600,
+    reqLevel: 4,
+  },
+  {
+    id: "dromm",
+    name: "House Dromm",
+    blurb: "Grim veterans of the Sunless War — heavy, and proud.",
+    power: 1500,
+    tithe: 7,
+    cost: 2600,
+    reqLevel: 6,
+  },
+  {
+    id: "ashfeld",
+    name: "House Ashfeld",
+    blurb: "Ash-gatherers turned sellsword — they pay their way.",
+    power: 700,
+    tithe: 22,
+    cost: 1400,
+    reqLevel: 5,
+  },
 ];
 
 export const VASSAL_BY_ID: Record<string, VassalHouse> = Object.fromEntries(
@@ -1606,7 +1688,11 @@ export function realmPulse(state: GameState) {
   const ln = state.longNight ?? { pressure: 0 };
   if (ln.endsAt && now >= ln.endsAt) {
     ln.endsAt = undefined;
-    pushLog(state, "The Long Night lifts. The sun returns, grey and cold, and the truce with it.", "info");
+    pushLog(
+      state,
+      "The Long Night lifts. The sun returns, grey and cold, and the truce with it.",
+      "info",
+    );
   }
   if (!ln.endsAt) {
     ln.pressure = Math.min(100, (ln.pressure ?? 0) + LONG_NIGHT.risePerHour * hours);
@@ -1614,7 +1700,11 @@ export function realmPulse(state: GameState) {
       ln.pressure = 0;
       ln.endsAt = now + LONG_NIGHT.durationMs;
       ln.held = false;
-      pushLog(state, "The upper Ash thickens and swallows the sun — the Long Night is upon the realm.", "bad");
+      pushLog(
+        state,
+        "The upper Ash thickens and swallows the sun — the Long Night is upon the realm.",
+        "bad",
+      );
       chronicle(
         state,
         "war",
@@ -1652,7 +1742,8 @@ export function realmPulse(state: GameState) {
   if (hours > 0 && (state.vassals?.length ?? 0) > 0) {
     state.vassalLoyalty = state.vassalLoyalty ?? {};
     const seatHeld = state.castle?.holder === "player";
-    const seatLost = !!state.castle && state.castle.holder !== "player" && state.castle.holder !== "crown";
+    const seatLost =
+      !!state.castle && state.castle.holder !== "player" && state.castle.holder !== "crown";
     const searing = isSearing(state);
     let drift = VASSAL.driftUpPerHour;
     if (seatLost) drift -= VASSAL.lostSeatDrainPerHour;
@@ -1765,7 +1856,13 @@ export function ashenToll(
   const days = (now - castle.sinceAt) / 86_400_000;
   const { graceDays, fullDays, titheDrain, wardWeaken } = ASHEN_TOLL;
   const ramp = Math.min(1, Math.max(0, (days - graceDays) / (fullDays - graceDays)));
-  return { held: true, days, ramp, titheFactor: 1 - titheDrain * ramp, wardMult: 1 + wardWeaken * ramp };
+  return {
+    held: true,
+    days,
+    ramp,
+    titheFactor: 1 - titheDrain * ramp,
+    wardMult: 1 + wardWeaken * ramp,
+  };
 }
 
 /**
@@ -1773,7 +1870,10 @@ export function ashenToll(
  * A held seat can only be stormed during the hours its holder declares; outside
  * the window it is safe. (AI-rival model: rivals wait for the opening.)
  */
-export function castleVulnerable(castle: CastleState | undefined, now: number = Date.now()): boolean {
+export function castleVulnerable(
+  castle: CastleState | undefined,
+  now: number = Date.now(),
+): boolean {
   if (!castle?.window) return true;
   const h = new Date(now).getHours();
   const { startHour, hours } = castle.window;
@@ -2000,6 +2100,125 @@ export function surgeEndsIn(now = Date.now()) {
   return SURGE_HOUR_MS - (now % SURGE_HOUR_MS);
 }
 
+/* ------------------------------ Combat model ------------------------------ */
+
+/** The five ways a blow can bite. Physical is neutral; the rest are typed. */
+export type DamageType = "phys" | "fire" | "frost" | "shadow" | "holy";
+
+export const DAMAGE_LABEL: Record<DamageType, string> = {
+  phys: "Physical",
+  fire: "Fire",
+  frost: "Frost",
+  shadow: "Shadow",
+  holy: "Holy",
+};
+
+/** How a banner squares up: trade blows, hold the line, or throw everything in. */
+export type Stance = "aggressive" | "steady" | "defensive";
+
+export const STANCE_LABEL: Record<Stance, string> = {
+  aggressive: "Aggressive",
+  steady: "Steady",
+  defensive: "Defensive",
+};
+
+export const STANCE_BLURB: Record<Stance, string> = {
+  aggressive: "Hit harder and kill faster — but take heavier blows.",
+  steady: "A balanced line. No edge, no exposure.",
+  defensive: "Soak the hits and guard the wounded — the kill comes slower.",
+};
+
+const STANCE_MOD: Record<Stance, { dmg: number; incoming: number }> = {
+  aggressive: { dmg: 1.18, incoming: 1.22 },
+  steady: { dmg: 1, incoming: 1 },
+  defensive: { dmg: 0.88, incoming: 0.8 },
+};
+
+/** Each kin's weaknesses and resistances — the whole reason damage type matters. */
+const FAMILY_COMBAT: Record<MonsterFamily, { weak: DamageType[]; resist: DamageType[] }> = {
+  humanoid: { weak: [], resist: [] },
+  beast: { weak: ["fire"], resist: ["frost"] },
+  undead: { weak: ["holy", "fire"], resist: ["shadow", "frost"] },
+  demon: { weak: ["holy"], resist: ["fire", "shadow"] },
+  dragonkin: { weak: ["frost"], resist: ["fire", "phys"] },
+  construct: { weak: ["fire"], resist: ["phys", "shadow"] },
+  insect: { weak: ["fire", "frost"], resist: ["shadow"] },
+  spirit: { weak: ["holy"], resist: ["phys"] },
+  plant: { weak: ["fire"], resist: ["frost", "phys"] },
+};
+
+/** Effectiveness of a damage type against a kin: 1.5 weak, 0.6 resist, else 1. */
+export function typeMultVs(type: DamageType, family: MonsterFamily): number {
+  const fc = FAMILY_COMBAT[family];
+  if (fc.weak.includes(type)) return 1.5;
+  if (fc.resist.includes(type)) return 0.6;
+  return 1;
+}
+
+/** The damage type a champion deals — casters vary by their people. */
+export function memberDamageType(m: Member): DamageType {
+  const cls = CLASS_BY_ID[m.classId]!;
+  if (cls.role === "mender" || cls.role === "chanter") return "holy";
+  if (cls.role === "arcanist") {
+    switch (cls.race) {
+      case "grakhar":
+        return "fire";
+      case "nocturi":
+      case "kaemari":
+        return "shadow";
+      case "sylvani":
+      case "durgan":
+        return "frost";
+      default:
+        return "fire";
+    }
+  }
+  return "phys";
+}
+
+/** Elite twists that turn a boss slot into a puzzle rather than a bigger bar. */
+export type EliteAffix = "armored" | "frenzied" | "warded";
+
+export const AFFIX_LABEL: Record<EliteAffix, string> = {
+  armored: "Armored",
+  frenzied: "Frenzied",
+  warded: "Warded",
+};
+
+export const AFFIX_BLURB: Record<EliteAffix, string> = {
+  armored: "Thick plate — soaks a quarter of every blow, and carries more health.",
+  frenzied: "Grows deadlier every round it lives. End it fast.",
+  warded: "A ward halves all damage until a critical strike shatters it.",
+};
+
+/** The damage types a party brings to bear, for pre-fight planning. */
+export function partyDamageTypes(members: Member[]): DamageType[] {
+  const seen = new Set<DamageType>();
+  for (const m of members) if (m.hp > 0) seen.add(memberDamageType(m));
+  return [...seen];
+}
+
+/** The kin that hunt a zone and their shared weaknesses/resistances, for hints. */
+export function zoneThreatProfile(zoneId: string): {
+  families: MonsterFamily[];
+  weak: DamageType[];
+  resist: DamageType[];
+} {
+  const fams = [...new Set(zoneMonsters(zoneId).map((m) => m.family))];
+  const weakCount: Partial<Record<DamageType, number>> = {};
+  const resistCount: Partial<Record<DamageType, number>> = {};
+  for (const f of fams) {
+    for (const t of FAMILY_COMBAT[f].weak) weakCount[t] = (weakCount[t] ?? 0) + 1;
+    for (const t of FAMILY_COMBAT[f].resist) resistCount[t] = (resistCount[t] ?? 0) + 1;
+  }
+  const half = Math.max(1, Math.ceil(fams.length / 2));
+  const weak = (Object.keys(weakCount) as DamageType[]).filter((t) => (weakCount[t] ?? 0) >= half);
+  const resist = (Object.keys(resistCount) as DamageType[]).filter(
+    (t) => (resistCount[t] ?? 0) >= half,
+  );
+  return { families: fams, weak, resist };
+}
+
 export function resolveRun(state: GameState, party: Party, zoneId: string): RunResult {
   const zone = ZONES.find((z) => z.id === zoneId)!;
   const surging = isSurging(zone.id);
@@ -2082,7 +2301,12 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     } else {
       const mult = outcome === "improved" ? IMPROVED_POWER : 1;
       if (def.kind === "attack") {
-        enemyHp -= memberPower(reader.m) * def.power * mult;
+        dealDamage(
+          reader,
+          memberPower(reader.m) * def.power * mult,
+          memberDamageType(reader.m),
+          def.name,
+        );
       } else {
         for (const a of alive) {
           a.atkBuff = Math.min(1.6, a.atkBuff + def.power * mult);
@@ -2123,21 +2347,10 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   let bigHit: { name: string; skill: string; damage: number; crit: boolean } | null = null;
   let critCount = 0;
 
-  /** Land a blow: rolls a critical off the striker's DEX/WIT and books the damage. */
-  const strike = (m: Member, amount: number, skill: string) => {
-    const st = memberStats(m);
-    const critChance = Math.min(0.42, 0.06 + st.dex * 0.004 + st.wit * 0.002);
-    const crit = Math.random() < critChance;
-    const dealt = crit ? amount * (1.9 + Math.random() * 0.5) : amount;
-    if (crit) critCount += 1;
-    damageBy[m.id] = (damageBy[m.id] ?? 0) + dealt;
-    if (!bigHit || dealt > bigHit.damage) {
-      bigHit = { name: m.name, skill, damage: Math.round(dealt), crit };
-    }
-    return dealt;
-  };
+  /* ---- the encounter: a real pack, each with its own health ---- */
+  const stance: Stance = party.stance ?? "steady";
+  const sMod = STANCE_MOD[stance];
 
-  /* who is actually out there — three encounter slots drawn from the zone's roster */
   const roster = zoneMonsters(zone.id);
   const commons = roster.filter((m) => !m.elite);
   const elites = roster.filter((m) => m.elite);
@@ -2152,22 +2365,93 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     }
     return pool[pool.length - 1];
   };
-  const met: Monster[] = [];
-  for (let i = 0; i < 3; i++) {
-    const useElite = elites.length > 0 && Math.random() < eliteChance;
-    const pick = useElite ? pickWeighted(elites) : (pickWeighted(commons) ?? pickWeighted(elites));
-    if (pick && !met.some((x) => x.id === pick.id)) met.push(pick);
-  }
-  const eliteMet = met.some((m) => m.elite);
-  const humanoidMet = met.some((m) => m.family === "humanoid");
 
-  let enemyHp = zone.threat * 12 * (eliteMet ? ELITE.threatMult : 1);
-  const enemyMaxHp = enemyHp;
+  const packSize = Math.min(6, Math.max(3, Math.round(zone.rounds / 3)));
+  const hasElite = elites.length > 0 && Math.random() < eliteChance;
+  const totalHp = zone.threat * 12 * (hasElite ? ELITE.threatMult : 1);
+  const AFFIXES: EliteAffix[] = ["armored", "frenzied", "warded"];
+
+  type Foe = {
+    mon: Monster;
+    hp: number;
+    maxHp: number;
+    affix?: EliteAffix | undefined;
+    wardUp: boolean;
+    frenzy: number;
+  };
+  const foes: Foe[] = [];
+  const shareSum = hasElite ? packSize - 1 + 2.2 : packSize; // commons weight 1, elite 2.2
+  for (let i = 0; i < packSize; i++) {
+    const eliteSlot = hasElite && i === 0;
+    const mon = eliteSlot
+      ? (pickWeighted(elites) ?? pickWeighted(commons))
+      : (pickWeighted(commons) ?? pickWeighted(elites));
+    if (!mon) continue;
+    let hp = (totalHp / Math.max(1, shareSum)) * (eliteSlot ? 2.2 : 1);
+    let affix: EliteAffix | undefined;
+    if (eliteSlot) {
+      affix = AFFIXES[Math.floor(Math.random() * AFFIXES.length)];
+      if (affix === "armored") hp *= 1.4;
+    }
+    foes.push({ mon, hp, maxHp: hp, affix, wardUp: affix === "warded", frenzy: 0 });
+  }
+  const met: Monster[] = [];
+  for (const foe of foes) if (!met.some((m) => m.id === foe.mon.id)) met.push(foe.mon);
+  const eliteMet = foes.some((f) => f.affix || f.mon.elite);
+  const humanoidMet = foes.some((f) => f.mon.family === "humanoid");
+  const affixMet = foes.find((f) => f.affix)?.affix;
+
   let enemyDebuff = 0;
   let findBonus = 0;
   let kills = 0;
 
-  for (let round = 0; round < zone.rounds && enemyHp > 0; round++) {
+  const aliveFoes = () => foes.filter((f) => f.hp > 0);
+  const enemyPctNow = () => aliveFoes().reduce((s, f) => s + f.hp, 0) / Math.max(1, totalHp);
+  const pickTarget = (): Foe | undefined => {
+    const a = aliveFoes();
+    if (!a.length) return undefined;
+    if (stance === "aggressive") return a.reduce((x, y) => (x.hp <= y.hp ? x : y)); // finish the weak
+    if (stance === "defensive") {
+      const threat = a.find((f) => f.affix || f.mon.elite);
+      return threat ?? a.reduce((x, y) => (x.hp >= y.hp ? x : y)); // break the biggest first
+    }
+    return a[0]; // steady: front to back
+  };
+
+  /** Book a champion's blow (crit + MVP), then bite the pack by type, spilling over. */
+  function dealDamage(f: Fighter, amount: number, type: DamageType, skill: string) {
+    const st = memberStats(f.m);
+    const critChance = Math.min(0.42, 0.06 + st.dex * 0.004 + st.wit * 0.002);
+    const crit = Math.random() < critChance;
+    let dealt = crit ? amount * (1.9 + Math.random() * 0.5) : amount;
+    if (crit) critCount += 1;
+    damageBy[f.m.id] = (damageBy[f.m.id] ?? 0) + dealt;
+    if (!bigHit || dealt > bigHit.damage) {
+      bigHit = { name: f.m.name, skill, damage: Math.round(dealt), crit };
+    }
+    let guard = 0;
+    while (dealt > 0 && guard++ < packSize + 2) {
+      const t = pickTarget();
+      if (!t) break;
+      let mult = typeMultVs(type, t.mon.family);
+      if (t.affix === "armored") mult *= 0.75;
+      if (t.wardUp) {
+        mult *= 0.5;
+        if (crit) t.wardUp = false; // a critical shatters the ward
+      }
+      const applied = dealt * mult;
+      if (applied >= t.hp) {
+        dealt -= t.hp / mult; // spend the raw damage that finished it
+        t.hp = 0;
+        kills += t.affix || t.mon.elite ? 1 : rnd(4, 9); // a common slot is a knot of foes
+      } else {
+        t.hp -= applied;
+        dealt = 0;
+      }
+    }
+  }
+
+  for (let round = 0; round < zone.rounds && aliveFoes().length > 0; round++) {
     const alive = fighters.filter((f) => f.hp > 0);
     if (alive.length === 0) break;
     const lowestAllyPct = Math.min(...alive.map((f) => f.hp / f.maxHp));
@@ -2181,7 +2465,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       }
       if (scrollCd <= 0) {
         const atk = bestScroll("attack");
-        if (atk && enemyHp > 0) {
+        if (atk && aliveFoes().length > 0) {
           readScroll(atk, reader, alive);
           scrollCd = SCROLL_COOLDOWN;
         }
@@ -2197,7 +2481,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         round,
         selfPct: f.hp / f.maxHp,
         lowestAllyPct,
-        enemyPct: enemyHp / enemyMaxHp,
+        enemyPct: enemyPctNow(),
         mpPct: f.mp / f.maxMp,
       };
 
@@ -2207,11 +2491,12 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         return conditionMet(s.condition, ctx);
       });
 
-      const base = memberPower(f.m) * (1 + f.atkBuff) * (1 + enemyDebuff);
+      const base = memberPower(f.m) * (1 + f.atkBuff) * (1 + enemyDebuff) * sMod.dmg;
+      const dtype = memberDamageType(f.m);
 
       if (!tactic) {
         // plain weapon swing, no MP
-        enemyHp -= strike(f.m, base * 0.55 * (1 + fireShot(f.m)), "a plain swing");
+        dealDamage(f, base * 0.55 * (1 + fireShot(f.m)), dtype, "a plain swing");
         continue;
       }
 
@@ -2222,7 +2507,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       const pot = skillPotency(s);
 
       if (def.kind === "attack") {
-        enemyHp -= strike(f.m, base * pot * (1 + fireShot(f.m)), def.name);
+        dealDamage(f, base * pot * (1 + fireShot(f.m)), dtype, def.name);
       } else if (def.kind === "heal") {
         const target = alive.reduce((a, b) => (a.hp / a.maxHp <= b.hp / b.maxHp ? a : b));
         target.hp = Math.min(target.maxHp, target.hp + base * pot * 0.6);
@@ -2237,8 +2522,16 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       }
     }
 
-    // enemy strikes back
-    const incoming = zone.enemyHit * (1 + round * 0.05);
+    // the pack strikes back — the fewer foes left, the fewer blows land (focus fire pays)
+    const standingFoes = aliveFoes();
+    for (const foe of standingFoes) if (foe.affix === "frenzied") foe.frenzy += 0.12;
+    const frenzy = standingFoes.reduce((s, f) => s + (f.affix === "frenzied" ? f.frenzy : 0), 0);
+    const incoming =
+      zone.enemyHit *
+      (1 + round * 0.05) *
+      sMod.incoming *
+      (standingFoes.length / packSize) *
+      (1 + frenzy);
     const targets = fighters.filter((f) => f.hp > 0);
     for (const f of targets) {
       const role = CLASS_BY_ID[f.m.classId]!.role;
@@ -2250,11 +2543,10 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         (1 - syn.mitigation / 100);
       f.hp = Math.max(0, f.hp - taken);
     }
-    kills += rnd(2, 5);
   }
 
   const survivors = fighters.filter((f) => f.hp > 0).length;
-  const success = enemyHp <= 0 && survivors > 0;
+  const success = aliveFoes().length === 0 && survivors > 0;
 
   /* split the body count across what was actually met — elites come one at a time */
   const encounters: Encounter[] = [];
@@ -2419,8 +2711,11 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   }
 
   if (eliteMet) {
-    const el = met.find((m) => m.elite);
-    if (el) highlights.push({ text: `${el.name} was brought down — an elite kill.`, kind: "rout" });
+    const el = foes.find((f) => f.affix || f.mon.elite)?.mon;
+    if (el) {
+      const tag = affixMet ? ` (${AFFIX_LABEL[affixMet]})` : "";
+      highlights.push({ text: `${el.name}${tag} was brought down — an elite kill.`, kind: "rout" });
+    }
   }
 
   // soul / spirit essence — split by what the zone's inhabitants are made of

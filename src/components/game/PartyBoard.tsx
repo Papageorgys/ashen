@@ -31,8 +31,14 @@ import {
   synergyBonus,
   bondedPairsInParty,
   bondBonus,
+  partyDamageTypes,
+  zoneThreatProfile,
+  DAMAGE_LABEL,
+  STANCE_LABEL,
+  STANCE_BLURB,
   type GameState,
   type Party,
+  type Stance,
 } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -74,6 +80,11 @@ function PartyCard({
   const bondPct = Math.round(bondBonus(state, party) * 100);
   const [over, setOver] = useState(false);
   const full = members.length >= MAX_PARTY_SIZE;
+  const dmgTypes = partyDamageTypes(members);
+  const stance = party.stance ?? "steady";
+  const targetZoneId = party.run?.zoneId ?? party.travel?.zoneId ?? party.farming ?? null;
+  const targetProfile = targetZoneId ? zoneThreatProfile(targetZoneId) : null;
+  const covers = targetProfile?.weak.some((t) => dmgTypes.includes(t)) ?? false;
 
   return (
     <div
@@ -226,6 +237,78 @@ function PartyCard({
           )}
         </div>
       )}
+
+      {/* battle plan: stance + what damage the banner brings, vs what the field is weak to */}
+      <div className="mt-3 space-y-2 border-t border-border pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            Stance
+          </span>
+          <div className="inline-flex overflow-hidden rounded-sm border border-border">
+            {(["aggressive", "steady", "defensive"] as Stance[]).map((st) => (
+              <button
+                key={st}
+                type="button"
+                title={STANCE_BLURB[st]}
+                onClick={() => api.setPartyStance(party.id, st)}
+                className={cn(
+                  "px-2 py-0.5 font-display text-[10px] uppercase tracking-wider transition-colors",
+                  stance === st
+                    ? "bg-gold/15 text-gold"
+                    : "text-muted-foreground hover:text-gold/80",
+                )}
+              >
+                {STANCE_LABEL[st]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1 text-[10px]">
+          <span className="text-muted-foreground">Brings</span>
+          {dmgTypes.length ? (
+            dmgTypes.map((t) => (
+              <span
+                key={t}
+                className={cn(
+                  "rounded-sm border px-1.5 py-0.5",
+                  targetProfile?.weak.includes(t)
+                    ? "border-grade-a/60 text-grade-a"
+                    : targetProfile?.resist.includes(t)
+                      ? "border-destructive/50 text-destructive"
+                      : "border-border text-gold",
+                )}
+              >
+                {DAMAGE_LABEL[t]}
+              </span>
+            ))
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </div>
+        {targetProfile && (targetProfile.weak.length > 0 || targetProfile.resist.length > 0) && (
+          <p className="text-[10px] text-muted-foreground">
+            This field is{" "}
+            {targetProfile.weak.length > 0 && (
+              <>
+                weak to{" "}
+                <span className="text-grade-a">
+                  {targetProfile.weak.map((t) => DAMAGE_LABEL[t]).join(", ")}
+                </span>
+              </>
+            )}
+            {targetProfile.weak.length > 0 && targetProfile.resist.length > 0 && ", "}
+            {targetProfile.resist.length > 0 && (
+              <>
+                resists{" "}
+                <span className="text-destructive">
+                  {targetProfile.resist.map((t) => DAMAGE_LABEL[t]).join(", ")}
+                </span>
+              </>
+            )}
+            .{targetProfile.weak.length > 0 && !covers && " Bring that damage."}
+          </p>
+        )}
+      </div>
 
       <div className="mt-3 border-t border-border pt-3">
         {party.travel ? (
