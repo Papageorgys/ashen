@@ -128,6 +128,7 @@ import {
   scribeOdds,
   type GameState,
   type Member,
+  type Stance,
 } from "@/lib/game/engine";
 import { SCROLL_BY_ID, travelMsTo } from "@/lib/game/data";
 import { MONSTER_BY_ID } from "@/lib/game/monsters";
@@ -487,7 +488,8 @@ export function useClanGame() {
               if (!m) continue;
               if (!res.fallen.includes(m.id)) continue;
               // the dead are bolder in the dark — the Long Night bites harder (§5)
-              const risk = (deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0) * tide.deathMult;
+              const risk =
+                (deathRisk(s, party, zone.kind, zone.reqLevel, m) || risk0) * tide.deathMult;
               if (m.isLord) {
                 // the Lord is dragged out alive, but it costs
                 if (Math.random() < risk) {
@@ -547,7 +549,11 @@ export function useClanGame() {
           // Holding the line through the Long Night is a Deed worth remembering (§5).
           // The first banner to keep the field while the sky is swallowed earns it,
           // once per Night — provided it wasn't a rout.
-          if (s.longNight?.endsAt && !s.longNight.held && lostThisRun.length < party.memberIds.length) {
+          if (
+            s.longNight?.endsAt &&
+            !s.longNight.held &&
+            lostThisRun.length < party.memberIds.length
+          ) {
             s.longNight.held = true;
             const zoneName2 = ZONE_BY_ID[zoneId]?.name ?? "the field";
             chronicle(
@@ -556,7 +562,11 @@ export function useClanGame() {
               "Held the line through the Long Night",
               `${party.name} kept the field at ${zoneName2} while the upper Ash swallowed the sun. When the light-fearing things poured out, the banner did not come down.`,
             );
-            pushLog(s, `${party.name} held the line through the Long Night — a Deed for the Chronicle.`, "good");
+            pushLog(
+              s,
+              `${party.name} held the line through the Long Night — a Deed for the Chronicle.`,
+              "good",
+            );
           }
 
           // ---- Scars & Deeds — the run leaves its mark on those who lived it ----
@@ -963,6 +973,12 @@ export function useClanGame() {
         );
       }),
 
+    setPartyStance: (partyId: string, stance: Stance) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (p) p.stance = stance;
+      }),
+
     recallParty: (partyId: string) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);
@@ -1131,7 +1147,8 @@ export function useClanGame() {
     swearOath: (memberId: string) =>
       update((s) => {
         const m = s.members.find((x) => x.id === memberId);
-        if (!m || m.isLord) return void toast("The Lord is always guarded and cannot swear the Oath.");
+        if (!m || m.isLord)
+          return void toast("The Lord is always guarded and cannot swear the Oath.");
         if (m.oath) return void toast("Already sworn to the Ashen Oath.");
         m.oath = true;
         chronicle(
@@ -1140,7 +1157,11 @@ export function useClanGame() {
           `${m.name} swears the Ashen Oath`,
           "To fall rather than yield, and to be remembered for it. The Warden-Fallen make room.",
         );
-        pushLog(s, `${m.name} swore the Ashen Oath — they will step forward first, and fall hardest into legend.`, "info");
+        pushLog(
+          s,
+          `${m.name} swore the Ashen Oath — they will step forward first, and fall hardest into legend.`,
+          "info",
+        );
         toast.success(`${m.name} is Oathsworn.`);
       }),
 
@@ -1262,10 +1283,12 @@ export function useClanGame() {
         const house = VASSAL_BY_ID[houseId];
         if (!house) return;
         s.vassals = s.vassals ?? [];
-        if (s.vassals.includes(houseId)) return void toast(`${house.name} already flies your banner.`);
+        if (s.vassals.includes(houseId))
+          return void toast(`${house.name} already flies your banner.`);
         if (s.clanLevel < house.reqLevel)
           return void toast(`${house.name} will only swear to a clan of level ${house.reqLevel}.`);
-        if (s.gold < house.cost) return void toast.error(`${house.name} expects a gift of ${house.cost} gold.`);
+        if (s.gold < house.cost)
+          return void toast.error(`${house.name} expects a gift of ${house.cost} gold.`);
         s.gold -= house.cost;
         s.vassals.push(houseId);
         s.vassalLoyalty = s.vassalLoyalty ?? {};
@@ -1285,7 +1308,11 @@ export function useClanGame() {
         if (!s.vassals?.includes(houseId)) return;
         s.vassals = s.vassals.filter((id) => id !== houseId);
         if (s.vassalLoyalty) delete s.vassalLoyalty[houseId];
-        pushLog(s, `${VASSAL_BY_ID[houseId]?.name ?? "A house"} is released from their oath.`, "info");
+        pushLog(
+          s,
+          `${VASSAL_BY_ID[houseId]?.name ?? "A house"} is released from their oath.`,
+          "info",
+        );
       }),
 
     /** Reaffirm a wavering house's oath with a gift of gold (§8.1). */
@@ -1294,11 +1321,18 @@ export function useClanGame() {
         const house = VASSAL_BY_ID[houseId];
         if (!house || !s.vassals?.includes(houseId)) return;
         const cost = reaffirmCost(house);
-        if (s.gold < cost) return void toast.error(`${house.name} expects a gift of ${cost} gold to renew their faith.`);
+        if (s.gold < cost)
+          return void toast.error(
+            `${house.name} expects a gift of ${cost} gold to renew their faith.`,
+          );
         s.gold -= cost;
         s.vassalLoyalty = s.vassalLoyalty ?? {};
         s.vassalLoyalty[houseId] = 100;
-        pushLog(s, `A gift of ${cost} gold renews ${house.name}'s oath. Their loyalty stands full.`, "good");
+        pushLog(
+          s,
+          `A gift of ${cost} gold renews ${house.name}'s oath. Their loyalty stands full.`,
+          "good",
+        );
         toast.success(`${house.name}'s loyalty restored.`);
       }),
 
@@ -1319,7 +1353,9 @@ export function useClanGame() {
           "A debt to the Compact",
           `The Ledger advances ${amt} gold against the clan's name. ${Math.round(amt * (1 + LEDGER.rate))} comes due within the week — every crown has a price.`,
         );
-        toast.success(`Borrowed ${amt} gold. ${Math.round(amt * (1 + LEDGER.rate))} owed by week's end.`);
+        toast.success(
+          `Borrowed ${amt} gold. ${Math.round(amt * (1 + LEDGER.rate))} owed by week's end.`,
+        );
       }),
 
     /** Settle the Compact debt — in full if you can afford it. */
@@ -1341,7 +1377,8 @@ export function useClanGame() {
         if (insured(s, now))
           return void toast("A policy is already in force. The Compact will not double-write it.");
         const premium = insurePremium(s);
-        if (s.gold < premium) return void toast.error(`The Compact asks ${premium} gold to underwrite the host.`);
+        if (s.gold < premium)
+          return void toast.error(`The Compact asks ${premium} gold to underwrite the host.`);
         s.gold -= premium;
         s.insurance = { until: now + LEDGER.insureTermMs, premium };
         pushLog(
@@ -1393,7 +1430,11 @@ export function useClanGame() {
         if (s.gold < cost) return void toast.error(`The rite of rest asks ${cost} gold.`);
         s.gold -= cost;
         s.ashDebt = 0;
-        pushLog(s, `The host rested at the warded flame — Ash Debt cleared (${cost} gold).`, "good");
+        pushLog(
+          s,
+          `The host rested at the warded flame — Ash Debt cleared (${cost} gold).`,
+          "good",
+        );
         toast.success("Ash Debt cleared. The host stands at full strength.");
       }),
 
