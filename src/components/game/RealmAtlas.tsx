@@ -662,10 +662,15 @@ export function RealmAtlas({
         }[];
       }
     >();
-    // The continent is a zoomed-out realm-picker; banners live on the detailed
-    // region maps (and the home seat), so we don't repeat them on the overview.
-    if (ATLAS_MAPS[currentId].kind === "continent") return [];
+    // Banners are shown only on the home-haven map. Deploying records a game zone,
+    // and many atlas maps paint the SAME zones (Ember Court, the Free Holds and
+    // Greenhaven all have a Howling Warren point, etc.), so a banner "in
+    // howling_warren" would otherwise appear on every map that paints that zone —
+    // looking like banners you never sent there. The home map is the one
+    // unambiguous overview: local zones sit on their points, everything else
+    // musters at the seat.
     const homeLoc = ATLAS_MAPS[currentId].locations.find((l) => l.home);
+    if (!homeLoc) return [];
     for (const p of state?.parties ?? []) {
       if (p.memberIds.length === 0) continue; // an empty banner isn't a host
       const zid = currentZoneOf(p);
