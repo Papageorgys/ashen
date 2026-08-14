@@ -22,6 +22,8 @@ export interface AtlasLocation {
   region?: AtlasMapId;
   /** the realm's seat on a region map — shown with its own glyph, not numbered */
   seat?: boolean;
+  /** the clan's home haven — every player starts here */
+  home?: boolean;
   /** play-mode framing (mirrors the zone gate/threat feel) */
   level?: number;
   threat?: number;
@@ -799,7 +801,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
     aspect: 1,
     parent: "aethyr",
     subtitle:
-      "The green haven around the Founders' Monument — walled harbours, watchtowers and old roads, where the first oaths are still kept.",
+      "The clan's home haven, around the Founders' Monument — walled harbours, watchtowers and old roads, where every oath-taker first musters.",
     art: "GreenHaven_gamemap.png",
     locations: [
       {
@@ -807,11 +809,13 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         name: "Greenhaven",
         type: "stronghold",
         seat: true,
+        home: true,
         x: 67,
         y: 55,
         level: 33,
         threat: 600,
-        blurb: "The walled harbour-city and seat of the haven, ringed in green and grey stone.",
+        blurb:
+          "The walled harbour-city and seat of the haven, ringed in green and grey stone. Every player's clan musters here.",
       },
       {
         id: "gh1",
@@ -876,6 +880,9 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
     ],
   },
 };
+
+/** The clan's shared home haven — every player starts here, so the atlas opens on it. */
+export const HOME_MAP: AtlasMapId = "greenhaven";
 
 /**
  * Which real game zone each atlas place deploys to, so play-mode marches move an
