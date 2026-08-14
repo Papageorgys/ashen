@@ -36,6 +36,11 @@ import {
   SHARPEN_MAX,
   SHARPEN_SAFE,
   slotOf,
+  memberDamageType,
+  DAMAGE_LABEL,
+  RUNE_ITEM,
+  RUNE_TYPES,
+  type DamageType,
   type GameState,
 } from "@/lib/game/engine";
 import { cn } from "@/lib/utils";
@@ -44,6 +49,15 @@ import { ItemIcon } from "./ItemIcon";
 import type { ClanApi } from "@/hooks/useClanGame";
 
 type Mastery = (typeof CRAFT_MASTERIES)[number];
+
+/** A dot colour per damage type, so an engraved weapon reads at a glance. */
+const DTYPE_COLOR: Record<DamageType, string> = {
+  phys: "#b8b2a4",
+  fire: "#e2703a",
+  frost: "#5aa9d6",
+  shadow: "#9a6cc4",
+  holy: "#e7d081",
+};
 
 /** Ornamental corner studs, like the rivets on an old client window. */
 function Corners() {
@@ -687,6 +701,58 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
                   <span className="text-[10px] text-muted-foreground">Unequipped</span>
                 )}
               </div>
+
+              {/* weapon rune — sets the damage type this champion deals */}
+              {(() => {
+                const hasWeapon = m.gear.some((g) => slotOf(g) === "weapon");
+                const dtype = memberDamageType(m);
+                const ownedRunes = RUNE_TYPES.filter(
+                  (t) => (state.inventory[RUNE_ITEM[t]] ?? 0) > 0,
+                );
+                return (
+                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-forge-frame/30 pt-1.5">
+                    <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ background: DTYPE_COLOR[dtype] }}
+                      />
+                      Deals {DAMAGE_LABEL[dtype]}
+                      {m.weaponRune ? " · runed" : ""}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Select
+                        onValueChange={(v) => api.socketRune(m.id, v as never)}
+                        disabled={!hasWeapon || ownedRunes.length === 0}
+                      >
+                        <SelectTrigger
+                          className="h-6 w-28 text-[11px]"
+                          aria-label={`Engrave a rune on ${m.name}`}
+                        >
+                          <SelectValue placeholder={hasWeapon ? "Engrave" : "No weapon"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ownedRunes.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {DAMAGE_LABEL[t]} ×{state.inventory[RUNE_ITEM[t]]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {m.weaponRune && (
+                        <button
+                          type="button"
+                          onClick={() => api.clearRune(m.id)}
+                          aria-label={`Grind the rune off ${m.name}`}
+                          className="rounded-[2px] border border-forge-frame/60 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>
