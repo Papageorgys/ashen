@@ -36,6 +36,7 @@ import {
   MAX_QUALITY,
   qualityItemId,
   qualityLabel,
+  splitItemId,
 } from "@/lib/game/data";
 import {
   canCraft,
@@ -62,6 +63,11 @@ import {
   craftChance,
   qualityStepChance,
   rollQuality,
+  canSharpen,
+  sharpenCost,
+  sharpenChance,
+  sharpenWardCost,
+  SHARPEN_SAFE,
   initialState,
   learnSkill as learnSkillFn,
   learnableSkills as learnableSkillsFn,
@@ -1844,6 +1850,60 @@ export function useClanGame() {
         } else {
           pushLog(s, `The forge failed — ${name} shattered, materials lost.`, "bad");
           toast.error(`Craft failed: ${name}`);
+        }
+      }),
+
+    /**
+     * Sharpen a quality-graded piece one step higher — a gamble fed by farmed
+     * essence. Below the safe threshold a miss is harmless; above it a miss grinds
+     * the edge back a step unless the strike is warded with extra gold.
+     */
+    sharpen: (item: ItemId, ward = false) =>
+      update((s) => {
+        const check = canSharpen(s, item, ward);
+        if (!check.ok) return void toast.error(check.why);
+        const { base, quality } = splitItemId(item);
+        const c = sharpenCost(item, quality);
+        const wardGold = ward ? sharpenWardCost(item, quality) : 0;
+        const def = ITEM_BY_ID[base];
+        // pay the strike up front
+        s.inventory[item] = (s.inventory[item] ?? 0) - 1;
+        s.inventory[emberId(c.kind)] = (s.inventory[emberId(c.kind)] ?? 0) - c.ember;
+        s.gold -= c.gold + wardGold;
+        if (Math.random() < sharpenChance(quality)) {
+          const up = qualityItemId(base, quality + 1);
+          const upName = ITEM_BY_ID[up]?.name ?? def?.name;
+          s.inventory[up] = (s.inventory[up] ?? 0) + 1;
+          pushLog(s, `Sharpened ${upName} — the edge held at +${quality + 1}.`, "good");
+          toast.success(`Sharpened to +${quality + 1}`);
+          if (quality + 1 >= 12) {
+            chronicle(
+              s,
+              "forge",
+              `${upName} takes a keener edge`,
+              `Sharpened to +${quality + 1}/${MAX_QUALITY}. Few hands ever push a piece this far.`,
+            );
+          }
+        } else if (quality <= SHARPEN_SAFE || ward) {
+          // harmless bounce — the piece survives at its current edge
+          s.inventory[item] = (s.inventory[item] ?? 0) + 1;
+          if (ward) {
+            pushLog(
+              s,
+              `The ward held — ${def?.name} survived a failed strike at +${quality}.`,
+              "info",
+            );
+            toast(`Ward held — +${quality} kept`);
+          } else {
+            pushLog(s, `The strike slipped, but +${quality} ${def?.name} took no harm.`, "info");
+            toast(`Failed — +${quality} unharmed`);
+          }
+        } else {
+          const down = qualityItemId(base, quality - 1);
+          const downName = ITEM_BY_ID[down]?.name ?? def?.name;
+          s.inventory[down] = (s.inventory[down] ?? 0) + 1;
+          pushLog(s, `The temper cracked — ${def?.name} ground back to +${quality - 1}.`, "bad");
+          toast.error(`Failed — dropped to +${quality - 1}`);
         }
       }),
 

@@ -14,6 +14,7 @@ import {
   ARMOR_SETS,
   MAX_QUALITY,
   canRollQuality,
+  qualityItemId,
   splitItemId,
   type ArmorSet,
   LAST_NAMES,
@@ -2848,6 +2849,61 @@ export function canCraft(state: GameState, recipeId: string) {
   for (const i of r.inputs) {
     if ((state.inventory[i.item] ?? 0) < i.qty) return { ok: false, why: "Missing materials" };
   }
+  return { ok: true, why: "" };
+}
+
+/* ------------------------------- Sharpening -------------------------------- */
+/**
+ * Post-craft enhancement. Takes a quality-graded piece and gambles to push its
+ * edge one step higher, burning farmed essence and a forge fee each strike. Up to
+ * a safe threshold a failed strike only bounces; past it the temper cracks and the
+ * piece grinds back a step — unless a warding sigil (bought with the strike) holds
+ * the edge. It reuses the #qN quality model, so a sharpened piece is simply a
+ * higher-quality instance sitting in the vault, ready to equip.
+ */
+export const SHARPEN_SAFE = 3; // at or below this, a failure can't downgrade
+export const SHARPEN_MAX = MAX_QUALITY; // shares the forged-quality ceiling (20)
+
+/** Which essence a piece drinks when sharpened — cold work for robes and jewels. */
+export function sharpenEmber(item: ItemId): ShotKind {
+  const def = ITEM_BY_ID[item];
+  return def?.slot === "jewelry" || def?.armorType === "robe" ? "spirit" : "soul";
+}
+
+/** Success chance of the next strike, given the piece's current quality. */
+export function sharpenChance(q: number) {
+  if (q < SHARPEN_SAFE) return 1; // the first steps are guaranteed
+  const t = (q - SHARPEN_SAFE) / (SHARPEN_MAX - SHARPEN_SAFE);
+  return Math.max(0.2, 0.9 - 0.7 * t); // 0.9 at the threshold, easing toward 0.2
+}
+
+/** Essence + gold a single strike burns to attempt q → q+1. */
+export function sharpenCost(item: ItemId, q: number) {
+  const def = ITEM_BY_ID[item];
+  const base = def?.value ?? 40;
+  return {
+    ember: 3 + q * 2,
+    gold: Math.round(base * 0.15 * (1 + q * 0.35)),
+    kind: sharpenEmber(item),
+  };
+}
+
+/** Extra gold to ward a strike so a failure won't grind the edge back. */
+export function sharpenWardCost(item: ItemId, q: number) {
+  return Math.round(sharpenCost(item, q).gold * 1.5);
+}
+
+export function canSharpen(state: GameState, item: ItemId, ward = false) {
+  const def = ITEM_BY_ID[item];
+  if (!def || !canRollQuality(def)) return { ok: false, why: "That piece cannot be sharpened" };
+  if ((state.inventory[item] ?? 0) < 1) return { ok: false, why: "None in the vault" };
+  const { quality } = splitItemId(item);
+  if (quality >= SHARPEN_MAX) return { ok: false, why: "Already at the finest edge" };
+  const c = sharpenCost(item, quality);
+  const gold = c.gold + (ward ? sharpenWardCost(item, quality) : 0);
+  if (state.gold < gold) return { ok: false, why: "Not enough gold" };
+  if ((state.inventory[emberId(c.kind)] ?? 0) < c.ember)
+    return { ok: false, why: `Needs ${c.ember} ${c.kind} essence` };
   return { ok: true, why: "" };
 }
 

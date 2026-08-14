@@ -18,14 +18,23 @@ import {
   RECIPES,
   SLOT_LABEL,
   canRollQuality,
+  emberId,
+  qualityLabel,
+  splitItemId,
   type ItemDef,
 } from "@/lib/game/data";
 import {
   artisanRank,
   canCraft,
+  canSharpen,
   craftChance,
   expectedQuality,
   qualityStepChance,
+  sharpenChance,
+  sharpenCost,
+  sharpenWardCost,
+  SHARPEN_MAX,
+  SHARPEN_SAFE,
   slotOf,
   type GameState,
 } from "@/lib/game/engine";
@@ -40,16 +49,14 @@ type Mastery = (typeof CRAFT_MASTERIES)[number];
 function Corners() {
   return (
     <>
-      {[
-        "left-0 top-0",
-        "right-0 top-0",
-        "left-0 bottom-0",
-        "right-0 bottom-0",
-      ].map((p) => (
+      {["left-0 top-0", "right-0 top-0", "left-0 bottom-0", "right-0 bottom-0"].map((p) => (
         <span
           key={p}
           aria-hidden="true"
-          className={cn("pointer-events-none absolute h-2 w-2 border border-forge-frame/80 bg-forge-frame/40", p)}
+          className={cn(
+            "pointer-events-none absolute h-2 w-2 border border-forge-frame/80 bg-forge-frame/40",
+            p,
+          )}
         />
       ))}
     </>
@@ -103,7 +110,10 @@ function Slot({
   return (
     <ItemTooltip item={item}>
       <span
-        className={cn("l2-slot relative inline-flex items-center justify-center rounded-[2px]", lit && "l2-slot-lit")}
+        className={cn(
+          "l2-slot relative inline-flex items-center justify-center rounded-[2px]",
+          lit && "l2-slot-lit",
+        )}
         style={{ width: size, height: size }}
       >
         <ItemIcon item={item} size={Math.round(size * 0.78)} />
@@ -138,6 +148,200 @@ function Gauge({ pct, tone = "gold" }: { pct: number; tone?: "gold" | "ember" })
         }}
       />
     </div>
+  );
+}
+
+/**
+ * The sharpening bench — push a quality-graded piece one edge higher, gambling
+ * farmed essence against the temper cracking. The safe steps are guaranteed; past
+ * them a warding sigil (bought with the strike) can hold the edge on a miss.
+ */
+function SharpenBench({ state, api }: { state: GameState; api: ClanApi }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [ward, setWard] = useState(false);
+
+  const stock = Object.entries(state.inventory)
+    .filter(([id, qty]) => (qty ?? 0) > 0 && canRollQuality(ITEM_BY_ID[id]))
+    .map(([id]) => id)
+    .sort((a, b) => splitItemId(b).quality - splitItemId(a).quality);
+
+  const item = selected && stock.includes(selected) ? selected : (stock[0] ?? null);
+  const def = item ? ITEM_BY_ID[item] : null;
+  const q = item ? splitItemId(item).quality : 0;
+  const atMax = q >= SHARPEN_MAX;
+  const cost = item && !atMax ? sharpenCost(item, q) : null;
+  const wardGold = item && !atMax ? sharpenWardCost(item, q) : 0;
+  const chance = Math.round(sharpenChance(q) * 100);
+  const check = item ? canSharpen(state, item, ward) : { ok: false, why: "" };
+  const risky = q >= SHARPEN_SAFE;
+  const haveEmber = cost ? (state.inventory[emberId(cost.kind)] ?? 0) : 0;
+
+  return (
+    <Window
+      title="Sharpening Bench"
+      subtitle="Gamble farmed essence to push a piece past its forged edge — the first steps hold, then the temper starts to fight back."
+    >
+      {stock.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No quality-graded gear to sharpen. Forge a D- or C-grade piece with an artisan first.
+        </p>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+          {/* eligible pieces */}
+          <div className="l2-inset max-h-[300px] overflow-y-auto rounded-[2px] p-1">
+            <ul className="space-y-1">
+              {stock.map((id) => {
+                const d = ITEM_BY_ID[id]!;
+                const iq = splitItemId(id).quality;
+                const active = item === id;
+                return (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(id);
+                        setWard(false);
+                      }}
+                      aria-current={active}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-[2px] border px-2 py-1.5 text-left motion-safe:transition-colors",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        active
+                          ? "border-gold/60 bg-primary/15"
+                          : "border-transparent hover:border-forge-frame/60 hover:bg-secondary/40",
+                      )}
+                    >
+                      <Slot item={id} size={34} lit={active} />
+                      <span className="min-w-0 flex-1">
+                        <span className={cn("block truncate text-xs", GRADE_CLASS[d.grade])}>
+                          {d.name}
+                        </span>
+                        <span className="block text-[10px] text-muted-foreground">
+                          [{d.grade}] · {qualityLabel(iq)} · ×{state.inventory[id]}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-display text-[11px] tabular-nums text-gold">
+                        +{iq}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {/* strike detail */}
+          {def && item && (
+            <div className="l2-inset flex flex-col gap-3 rounded-[2px] p-3">
+              <div className="flex items-start gap-3">
+                <Slot item={item} size={64} lit />
+                <div className="min-w-0">
+                  <div className={cn("font-display text-sm", GRADE_CLASS[def.grade])}>
+                    {def.name}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {qualityLabel(q)} · edge +{q}/{SHARPEN_MAX}
+                  </div>
+                </div>
+              </div>
+
+              {atMax ? (
+                <p className="text-[11px] text-grade-a" role="status">
+                  This piece already holds the finest edge — it cannot be sharpened further.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-display uppercase tracking-[0.18em] text-muted-foreground">
+                        Next edge +{q + 1}
+                      </span>
+                      <span
+                        className={cn("tabular-nums", risky ? "text-forge-ember" : "text-gold")}
+                      >
+                        {chance}%
+                      </span>
+                    </div>
+                    <Gauge pct={chance} tone={risky ? "ember" : "gold"} />
+                    <p className="pt-0.5 text-[10px] text-muted-foreground">
+                      {q < SHARPEN_SAFE
+                        ? "A safe step — a failed strike costs the essence, but never the edge."
+                        : ward
+                          ? "Warded — a failed strike wastes the essence and ward, but the edge holds."
+                          : "Unwarded — a failed strike grinds the edge back to +" + (q - 1) + "."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground">
+                        {cost!.kind === "soul" ? "Soul" : "Spirit"} essence
+                      </span>
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          haveEmber >= cost!.ember ? "text-foreground" : "text-destructive",
+                        )}
+                      >
+                        {haveEmber}/{cost!.ember}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground">Forge fee</span>
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          state.gold >= cost!.gold ? "text-gold" : "text-destructive",
+                        )}
+                      >
+                        {cost!.gold} gold
+                      </span>
+                    </div>
+                    {risky && (
+                      <label className="flex items-center justify-between gap-2 text-[11px]">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            className="accent-gold"
+                            checked={ward}
+                            onChange={(e) => setWard(e.target.checked)}
+                          />
+                          Warding sigil
+                        </span>
+                        <span
+                          className={cn(
+                            "tabular-nums",
+                            !ward || state.gold >= cost!.gold + wardGold
+                              ? "text-muted-foreground"
+                              : "text-destructive",
+                          )}
+                        >
+                          +{wardGold} gold
+                        </span>
+                      </label>
+                    )}
+                  </div>
+
+                  {!check.ok && check.why && (
+                    <p className="text-[11px] text-destructive" role="status">
+                      {check.why}
+                    </p>
+                  )}
+
+                  <Button
+                    className="mt-auto w-full font-display uppercase tracking-[0.2em]"
+                    disabled={!check.ok}
+                    onClick={() => api.sharpen(item, ward)}
+                  >
+                    Sharpen +{q} → +{q + 1}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Window>
   );
 }
 
@@ -206,7 +410,9 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
           {/* recipe list */}
           <div className="l2-inset max-h-[380px] overflow-y-auto rounded-[2px] p-1">
             {recipes.length === 0 && (
-              <p className="p-3 text-xs text-muted-foreground">No recipes known in this discipline.</p>
+              <p className="p-3 text-xs text-muted-foreground">
+                No recipes known in this discipline.
+              </p>
             )}
             <ul className="space-y-1">
               {recipes.map((r) => {
@@ -294,7 +500,12 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
                 </div>
                 <div className="mt-3 flex items-center justify-between text-[11px]">
                   <span className="text-muted-foreground">Forge fee</span>
-                  <span className={cn("tabular-nums", state.gold >= recipe.gold ? "text-gold" : "text-destructive")}>
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      state.gold >= recipe.gold ? "text-gold" : "text-destructive",
+                    )}
+                  >
                     {recipe.gold} gold
                   </span>
                 </div>
@@ -315,7 +526,8 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
                         Quality step
                       </span>
                       <span className="tabular-nums text-grade-a">
-                        {Math.round(detail.qStep * 100)}% · avg +{expectedQuality(detail.qStep).toFixed(1)} / {MAX_QUALITY}
+                        {Math.round(detail.qStep * 100)}% · avg +
+                        {expectedQuality(detail.qStep).toFixed(1)} / {MAX_QUALITY}
                       </span>
                     </div>
                     <Gauge pct={detail.qStep * 100} tone="ember" />
@@ -359,14 +571,19 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
                 <div className="min-w-0">
                   <div className="font-display text-sm">{m.name}</div>
                   <div className="truncate text-[11px] text-muted-foreground">
-                    {m.craftMastery ? CRAFT_MASTERY_BLURB[m.craftMastery] : "No discipline chosen yet."}
+                    {m.craftMastery
+                      ? CRAFT_MASTERY_BLURB[m.craftMastery]
+                      : "No discipline chosen yet."}
                   </div>
                 </div>
                 <Select
                   {...(m.craftMastery ? { value: m.craftMastery } : {})}
                   onValueChange={(v) => api.setCraftMastery(m.id, v as never)}
                 >
-                  <SelectTrigger className="h-7 w-32 shrink-0 text-xs" aria-label={`Discipline for ${m.name}`}>
+                  <SelectTrigger
+                    className="h-7 w-32 shrink-0 text-xs"
+                    aria-label={`Discipline for ${m.name}`}
+                  >
                     <SelectValue placeholder="Choose" />
                   </SelectTrigger>
                   <SelectContent>
@@ -380,7 +597,9 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
               </div>
             ))}
             {artisans.length === 0 && (
-              <p className="text-sm text-muted-foreground">Recruit an artisan before the forge can burn.</p>
+              <p className="text-sm text-muted-foreground">
+                Recruit an artisan before the forge can burn.
+              </p>
             )}
           </div>
         </Window>
@@ -395,13 +614,20 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
                 <div className="flex min-w-0 items-center gap-2">
                   <Slot item={i.id} size={32} />
                   <span className="min-w-0">
-                    <span className={cn("block truncate text-xs", GRADE_CLASS[i.grade])}>{i.name}</span>
+                    <span className={cn("block truncate text-xs", GRADE_CLASS[i.grade])}>
+                      {i.name}
+                    </span>
                     <span className="text-[10px] text-muted-foreground">
                       [{i.grade}] ×{state.inventory[i.id]}
                     </span>
                   </span>
                 </div>
-                <Button size="sm" variant="ghost" className="shrink-0 text-xs" onClick={() => api.sell(i.id)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 text-xs"
+                  onClick={() => api.sell(i.id)}
+                >
                   Sell {i.value}g
                 </Button>
               </div>
@@ -412,6 +638,8 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
           </div>
         </Window>
       </div>
+
+      <SharpenBench state={state} api={api} />
 
       <Window
         title="Outfit"
@@ -426,7 +654,10 @@ export function CraftPanel({ state, api }: { state: GameState; api: ClanApi }) {
                   onValueChange={(v) => api.equip(m.id, v as never)}
                   disabled={gearOwned.length === 0 || m.gear.length >= 6}
                 >
-                  <SelectTrigger className="h-7 w-36 text-xs" aria-label={`Equip gear on ${m.name}`}>
+                  <SelectTrigger
+                    className="h-7 w-36 text-xs"
+                    aria-label={`Equip gear on ${m.name}`}
+                  >
                     <SelectValue placeholder="Equip" />
                   </SelectTrigger>
                   <SelectContent>
