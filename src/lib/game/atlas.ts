@@ -46,6 +46,8 @@ export interface AtlasMap {
   art: string | null;
   /** realm hue used by the relief fallback and cartouche */
   hue: string;
+  /** width:height ratio of this map's box (default 4/3) */
+  aspect?: number;
   parent?: AtlasMapId;
   locations: AtlasLocation[];
 }
@@ -87,16 +89,17 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
     title: "Aethyr",
     kind: "continent",
     hue: A.gilded,
+    aspect: 1.5,
     subtitle:
       "A fractured continent scoured by ash and ambition. Creed is power, legacy is earned — and the Long Night watches all.",
-    art: "aethyr.png",
+    art: "aethyr.jpg",
     locations: [
       {
         id: "ember_court",
         name: "The Ember Court",
         type: "realm",
-        x: 31,
-        y: 24,
+        x: 20,
+        y: 64,
         hue: A.ember,
         region: "ember_court",
         blurb:
@@ -106,8 +109,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "hollow_covenant",
         name: "The Hollow Covenant",
         type: "realm",
-        x: 74,
-        y: 22,
+        x: 76,
+        y: 47,
         hue: A.hollow,
         region: "hollow_covenant",
         blurb:
@@ -117,8 +120,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "free_holds",
         name: "The Free Holds",
         type: "realm",
-        x: 45,
-        y: 8,
+        x: 53,
+        y: 11,
         hue: A.free,
         region: "free_holds",
         blurb:
@@ -128,8 +131,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "pale_wardens",
         name: "The Pale Wardens",
         type: "realm",
-        x: 19,
-        y: 41,
+        x: 22,
+        y: 17,
         hue: A.pale,
         region: "pale_wardens",
         blurb:
@@ -139,8 +142,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "verdant",
         name: "The Verdant Reclamation",
         type: "realm",
-        x: 83,
-        y: 44,
+        x: 84,
+        y: 29,
         hue: A.verdant,
         region: "verdant_reclamation",
         blurb:
@@ -150,8 +153,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "gilded",
         name: "The Gilded Compact",
         type: "realm",
-        x: 23,
-        y: 60,
+        x: 57,
+        y: 66,
         hue: A.gilded,
         region: "gilded_compact",
         blurb:
@@ -161,8 +164,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "sunless",
         name: "The Sunless Choir",
         type: "realm",
-        x: 52,
-        y: 78,
+        x: 34,
+        y: 84,
         hue: A.sunless,
         region: "sunless_choir",
         blurb:
@@ -173,7 +176,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         name: "Castle Vareth",
         type: "stronghold",
         x: 50,
-        y: 27,
+        y: 45,
         blurb:
           "The Contested Stronghold at the heart of Aethyr. Black stone over the trade road — whoever holds it taxes every caravan and every rival's pride.",
       },
@@ -182,7 +185,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         name: "The Ashen Reach",
         type: "monument",
         x: 48,
-        y: 49,
+        y: 56,
         blurb:
           "The scoured imperial heart, claimed by none and crossed by all. The crossroads of the continent, where every march begins.",
       },
@@ -190,16 +193,16 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "founders",
         name: "The Founders' Monument",
         type: "monument",
-        x: 77,
-        y: 66,
+        x: 88,
+        y: 58,
         blurb: "A ringed monument to the first oath-takers, half-swallowed by the Verdant green.",
       },
       {
         id: "drowned",
         name: "The Drowned Cathedrals",
         type: "holy",
-        x: 38,
-        y: 71,
+        x: 44,
+        y: 87,
         blurb:
           "Flooded spires of a faith the sea took. The seat of the Sunless Choir's drowned devotions.",
       },
@@ -207,8 +210,8 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         id: "embervault",
         name: "The Embervault",
         type: "ruin",
-        x: 41,
-        y: 86,
+        x: 60,
+        y: 90,
         blurb:
           "A sunken vault-city beneath the Sunless Choir. What was sealed there was sealed for a reason.",
       },
