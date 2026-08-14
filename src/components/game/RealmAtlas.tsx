@@ -251,6 +251,7 @@ export function RealmAtlas({
   now,
   className,
   onOpenTool,
+  navSlot,
 }: {
   /** live game state — when supplied with `api`, play mode deploys real banners */
   state?: GameState;
@@ -260,6 +261,8 @@ export function RealmAtlas({
   className?: string;
   /** jump straight to a tool panel (Forge, Warehouse) from the map's own toolbar */
   onOpenTool?: (tab: string) => void;
+  /** the game menu, rendered into the map's own top bar (a burger, in practice) */
+  navSlot?: React.ReactNode;
 }) {
   const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
   // the war table (live: state + api wired) opens ready to command; the standalone
@@ -642,18 +645,23 @@ export function RealmAtlas({
 
   // deployed banners standing on the current map, stacked when they share a spot
   const fieldBanners = (() => {
-    const stackAt: Record<string, number> = {};
-    const out: {
-      id: string;
-      name: string;
-      x: number;
-      y: number;
-      fighting: boolean;
-      traveling: boolean;
-      resting: boolean;
-      pct: number;
-    }[] = [];
-    // the home haven's seat, where resting and far-flung banners muster
+    // Group banners by the exact point they sit on, so many banners mustered at
+    // one place (the home seat especially) read as a single "N banners" marker
+    // instead of a column of flags fanned all across the map.
+    const groups = new Map<
+      string,
+      {
+        x: number;
+        y: number;
+        parties: {
+          name: string;
+          fighting: boolean;
+          traveling: boolean;
+          resting: boolean;
+          pct: number;
+        }[];
+      }
+    >();
     const homeLoc = ATLAS_MAPS[currentId].locations.find((l) => l.home);
     for (const p of state?.parties ?? []) {
       if (p.memberIds.length === 0) continue; // an empty banner isn't a host
@@ -669,19 +677,20 @@ export function RealmAtlas({
       }
       if (!pos) continue;
       const key = `${pos.x},${pos.y}`;
-      const n = (stackAt[key] = (stackAt[key] ?? 0) + 1) - 1;
-      out.push({
-        id: p.id,
+      let g = groups.get(key);
+      if (!g) {
+        g = { x: pos.x, y: pos.y, parties: [] };
+        groups.set(key, g);
+      }
+      g.parties.push({
         name: p.name,
-        x: pos.x + n * 1.5,
-        y: pos.y - n * 4,
         fighting: !!p.run,
         traveling: !!p.travel && !p.run,
         resting,
         pct: progressOf(p),
       });
     }
-    return out;
+    return [...groups.values()];
   })();
 
   return (
@@ -691,8 +700,9 @@ export function RealmAtlas({
         className,
       )}
     >
-      {/* top bar: breadcrumb + mode toggle */}
+      {/* top bar: menu + breadcrumb + mode toggle */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#17130d] px-3 py-2">
+        {navSlot}
         <nav className="flex flex-1 items-center gap-1.5" aria-label="Atlas location">
           {crumbs.map((m, i) => {
             const last = i === crumbs.length - 1;
@@ -997,46 +1007,54 @@ export function RealmAtlas({
               );
             })}
 
-            {/* deployed banners standing in the field */}
-            {fieldBanners.map((b) => (
-              <div
-                key={b.id}
-                className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-full"
-                style={{ left: `${b.x}%`, top: `${b.y}%` }}
-              >
-                {/* counter-scale by 1/zoom so the label keeps a constant on-screen
-                    size instead of blowing up as the map is zoomed in */}
+            {/* banners in the field — one marker per point, counting any stack */}
+            {fieldBanners.map((g) => {
+              const many = g.parties.length > 1;
+              const fighting = g.parties.some((p) => p.fighting);
+              const traveling = !fighting && g.parties.some((p) => p.traveling);
+              const allResting = g.parties.every((p) => p.resting);
+              const glyph = fighting ? "⚑" : traveling ? "➹" : allResting ? "⌂" : "⚑";
+              const single = many ? null : g.parties[0]!;
+              return (
                 <div
-                  style={{
-                    transform: `scale(${1 / Math.max(1, zoom)})`,
-                    transformOrigin: "bottom center",
-                  }}
+                  key={`${g.x},${g.y}`}
+                  className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-full"
+                  style={{ left: `${g.x}%`, top: `${g.y}%` }}
                 >
+                  {/* counter-scale by 1/zoom so the label keeps a constant on-screen
+                      size instead of blowing up as the map is zoomed in */}
                   <div
-                    className={cn(
-                      "flex items-center gap-1 whitespace-nowrap rounded-[2px] border bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]",
-                      b.resting ? "border-gold/40 opacity-90" : "border-gold",
-                    )}
+                    style={{
+                      transform: `scale(${1 / Math.max(1, zoom)})`,
+                      transformOrigin: "bottom center",
+                    }}
                   >
-                    <span
-                      aria-hidden="true"
-                      className={cn(b.fighting && "motion-safe:animate-pulse")}
+                    <div
+                      className={cn(
+                        "flex items-center gap-1 whitespace-nowrap rounded-[2px] border bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]",
+                        allResting ? "border-gold/40 opacity-90" : "border-gold",
+                      )}
                     >
-                      {b.resting ? "⌂" : b.traveling ? "➹" : "⚑"}
-                    </span>
-                    {b.name}
-                  </div>
-                  {(b.fighting || b.traveling) && (
-                    <div className="mt-0.5 h-[2px] w-full bg-black/40">
                       <span
-                        className="block h-full bg-gold motion-safe:transition-[width]"
-                        style={{ width: `${b.pct}%` }}
-                      />
+                        aria-hidden="true"
+                        className={cn(fighting && "motion-safe:animate-pulse")}
+                      >
+                        {glyph}
+                      </span>
+                      {many ? `${g.parties.length} banners` : single!.name}
                     </div>
-                  )}
+                    {single && (single.fighting || single.traveling) && (
+                      <div className="mt-0.5 h-[2px] w-full bg-black/40">
+                        <span
+                          className="block h-full bg-gold motion-safe:transition-[width]"
+                          style={{ width: `${single.pct}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* fly-in / fly-out overlay: cross-fades the incoming map over the top */}
