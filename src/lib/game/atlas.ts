@@ -1024,7 +1024,12 @@ export function bannerPointOnMap(
   const map = ATLAS_MAPS[mapId];
   if (map.kind === "region") {
     const loc = map.locations.find((l) => ATLAS_ZONE[l.id] === zoneId);
-    return loc ? { x: loc.x, y: loc.y } : null;
+    if (loc) return { x: loc.x, y: loc.y };
+    // The home haven is the default view: muster any banner hunting a zone that
+    // isn't painted here at the seat, so the whole host stays visible from home
+    // instead of vanishing when it marches beyond the map's own points.
+    const home = map.locations.find((l) => l.home);
+    return home ? { x: home.x, y: home.y } : null;
   }
   // continent
   const z2a = ZONE_TO_ATLAS[zoneId];
