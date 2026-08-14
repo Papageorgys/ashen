@@ -1015,7 +1015,7 @@ export function useClanGame() {
         m.partyId = partyId;
       }),
 
-    sendParty: (partyId: string, zoneId: string) =>
+    sendParty: (partyId: string, zoneId: string, atlasLoc?: string) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);
         const z = ZONES.find((x) => x.id === zoneId);
@@ -1025,6 +1025,8 @@ export function useClanGame() {
         const travelMs = travelMsTo(zoneId);
         p.travel = { zoneId, arrivesAt: Date.now() + travelMs };
         p.farming = zoneId;
+        // remember exactly where on the atlas it was sent, so it's drawn there
+        p.atlasLoc = atlasLoc;
         pushLog(
           s,
           `${p.name} set out to march on ${z.name} — ${Math.round(travelMs / 1000)}s on the road.`,

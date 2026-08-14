@@ -20,7 +20,6 @@ import {
   ATLAS_TYPE_LABEL,
   ATLAS_ZONE,
   atlasMarker,
-  bannerPointOnMap,
   HOME_MAP,
   type AtlasLocation,
   type AtlasMap,
@@ -496,8 +495,8 @@ export function RealmAtlas({
   const selHere = selZone ? partiesAt(selZone.id) : [];
   const selDeployable = selZone ? deployable(selZone.id) : [];
 
-  function marchLive(zoneId: string, party: Party, name: string) {
-    api?.sendParty(party.id, zoneId);
+  function marchLive(zoneId: string, party: Party, name: string, locId?: string) {
+    api?.sendParty(party.id, zoneId, locId);
     setStatus(`${party.name} marches on ${name}.`);
   }
   function recallLive(party: Party) {
@@ -662,22 +661,26 @@ export function RealmAtlas({
         }[];
       }
     >();
-    // Banners are shown only on the home-haven map. Deploying records a game zone,
-    // and many atlas maps paint the SAME zones (Ember Court, the Free Holds and
-    // Greenhaven all have a Howling Warren point, etc.), so a banner "in
-    // howling_warren" would otherwise appear on every map that paints that zone —
-    // looking like banners you never sent there. The home map is the one
-    // unambiguous overview: local zones sit on their points, everything else
-    // musters at the seat.
-    const homeLoc = ATLAS_MAPS[currentId].locations.find((l) => l.home);
-    if (!homeLoc) return [];
+    // A banner is drawn at the exact atlas point it was marched from, so it shows
+    // only where it's actually hunting — never on some other map that happens to
+    // paint the same game zone at a different point. Banners at rest (and older
+    // orders with no recorded point) muster at the home seat.
+    const map = ATLAS_MAPS[currentId];
+    const homeLoc = map.locations.find((l) => l.home);
     for (const p of state?.parties ?? []) {
       if (p.memberIds.length === 0) continue; // an empty banner isn't a host
-      const zid = currentZoneOf(p);
+      const deployed = !!currentZoneOf(p);
       let pos: { x: number; y: number } | null = null;
       let resting = false;
-      if (zid) {
-        pos = bannerPointOnMap(currentId, zid);
+      if (deployed) {
+        if (p.atlasLoc) {
+          const loc = map.locations.find((l) => l.id === p.atlasLoc);
+          if (loc) pos = { x: loc.x, y: loc.y };
+          // else: marched from a point on another map — it's shown there, not here
+        } else if (homeLoc) {
+          // an order with no recorded point (older save) musters at the seat
+          pos = { x: homeLoc.x, y: homeLoc.y };
+        }
       } else if (homeLoc) {
         // not deployed — it stands in the hall, shown at the home seat
         pos = { x: homeLoc.x, y: homeLoc.y };
@@ -1346,7 +1349,7 @@ export function RealmAtlas({
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => marchLive(selZone.id, p, selected.name)}
+                        onClick={() => marchLive(selZone.id, p, selected.name, selected.id)}
                         className="flex items-center justify-between gap-2 rounded-sm border border-gold bg-gradient-to-b from-gold to-[#c69a3e] px-2.5 py-1.5 font-display text-xs uppercase tracking-[0.1em] text-[#120d05] transition hover:brightness-110"
                       >
                         <span className="truncate">March {p.name}</span>
