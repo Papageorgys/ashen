@@ -495,6 +495,7 @@ function Index() {
         <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="stage-scroll min-h-0 min-w-0 space-y-4 px-3 py-4 sm:px-5">
             <ClanHeader state={state} api={api} />
+            <PartyBoard state={state} api={api} now={now} onOpenTool={setTool} />
             <div className="lg:hidden">
               <ExpeditionFeed state={state} now={now} />
             </div>
