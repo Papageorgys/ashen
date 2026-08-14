@@ -11,6 +11,8 @@ import {
   Castle,
   Anvil,
   PenLine,
+  Flame,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -32,6 +34,8 @@ import {
   zoneCondition,
   conditionRisk,
   longNightActive,
+  bannersInCity,
+  flameRestBill,
   RISK_LABEL,
   type RiskTier,
 } from "@/lib/game/engine";
@@ -1071,38 +1075,115 @@ export function RealmAtlas({
               </p>
             )}
 
-            {/* home city — the town's own services, reached by clicking the seat */}
-            {selected.home && onOpenTool && (
-              <div className="flex flex-col gap-2">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                  Your home haven — hold court
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {CITY_ACTIONS.map((a) => {
-                    const Icon = a.icon;
-                    return (
-                      <button
-                        key={a.tool}
-                        type="button"
-                        onClick={() => onOpenTool(a.tool)}
-                        title={a.hint}
-                        className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2.5 py-2 text-left transition hover:border-gold/60 hover:bg-gold/10"
+            {/* home city — its own actions, live only while a banner stands in the hall */}
+            {selected.home &&
+              onOpenTool &&
+              (() => {
+                const inCity = state ? bannersInCity(state) : [];
+                const atHome = inCity.length > 0;
+                const bill = state ? flameRestBill(state) : { wounded: [], gold: 0 };
+                const canPayRest =
+                  !!state && atHome && bill.wounded.length > 0 && state.gold >= bill.gold;
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                        Your home haven
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-[2px] px-1.5 py-px text-[9px] uppercase tracking-[0.1em]",
+                          atHome ? "bg-[#7ea86a] text-black" : "bg-black/50 text-muted-foreground",
+                        )}
                       >
-                        <Icon className="h-4 w-4 shrink-0 text-gold" aria-hidden />
-                        <span className="min-w-0">
-                          <span className="block truncate font-display text-xs text-gold">
-                            {a.label}
+                        {atHome ? `${inCity.length} in the hall` : "hall empty"}
+                      </span>
+                    </div>
+
+                    {!atHome && (
+                      <p className="rounded-sm border border-white/10 bg-black/30 px-2 py-1.5 text-[10px] leading-snug text-muted-foreground">
+                        No banner stands in the hall. Recall one home to rest, muster and hold
+                        court.
+                      </p>
+                    )}
+
+                    {/* in-world actions on the city itself */}
+                    {api && (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          disabled={!canPayRest}
+                          onClick={() => api.restAtFlameHeal()}
+                          title={
+                            atHome
+                              ? bill.wounded.length
+                                ? `Restore the wounded by half — ${bill.gold} gold`
+                                : "The garrison is hale"
+                              : "No banner in the hall"
+                          }
+                          className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2.5 py-2 text-left transition enabled:hover:border-gold/60 enabled:hover:bg-gold/10 disabled:opacity-40"
+                        >
+                          <Flame className="h-4 w-4 shrink-0 text-forge-ember" aria-hidden />
+                          <span className="min-w-0">
+                            <span className="block truncate font-display text-xs text-gold">
+                              Rest at the flame
+                            </span>
+                            <span className="block truncate text-[9px] text-muted-foreground">
+                              {atHome && bill.wounded.length
+                                ? `${bill.wounded.length} wounded · ${bill.gold}g`
+                                : "Heal the garrison"}
+                            </span>
                           </span>
-                          <span className="block truncate text-[9px] text-muted-foreground">
-                            {a.hint}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!atHome}
+                          onClick={() => api.musterMilitia()}
+                          title={atHome ? "Fill the hall's empty seats" : "No banner in the hall"}
+                          className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2.5 py-2 text-left transition enabled:hover:border-gold/60 enabled:hover:bg-gold/10 disabled:opacity-40"
+                        >
+                          <Users className="h-4 w-4 shrink-0 text-gold" aria-hidden />
+                          <span className="min-w-0">
+                            <span className="block truncate font-display text-xs text-gold">
+                              Muster the militia
+                            </span>
+                            <span className="block truncate text-[9px] text-muted-foreground">
+                              Fill empty seats
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* the hall's business — reachable only while a banner is home */}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {CITY_ACTIONS.map((a) => {
+                        const Icon = a.icon;
+                        return (
+                          <button
+                            key={a.tool}
+                            type="button"
+                            disabled={!atHome}
+                            onClick={() => onOpenTool(a.tool)}
+                            title={atHome ? a.hint : "No banner in the hall"}
+                            className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2.5 py-2 text-left transition enabled:hover:border-gold/60 enabled:hover:bg-gold/10 disabled:opacity-40"
+                          >
+                            <Icon className="h-4 w-4 shrink-0 text-gold" aria-hidden />
+                            <span className="min-w-0">
+                              <span className="block truncate font-display text-xs text-gold">
+                                {a.label}
+                              </span>
+                              <span className="block truncate text-[9px] text-muted-foreground">
+                                {a.hint}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
             {mode === "play" && selected.level != null && !selected.home && (
               <div className="grid grid-cols-3 gap-2">

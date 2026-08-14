@@ -57,6 +57,9 @@ import {
   keepUpgradeCost,
   canUpgradeKeep,
   mendBill,
+  bannersInCity,
+  flameRestBill,
+  FLAME_REST_FRACTION,
   forgeFee,
   KEEP_BY_ID,
   type KeepBuildingId,
@@ -924,6 +927,51 @@ export function useClanGame() {
         }
         if (!n) return void toast.error("Nothing left to draft.");
         pushLog(s, `The war table filled ${n} empty seat(s).`, "info");
+      }),
+
+    /* --------------------------- home-city actions -------------------------- */
+
+    /** Rest the wounded at the warded flame — heals the banners standing in the hall. */
+    restAtFlameHeal: () =>
+      update((s) => {
+        if (!bannersInCity(s).length) return void toast.error("No banner is in the hall.");
+        const bill = flameRestBill(s);
+        if (!bill.wounded.length)
+          return void toast.error("The garrison is hale — none need the flame.");
+        if (s.gold < bill.gold) return void toast.error(`The flame rite asks ${bill.gold} gold.`);
+        s.gold -= bill.gold;
+        for (const m of bill.wounded) {
+          const mh = maxHp(m);
+          const mm = maxMp(m);
+          m.hp = Math.min(mh, Math.round(m.hp + (mh - m.hp) * FLAME_REST_FRACTION));
+          m.mp = Math.min(mm, Math.round(m.mp + (mm - m.mp) * FLAME_REST_FRACTION));
+        }
+        pushLog(
+          s,
+          `The wounded rested at the warded flame — the hall's banners recover (${bill.gold} gold).`,
+          "good",
+        );
+        toast.success(`${bill.wounded.length} champion(s) rest at the flame`);
+      }),
+
+    /** Muster the militia — fills the empty seats of the banners standing in the hall. */
+    musterMilitia: () =>
+      update((s) => {
+        const inCity = bannersInCity(s);
+        if (!inCity.length) return void toast.error("No banner is in the hall.");
+        let n = 0;
+        for (const p of inCity) {
+          for (const m of suggestFill(s, p)) {
+            for (const q of s.parties) q.memberIds = q.memberIds.filter((x) => x !== m.id);
+            p.memberIds.push(m.id);
+            const live = s.members.find((x) => x.id === m.id);
+            if (live) live.partyId = p.id;
+            n++;
+          }
+        }
+        if (!n) return void toast.error("No champions free to muster.");
+        pushLog(s, `The militia mustered — ${n} champion(s) took the hall's empty seats.`, "info");
+        toast.success(`Mustered ${n} into the hall`);
       }),
 
     /** sends the whole banner back to the unassigned tray */
