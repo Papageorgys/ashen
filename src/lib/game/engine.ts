@@ -991,6 +991,30 @@ export function mendBill(state: GameState) {
   return { patients, gold: Math.round(missing * eff.mendCost) };
 }
 
+/* -------------------------------- Home city -------------------------------- */
+/**
+ * A banner is "in the city" when it holds champions and none of them are on the
+ * march or out in the field — i.e. resting at the home haven. The home city's own
+ * actions only work while at least one banner stands in the hall.
+ */
+export function bannersInCity(state: GameState): Party[] {
+  return state.parties.filter((p) => p.memberIds.length > 0 && !p.run && !p.travel && !p.farming);
+}
+
+/** The champions standing in the hall right now — the target of the city's actions. */
+export function cityGarrison(state: GameState): Member[] {
+  const ids = new Set(bannersInCity(state).flatMap((p) => p.memberIds));
+  return state.members.filter((m) => ids.has(m.id));
+}
+
+/** The warded flame restores half of what the garrison is missing, for a humble fee. */
+export const FLAME_REST_FRACTION = 0.5;
+export function flameRestBill(state: GameState) {
+  const wounded = cityGarrison(state).filter((m) => m.hp < maxHp(m) || m.mp < maxMp(m));
+  const missing = wounded.reduce((s, m) => s + (maxHp(m) - m.hp), 0);
+  return { wounded, gold: Math.round(missing * FLAME_REST_FRACTION * 2) };
+}
+
 export function nextClanReq(clanLevel: number) {
   return CLAN_LEVELS.find((c) => c.level === clanLevel + 1) ?? null;
 }
