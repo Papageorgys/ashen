@@ -68,6 +68,11 @@ import {
   sharpenChance,
   sharpenWardCost,
   SHARPEN_SAFE,
+  canSocketRune,
+  RUNE_ITEM,
+  memberDamageType,
+  DAMAGE_LABEL,
+  type RuneType,
   initialState,
   learnSkill as learnSkillFn,
   learnableSkills as learnableSkillsFn,
@@ -1986,6 +1991,37 @@ export function useClanGame() {
         if (!m) return;
         const [it] = m.gear.splice(index, 1);
         if (it) s.inventory[it] = (s.inventory[it] ?? 0) + 1;
+        // an engraved rune is bound to the blade — it's ground away with it
+        if (it && slotOf(it) === "weapon" && m.weaponRune) delete m.weaponRune;
+      }),
+
+    /**
+     * Engrave a weapon rune onto a champion, consuming it. Every strike they land
+     * then deals that damage type — the lever that lets a banner exploit a zone's
+     * weakness. Re-engraving overwrites the old rune; unequipping the weapon loses it.
+     */
+    socketRune: (memberId: string, type: RuneType) =>
+      update((s) => {
+        const check = canSocketRune(s, memberId, type);
+        if (!check.ok) return void toast.error(check.why);
+        const m = s.members.find((x) => x.id === memberId)!;
+        s.inventory[RUNE_ITEM[type]] = (s.inventory[RUNE_ITEM[type]] ?? 0) - 1;
+        m.weaponRune = type;
+        pushLog(
+          s,
+          `${m.name}'s weapon is engraved — strikes now deal ${DAMAGE_LABEL[type]}.`,
+          "good",
+        );
+        toast.success(`${m.name}: ${DAMAGE_LABEL[type]} rune engraved`);
+      }),
+
+    clearRune: (memberId: string) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m || !m.weaponRune) return;
+        const was = m.weaponRune;
+        delete m.weaponRune;
+        pushLog(s, `${m.name}'s ${DAMAGE_LABEL[was]} rune is ground away.`, "info");
       }),
 
     sell: (item: ItemId) =>

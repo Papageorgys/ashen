@@ -1688,6 +1688,102 @@ for (const grade of SHOT_GRADES) {
 
 ITEMS.push(...SHOT_ITEMS);
 
+/* --------------------------------- Runes ----------------------------------- */
+/*
+ * Engravable weapon runes. Socket one onto a champion's weapon and every strike
+ * they land changes damage type, so a banner can be tuned to a zone's weakness
+ * (see the threat profile on the War Table). Runes are refined from farmed
+ * essence at the Jewelcraft bench — the essence economy feeding gear again.
+ */
+export const RUNE_ITEMS: ItemDef[] = [
+  {
+    id: "rune_fire",
+    name: "Ember Rune",
+    kind: "material",
+    grade: "D",
+    value: 90,
+    desc: "Engrave it on a weapon and every strike burns — the wielder deals Fire.",
+  },
+  {
+    id: "rune_frost",
+    name: "Frost Rune",
+    kind: "material",
+    grade: "D",
+    value: 90,
+    desc: "Engrave it on a weapon and every strike bites cold — the wielder deals Frost.",
+  },
+  {
+    id: "rune_shadow",
+    name: "Shadow Rune",
+    kind: "material",
+    grade: "D",
+    value: 110,
+    desc: "Engrave it on a weapon and every strike drinks the light — the wielder deals Shadow.",
+  },
+  {
+    id: "rune_holy",
+    name: "Sacred Rune",
+    kind: "material",
+    grade: "D",
+    value: 130,
+    desc: "Engrave it on a weapon and every strike shines — the wielder deals Holy.",
+  },
+];
+
+ITEMS.push(...RUNE_ITEMS);
+
+const RUNE_RECIPES: Recipe[] = [
+  {
+    id: "r_rune_fire",
+    result: "rune_fire",
+    gold: 180,
+    mastery: "jewelry",
+    artisans: 1,
+    chance: 0.88,
+    inputs: [
+      { item: "soul_ember", qty: 24 },
+      { item: "spirit_ore", qty: 2 },
+    ],
+  },
+  {
+    id: "r_rune_frost",
+    result: "rune_frost",
+    gold: 180,
+    mastery: "jewelry",
+    artisans: 1,
+    chance: 0.88,
+    inputs: [
+      { item: "spirit_ember", qty: 24 },
+      { item: "moon_silk", qty: 2 },
+    ],
+  },
+  {
+    id: "r_rune_shadow",
+    result: "rune_shadow",
+    gold: 200,
+    mastery: "jewelry",
+    artisans: 1,
+    chance: 0.85,
+    inputs: [
+      { item: "spirit_ember", qty: 20 },
+      { item: "bone_dust", qty: 6 },
+    ],
+  },
+  {
+    id: "r_rune_holy",
+    result: "rune_holy",
+    gold: 240,
+    mastery: "jewelry",
+    artisans: 2,
+    chance: 0.82,
+    inputs: [
+      { item: "soul_ember", qty: 16 },
+      { item: "spirit_ember", qty: 16 },
+      { item: "moon_silk", qty: 2 },
+    ],
+  },
+];
+
 /* ------------------------------ Spell scrolls ------------------------------- */
 /*
  * A caster can imprint a spell onto vellum at the Scriptorium. The scroll then
@@ -2545,6 +2641,7 @@ export const RECIPES: Recipe[] = [
 
 // hands / feet / head pieces for every craftable armour set
 RECIPES.push(...(SET_PIECE_RECIPES as Recipe[]));
+RECIPES.push(...RUNE_RECIPES);
 
 /* ---------------------------------- Zones ---------------------------------- */
 
@@ -3145,7 +3242,8 @@ export const LANDMARKS: Landmark[] = [
     id: "ravensgate",
     name: "Frostwatch Keep",
     kind: "castle",
-    blurb: "A Pale Warden bastion on the north-east frontier, where the Long Night presses hardest.",
+    blurb:
+      "A Pale Warden bastion on the north-east frontier, where the Long Night presses hardest.",
     pos: { x: 86, y: 14 },
   },
   {

@@ -129,6 +129,8 @@ export interface Member {
   deaths?: number;
   /** artisans only — chosen crafting discipline */
   craftMastery?: CraftMastery | undefined;
+  /** a rune engraved on their weapon — overrides the damage type they deal */
+  weaponRune?: DamageType | undefined;
   /** whether this champion loads soulshots / spiritshots (default on) */
   shotsOn?: boolean;
   /** the player's own character — cannot be dismissed, cannot be lost forever */
@@ -2156,8 +2158,36 @@ export function typeMultVs(type: DamageType, family: MonsterFamily): number {
   return 1;
 }
 
-/** The damage type a champion deals — casters vary by their people. */
+/** The four engravable weapon runes, each forcing a damage type on the wielder. */
+export type RuneType = Exclude<DamageType, "phys">;
+export const RUNE_TYPES: RuneType[] = ["fire", "frost", "shadow", "holy"];
+export const RUNE_ITEM: Record<RuneType, ItemId> = {
+  fire: "rune_fire",
+  frost: "rune_frost",
+  shadow: "rune_shadow",
+  holy: "rune_holy",
+};
+
+/** The rune type an item id represents, or null if it isn't a rune. */
+export function runeItemType(item: ItemId): RuneType | null {
+  const hit = (Object.entries(RUNE_ITEM) as [RuneType, ItemId][]).find(([, id]) => id === item);
+  return hit ? hit[0] : null;
+}
+
+/** Can this champion take a weapon rune, and is the given one in the vault? */
+export function canSocketRune(state: GameState, memberId: string, type: RuneType) {
+  const m = state.members.find((x) => x.id === memberId);
+  if (!m) return { ok: false, why: "No such champion" };
+  if (!m.gear.some((g) => slotOf(g) === "weapon"))
+    return { ok: false, why: "Needs a weapon to engrave" };
+  if ((state.inventory[RUNE_ITEM[type]] ?? 0) < 1)
+    return { ok: false, why: "No such rune in the vault" };
+  return { ok: true, why: "" };
+}
+
+/** The damage type a champion deals — a weapon rune overrides all; casters vary by their people. */
 export function memberDamageType(m: Member): DamageType {
+  if (m.weaponRune) return m.weaponRune;
   const cls = CLASS_BY_ID[m.classId]!;
   if (cls.role === "mender" || cls.role === "chanter") return "holy";
   if (cls.role === "arcanist") {
