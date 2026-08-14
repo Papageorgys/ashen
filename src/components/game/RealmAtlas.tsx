@@ -5,6 +5,7 @@ import {
   ATLAS_TYPE_LABEL,
   ATLAS_ZONE,
   atlasMarker,
+  bannerPointOnMap,
   type AtlasLocation,
   type AtlasMap,
   type AtlasMapId,
@@ -586,6 +587,38 @@ export function RealmAtlas({
     size: (1 / zoom) * 100,
   };
 
+  // deployed banners standing on the current map, stacked when they share a spot
+  const fieldBanners = (() => {
+    const stackAt: Record<string, number> = {};
+    const out: {
+      id: string;
+      name: string;
+      x: number;
+      y: number;
+      fighting: boolean;
+      traveling: boolean;
+      pct: number;
+    }[] = [];
+    for (const p of state?.parties ?? []) {
+      const zid = currentZoneOf(p);
+      if (!zid) continue;
+      const pos = bannerPointOnMap(currentId, zid);
+      if (!pos) continue;
+      const key = `${pos.x},${pos.y}`;
+      const n = (stackAt[key] = (stackAt[key] ?? 0) + 1) - 1;
+      out.push({
+        id: p.id,
+        name: p.name,
+        x: pos.x + n * 1.5,
+        y: pos.y - n * 4,
+        fighting: !!p.run,
+        traveling: !!p.travel && !p.run,
+        pct: progressOf(p),
+      });
+    }
+    return out;
+  })();
+
   return (
     <div
       className={cn(
@@ -837,6 +870,33 @@ export function RealmAtlas({
                 </div>
               );
             })}
+
+            {/* deployed banners standing in the field */}
+            {fieldBanners.map((b) => (
+              <div
+                key={b.id}
+                className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-full"
+                style={{ left: `${b.x}%`, top: `${b.y}%` }}
+              >
+                <div className="flex items-center gap-1 whitespace-nowrap rounded-[2px] border border-gold bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]">
+                  <span
+                    aria-hidden="true"
+                    className={cn(b.fighting && "motion-safe:animate-pulse")}
+                  >
+                    {b.traveling ? "➹" : "⚑"}
+                  </span>
+                  {b.name}
+                </div>
+                {(b.fighting || b.traveling) && (
+                  <div className="mt-0.5 h-[2px] w-full bg-black/40">
+                    <span
+                      className="block h-full bg-gold motion-safe:transition-[width]"
+                      style={{ width: `${b.pct}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* fly-in / fly-out overlay: cross-fades the incoming map over the top */}

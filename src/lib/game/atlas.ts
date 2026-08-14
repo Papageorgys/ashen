@@ -864,3 +864,47 @@ export function atlasMarker(map: AtlasMap, loc: AtlasLocation): string {
   if (n >= 0) return String(n + 1);
   return ATLAS_ICON[loc.type] || "✦";
 }
+
+/** Reverse of ATLAS_ZONE: which region map + place a game zone sits on. */
+export const ZONE_TO_ATLAS: Record<string, { map: AtlasMapId; locId: string }> = (() => {
+  const out: Record<string, { map: AtlasMapId; locId: string }> = {};
+  for (const map of Object.values(ATLAS_MAPS)) {
+    if (map.kind !== "region") continue;
+    for (const loc of map.locations) {
+      const z = ATLAS_ZONE[loc.id];
+      if (z && !out[z]) out[z] = { map: map.id, locId: loc.id };
+    }
+  }
+  return out;
+})();
+
+/** Which continent realm marker owns a region, so field banners can cluster there. */
+export const REGION_TO_CONTINENT_LOC: Partial<Record<AtlasMapId, string>> = (() => {
+  const out: Partial<Record<AtlasMapId, string>> = {};
+  for (const loc of ATLAS_MAPS.aethyr.locations) if (loc.region) out[loc.region] = loc.id;
+  return out;
+})();
+
+/**
+ * Where a deployed banner should sit on a given atlas map, from its game zone.
+ * On a region map: the exact point of interest (or null if the zone isn't here).
+ * On the continent: the realm that owns the zone (or the Ashen Reach as a
+ * catch-all for zones with no painted point of interest).
+ */
+export function bannerPointOnMap(
+  mapId: AtlasMapId,
+  zoneId: string,
+): { x: number; y: number } | null {
+  const map = ATLAS_MAPS[mapId];
+  if (map.kind === "region") {
+    const loc = map.locations.find((l) => ATLAS_ZONE[l.id] === zoneId);
+    return loc ? { x: loc.x, y: loc.y } : null;
+  }
+  // continent
+  const z2a = ZONE_TO_ATLAS[zoneId];
+  const contLocId = z2a ? REGION_TO_CONTINENT_LOC[z2a.map] : undefined;
+  const loc =
+    (contLocId && map.locations.find((l) => l.id === contLocId)) ||
+    map.locations.find((l) => l.id === "ashen_reach");
+  return loc ? { x: loc.x, y: loc.y } : null;
+}
