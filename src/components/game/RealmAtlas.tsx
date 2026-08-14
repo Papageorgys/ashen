@@ -1004,28 +1004,37 @@ export function RealmAtlas({
                 className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-full"
                 style={{ left: `${b.x}%`, top: `${b.y}%` }}
               >
+                {/* counter-scale by 1/zoom so the label keeps a constant on-screen
+                    size instead of blowing up as the map is zoomed in */}
                 <div
-                  className={cn(
-                    "flex items-center gap-1 whitespace-nowrap rounded-[2px] border bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]",
-                    b.resting ? "border-gold/40 opacity-90" : "border-gold",
-                  )}
+                  style={{
+                    transform: `scale(${1 / Math.max(1, zoom)})`,
+                    transformOrigin: "bottom center",
+                  }}
                 >
-                  <span
-                    aria-hidden="true"
-                    className={cn(b.fighting && "motion-safe:animate-pulse")}
+                  <div
+                    className={cn(
+                      "flex items-center gap-1 whitespace-nowrap rounded-[2px] border bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]",
+                      b.resting ? "border-gold/40 opacity-90" : "border-gold",
+                    )}
                   >
-                    {b.resting ? "⌂" : b.traveling ? "➹" : "⚑"}
-                  </span>
-                  {b.name}
-                </div>
-                {(b.fighting || b.traveling) && (
-                  <div className="mt-0.5 h-[2px] w-full bg-black/40">
                     <span
-                      className="block h-full bg-gold motion-safe:transition-[width]"
-                      style={{ width: `${b.pct}%` }}
-                    />
+                      aria-hidden="true"
+                      className={cn(b.fighting && "motion-safe:animate-pulse")}
+                    >
+                      {b.resting ? "⌂" : b.traveling ? "➹" : "⚑"}
+                    </span>
+                    {b.name}
                   </div>
-                )}
+                  {(b.fighting || b.traveling) && (
+                    <div className="mt-0.5 h-[2px] w-full bg-black/40">
+                      <span
+                        className="block h-full bg-gold motion-safe:transition-[width]"
+                        style={{ width: `${b.pct}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
