@@ -648,12 +648,23 @@ export function RealmAtlas({
       y: number;
       fighting: boolean;
       traveling: boolean;
+      resting: boolean;
       pct: number;
     }[] = [];
+    // the home haven's seat, where resting and far-flung banners muster
+    const homeLoc = ATLAS_MAPS[currentId].locations.find((l) => l.home);
     for (const p of state?.parties ?? []) {
+      if (p.memberIds.length === 0) continue; // an empty banner isn't a host
       const zid = currentZoneOf(p);
-      if (!zid) continue;
-      const pos = bannerPointOnMap(currentId, zid);
+      let pos: { x: number; y: number } | null = null;
+      let resting = false;
+      if (zid) {
+        pos = bannerPointOnMap(currentId, zid);
+      } else if (homeLoc) {
+        // not deployed — it stands in the hall, shown at the home seat
+        pos = { x: homeLoc.x, y: homeLoc.y };
+        resting = true;
+      }
       if (!pos) continue;
       const key = `${pos.x},${pos.y}`;
       const n = (stackAt[key] = (stackAt[key] ?? 0) + 1) - 1;
@@ -664,6 +675,7 @@ export function RealmAtlas({
         y: pos.y - n * 4,
         fighting: !!p.run,
         traveling: !!p.travel && !p.run,
+        resting,
         pct: progressOf(p),
       });
     }
@@ -990,12 +1002,17 @@ export function RealmAtlas({
                 className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-full"
                 style={{ left: `${b.x}%`, top: `${b.y}%` }}
               >
-                <div className="flex items-center gap-1 whitespace-nowrap rounded-[2px] border border-gold bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]">
+                <div
+                  className={cn(
+                    "flex items-center gap-1 whitespace-nowrap rounded-[2px] border bg-[#241a0e] px-1 py-0.5 font-display text-[9px] text-gold shadow-[0_2px_4px_oklch(0_0_0/0.6)]",
+                    b.resting ? "border-gold/40 opacity-90" : "border-gold",
+                  )}
+                >
                   <span
                     aria-hidden="true"
                     className={cn(b.fighting && "motion-safe:animate-pulse")}
                   >
-                    {b.traveling ? "➹" : "⚑"}
+                    {b.resting ? "⌂" : b.traveling ? "➹" : "⚑"}
                   </span>
                   {b.name}
                 </div>
