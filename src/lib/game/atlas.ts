@@ -877,6 +877,28 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         threat: 55,
         blurb: "A green-walled village where the southern roads meet — quiet, and glad of it.",
       },
+      {
+        id: "gh7",
+        name: "Greywatch Fort",
+        type: "stronghold",
+        x: 78,
+        y: 68,
+        level: 1,
+        threat: 30,
+        blurb:
+          "A low border fort watching the wheat ruins — where green banners are blooded on their first hunt.",
+      },
+      {
+        id: "gh8",
+        name: "The Millpond",
+        type: "poi",
+        x: 58,
+        y: 79,
+        level: 3,
+        threat: 40,
+        blurb:
+          "Reed-choked millponds south of the walls, thick with things that bite in the shallows.",
+      },
     ],
   },
 };
@@ -944,14 +966,16 @@ export const ATLAS_ZONE: Record<string, string> = {
   sc4: "ashen_quarry",
   sc5: "moonveil_glade",
   sc6: "frozen_hold",
-  // Greenhaven (Founders' Monument)
-  gh_city: "obsidian_labyrinth",
+  // Greenhaven (Founders' Monument) — the seat is home, not a hunting ground, so
+  // it has no zone: selecting it opens the town's own actions instead of a march.
   gh1: "briar_downs",
   gh2: "kingsroad_marches",
   gh3: "moonveil_glade",
   gh4: "ruined_orchard",
   gh5: "saltmere_flats",
   gh6: "howling_warren",
+  gh7: "wolf_fields",
+  gh8: "millpond_reeds",
 };
 
 /** The numbered points of interest on a region map (everything but the seat). */

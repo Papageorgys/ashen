@@ -577,7 +577,12 @@ function Index() {
             <ClanHeader state={state} api={api} />
             <div className="stage-enter" key={activeTab}>
               <TabsContent value="banners" className="mt-0">
-                <PartyBoard state={state} api={api} now={now} onOpenTool={setTool} />
+                <PartyBoard
+                  state={state}
+                  api={api}
+                  now={now}
+                  onOpenTool={(v) => (TOOL_META[v] ? setTool(v) : setTab(v))}
+                />
               </TabsContent>
               <TabsContent value="keep" className="mt-0">
                 <ClanKeepPanel state={state} api={api} />
