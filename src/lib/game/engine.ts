@@ -1989,6 +1989,8 @@ export interface RunResult {
   rating?: "S" | "A" | "B" | "C" | undefined;
   /** what the banner actually fought out there */
   encounters?: Encounter[];
+  /** the weather the field was under, if anything but Calm */
+  condition?: { id: ZoneConditionId; name: string; glyph: string } | undefined;
 
   text: string;
 }
@@ -2102,6 +2104,162 @@ export function isSurging(zoneId: string, now = Date.now()) {
 export function surgeEndsIn(now = Date.now()) {
   return SURGE_HOUR_MS - (now % SURGE_HOUR_MS);
 }
+
+/* ---------------------------- Zone conditions ----------------------------- */
+/*
+ * Weather over the hunting grounds. Every zone sits under a condition that
+ * rotates each "watch" (a few hours), deterministic from the zone and the clock
+ * so every client agrees. Conditions carry real trade-offs — a rich haul usually
+ * means a deadlier field — so *where and when* a banner hunts actually matters,
+ * now that essence feeds sharpening and runes as well as shots. The Long Night
+ * brings its own condition to the map while it walks.
+ */
+export type ZoneConditionId = "calm" | "emberfall" | "feral" | "bountiful" | "barren" | "nightgrip";
+
+export type RiskTier = "safe" | "steady" | "tense" | "perilous";
+
+export interface ZoneCondition {
+  id: ZoneConditionId;
+  name: string;
+  glyph: string;
+  blurb: string;
+  /** reward/risk multipliers — 1 means no change */
+  gold: number;
+  xp: number;
+  essence: number;
+  drop: number;
+  /** the risk lever — scales the blows the field lands on the banner */
+  enemyHit: number;
+}
+
+export const ZONE_CONDITIONS: Record<ZoneConditionId, ZoneCondition> = {
+  calm: {
+    id: "calm",
+    name: "Calm",
+    glyph: "○",
+    blurb: "Still ground. Nothing for or against you — hunt as you like.",
+    gold: 1,
+    xp: 1,
+    essence: 1,
+    drop: 1,
+    enemyHit: 1,
+  },
+  emberfall: {
+    id: "emberfall",
+    name: "Emberfall",
+    glyph: "✷",
+    blurb: "The slain burn hot — essence pours off the field, and they die angrier for it.",
+    gold: 1,
+    xp: 1,
+    essence: 1.6,
+    drop: 1,
+    enemyHit: 1.08,
+  },
+  feral: {
+    id: "feral",
+    name: "Feral",
+    glyph: "✸",
+    blurb: "The pack is roused — richer spoils and coin, but the field hits back hard.",
+    gold: 1.35,
+    xp: 1.1,
+    essence: 1,
+    drop: 1.25,
+    enemyHit: 1.25,
+  },
+  bountiful: {
+    id: "bountiful",
+    name: "Bountiful",
+    glyph: "❧",
+    blurb:
+      "Rich veins and heavy pelts — materials fall thick, and the ground is no more dangerous.",
+    gold: 1,
+    xp: 1,
+    essence: 1.2,
+    drop: 1.5,
+    enemyHit: 1,
+  },
+  barren: {
+    id: "barren",
+    name: "Barren",
+    glyph: "◍",
+    blurb: "Thin herds and quiet ruins — little to take, but a safe place to blood a green banner.",
+    gold: 0.8,
+    xp: 1,
+    essence: 0.7,
+    drop: 0.8,
+    enemyHit: 0.82,
+  },
+  nightgrip: {
+    id: "nightgrip",
+    name: "Long Night's Grip",
+    glyph: "☾",
+    blurb: "The dark walks this ground — deadliest of all, but it gives up essence and rare finds.",
+    gold: 1.2,
+    xp: 1.15,
+    essence: 1.4,
+    drop: 1.2,
+    enemyHit: 1.35,
+  },
+};
+
+/** A watch — how long a condition holds over a zone before the weather turns. */
+export const CONDITION_WATCH_MS = 3 * 3_600_000;
+
+function strHash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * The condition holding over a zone right now. Deterministic per zone per watch,
+ * weighted toward Calm so a real condition means something; the Long Night's Grip
+ * only appears while the Long Night is abroad.
+ */
+export function zoneCondition(
+  zoneId: string,
+  now: number = Date.now(),
+  longNight = false,
+): ZoneCondition {
+  let seed = (strHash(zoneId) ^ Math.imul(Math.floor(now / CONDITION_WATCH_MS), 2654435761)) >>> 0;
+  seed = seed || 1;
+  seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+  const roll = seed / 4294967296;
+
+  const pool: [ZoneConditionId, number][] = [
+    ["calm", 40],
+    ["emberfall", 15],
+    ["feral", 12],
+    ["bountiful", 15],
+    ["barren", 10],
+  ];
+  if (longNight) pool.push(["nightgrip", 26]);
+
+  const total = pool.reduce((s, [, w]) => s + w, 0);
+  let r = roll * total;
+  for (const [id, w] of pool) {
+    if ((r -= w) <= 0) return ZONE_CONDITIONS[id];
+  }
+  return ZONE_CONDITIONS.calm;
+}
+
+/** The danger a condition adds to a field, for the risk badge. */
+export function conditionRisk(c: ZoneCondition): RiskTier {
+  if (c.enemyHit >= 1.25) return "perilous";
+  if (c.enemyHit >= 1.05) return "tense";
+  if (c.enemyHit <= 0.9) return "safe";
+  return "steady";
+}
+
+export const RISK_LABEL: Record<RiskTier, string> = {
+  safe: "Safe",
+  steady: "Steady",
+  tense: "Tense",
+  perilous: "Perilous",
+};
 
 /* ------------------------------ Combat model ------------------------------ */
 
@@ -2253,6 +2411,9 @@ export function zoneThreatProfile(zoneId: string): {
 export function resolveRun(state: GameState, party: Party, zoneId: string): RunResult {
   const zone = ZONES.find((z) => z.id === zoneId)!;
   const surging = isSurging(zone.id);
+  const cond = zoneCondition(zone.id, Date.now(), longNightActive(state));
+  const condOut =
+    cond.id === "calm" ? undefined : { id: cond.id, name: cond.name, glyph: cond.glyph };
   const ms = partyMembers(state, party);
   const power = partyPower(state, party);
   const syn = synergyBonus(ms);
@@ -2559,6 +2720,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     const frenzy = standingFoes.reduce((s, f) => s + (f.affix === "frenzied" ? f.frenzy : 0), 0);
     const incoming =
       zone.enemyHit *
+      cond.enemyHit *
       (1 + round * 0.05) *
       sMod.incoming *
       (standingFoes.length / packSize) *
@@ -2705,7 +2867,8 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       highlights,
       rating,
       encounters,
-      text: `${party.name} was driven out of ${zone.name}, salvaging ${gold} gold.${fallenNote}`,
+      condition: condOut,
+      text: `${party.name} was driven out of ${zone.name}, salvaging ${gold} gold.${condOut ? ` The field lay under ${condOut.name}.` : ""}${fallenNote}`,
     };
   }
 
@@ -2715,12 +2878,13 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     rnd(zone.gold[0], zone.gold[1]) *
       scale *
       (1 + syn.gold / 100) *
+      cond.gold *
       (eliteMet ? ELITE.goldMult : 1),
   );
   const loot: { item: ItemId; qty: number }[] = [];
   const eliteBonus = eliteMet ? ELITE.dropBonus : 0;
   for (const d of zone.drops) {
-    const chance = Math.min(0.97, d.chance + find * 0.01 + eliteBonus);
+    const chance = Math.min(0.97, d.chance * cond.drop + find * 0.01 + eliteBonus);
     if (Math.random() < chance) {
       loot.push({ item: d.item, qty: rnd(d.qty[0], d.qty[1]) + Math.floor(find / 14) });
     }
@@ -2752,7 +2916,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   // soul / spirit essence — split by what the zone's inhabitants are made of
   const band = ZONE_ESSENCE[zone.id];
   if (band) {
-    const total = rnd(band[0], band[1]);
+    const total = Math.round(rnd(band[0], band[1]) * cond.essence);
     const soulShare = SOUL_SPLIT[ZONE_ARCHETYPE[zone.id] ?? "mixed"];
     const souls = Math.round(total * soulShare);
     const spirits = total - souls;
@@ -2786,6 +2950,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       zone.xp *
         (1 + syn.xp / 100) *
         (1 + (surging ? SURGE_XP_PCT / 100 : 0)) *
+        cond.xp *
         (eliteMet ? ELITE.xpMult : 1),
     ),
     kills,
@@ -2804,8 +2969,9 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     highlights,
     rating,
     encounters,
+    condition: condOut,
 
-    text: `${party.name} cleared ${zone.name}: +${gold} gold, +${Math.round(zone.rep * (1 + (surging ? SURGE_REP_PCT / 100 : 0)))} reputation, ${kills} slain.${surging ? " High activity bonus applied." : ""}${fallenNote}`,
+    text: `${party.name} cleared ${zone.name}: +${gold} gold, +${Math.round(zone.rep * (1 + (surging ? SURGE_REP_PCT / 100 : 0)))} reputation, ${kills} slain.${surging ? " High activity bonus applied." : ""}${condOut ? ` The field lay under ${condOut.name}.` : ""}${fallenNote}`,
   };
 }
 
