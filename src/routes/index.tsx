@@ -41,14 +41,19 @@ import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Anvil,
   BookOpen,
   Castle,
   Flag,
   Globe2,
-  Hammer,
   PawPrint,
-  Package,
   Skull,
   PanelLeftClose,
   PanelLeftOpen,
@@ -297,14 +302,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: "Upgrade your halls",
         requiresClan: true,
       },
-      { value: "warehouse", label: "Warehouse", icon: Package, hint: "Every drop your clan holds" },
       { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
-      {
-        value: "forge",
-        label: "Forge",
-        icon: Hammer,
-        hint: "Craft, sharpen and engrave — quality varies with your artisans",
-      },
       {
         value: "sysforge",
         label: "Town Smithy",
@@ -357,6 +355,21 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
 
 const ALL_ITEMS = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];
 
+/**
+ * Field-kit tools opened as slide-over panels straight from the map's toolbar,
+ * so they live in exactly one place — the hub — with no duplicate rail entry.
+ */
+const TOOL_META: Record<string, { title: string; desc: string }> = {
+  forge: {
+    title: "Forge",
+    desc: "Craft from spoils, sharpen an edge, and engrave weapon runes.",
+  },
+  warehouse: {
+    title: "Warehouse",
+    desc: "Every drop, craft and reward your clan holds.",
+  },
+};
+
 function NavButton({
   item,
   active,
@@ -399,6 +412,7 @@ function Index() {
   const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
   const [tab, setTab] = useState("banners");
+  const [tool, setTool] = useState<string | null>(null);
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const boss = useWorldBoss(user?.id ?? null);
@@ -563,7 +577,7 @@ function Index() {
             <ClanHeader state={state} api={api} />
             <div className="stage-enter" key={activeTab}>
               <TabsContent value="banners" className="mt-0">
-                <PartyBoard state={state} api={api} now={now} onOpenTool={setTab} />
+                <PartyBoard state={state} api={api} now={now} onOpenTool={setTool} />
               </TabsContent>
               <TabsContent value="keep" className="mt-0">
                 <ClanKeepPanel state={state} api={api} />
@@ -608,9 +622,6 @@ function Index() {
                 <BestiaryPanel state={state} />
               </TabsContent>
 
-              <TabsContent value="warehouse" className="mt-0">
-                <WarehousePanel state={state} api={api} />
-              </TabsContent>
               <TabsContent value="scriptorium" className="mt-0">
                 <ScriptoriumPanel state={state} api={api} />
               </TabsContent>
@@ -619,9 +630,6 @@ function Index() {
               </TabsContent>
               <TabsContent value="sysforge" className="mt-0">
                 <SystemForgePanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="forge" className="mt-0">
-                <CraftPanel state={state} api={api} />
               </TabsContent>
             </div>
             <div className="lg:hidden">
@@ -646,6 +654,28 @@ function Index() {
           }
         />
       </div>
+
+      {/* field kit — the map's Forge and Vault open here, over the map, one home each */}
+      <Sheet open={!!tool} onOpenChange={(o) => !o && setTool(null)}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl lg:max-w-4xl"
+        >
+          <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 pr-12 text-left sm:text-left">
+            <SheetTitle className="font-display text-lg text-gold">
+              {tool ? (TOOL_META[tool]?.title ?? "") : ""}
+            </SheetTitle>
+            <SheetDescription className="text-xs">
+              {tool ? (TOOL_META[tool]?.desc ?? "") : ""}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {tool === "forge" && <CraftPanel state={state} api={api} />}
+            {tool === "warehouse" && <WarehousePanel state={state} api={api} />}
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <Toaster />
     </TooltipProvider>
   );
