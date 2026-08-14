@@ -15,6 +15,13 @@ import { ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
 import { RIVALS } from "@/lib/game/rivals";
 import { useMapManifest } from "@/lib/game/mapAssets";
 import { MapCanvas } from "./MapCanvas";
+import {
+  zoneCondition,
+  conditionRisk,
+  longNightActive,
+  RISK_LABEL,
+  type RiskTier,
+} from "@/lib/game/engine";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -30,6 +37,14 @@ import type { ClanApi } from "@/hooks/useClanGame";
  */
 
 type Mode = "view" | "play";
+
+/** Risk badge colours for a field's current condition. */
+const RISK_COLOR: Record<RiskTier, string> = {
+  safe: "#7ea86a",
+  steady: "#b8b2a4",
+  tense: "#d8a24a",
+  perilous: "#d1603a",
+};
 
 const MAP_BASE = `${import.meta.env.BASE_URL}maps/`;
 const MIN_ZOOM = 1;
@@ -1016,6 +1031,37 @@ export function RealmAtlas({
                   Field: <span className="text-gold">{selZone.name}</span>
                   {selZone.kind === "dungeon" ? " · dungeon" : " · experience field"}
                 </div>
+
+                {/* the weather over this field right now — where and when to hunt */}
+                {(() => {
+                  const c = zoneCondition(
+                    selZone.id,
+                    clock,
+                    state ? longNightActive(state, clock) : false,
+                  );
+                  const risk = conditionRisk(c);
+                  return (
+                    <div className="flex items-start gap-2 rounded-sm border border-white/10 bg-black/30 px-2 py-1.5">
+                      <span aria-hidden="true" className="text-sm leading-none text-gold">
+                        {c.glyph}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-display text-[11px] text-gold">{c.name}</span>
+                          <span
+                            className="rounded-[2px] px-1 py-px text-[8px] font-semibold uppercase tracking-[0.1em] text-black"
+                            style={{ background: RISK_COLOR[risk] }}
+                          >
+                            {RISK_LABEL[risk]}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                          {c.blurb}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selHere.length > 0 && (
                   <div className="flex flex-col gap-1.5">
