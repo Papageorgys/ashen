@@ -35,7 +35,8 @@ export type AtlasMapId =
   | "gilded_compact"
   | "verdant_reclamation"
   | "pale_wardens"
-  | "sunless_choir";
+  | "sunless_choir"
+  | "greenhaven";
 
 export interface AtlasMap {
   id: AtlasMapId;
@@ -195,6 +196,7 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
         type: "monument",
         x: 88,
         y: 58,
+        region: "greenhaven",
         blurb: "A ringed monument to the first oath-takers, half-swallowed by the Verdant green.",
       },
       {
@@ -788,6 +790,91 @@ export const ATLAS_MAPS: Record<AtlasMapId, AtlasMap> = {
       },
     ],
   },
+
+  greenhaven: {
+    id: "greenhaven",
+    title: "Greenhaven",
+    kind: "region",
+    hue: A.verdant,
+    aspect: 1,
+    parent: "aethyr",
+    subtitle:
+      "The green haven around the Founders' Monument — walled harbours, watchtowers and old roads, where the first oaths are still kept.",
+    art: "GreenHaven_gamemap.png",
+    locations: [
+      {
+        id: "gh_city",
+        name: "Greenhaven",
+        type: "stronghold",
+        seat: true,
+        x: 67,
+        y: 55,
+        level: 33,
+        threat: 600,
+        blurb: "The walled harbour-city and seat of the haven, ringed in green and grey stone.",
+      },
+      {
+        id: "gh1",
+        name: "Warden's Watch",
+        type: "poi",
+        x: 39,
+        y: 10,
+        level: 9,
+        threat: 90,
+        blurb: "A northern watchtower over the coast road — first to light when trouble lands.",
+      },
+      {
+        id: "gh2",
+        name: "Rootspire Keep",
+        type: "stronghold",
+        x: 46,
+        y: 45,
+        level: 17,
+        threat: 190,
+        blurb: "A keep grown up around an old spire at the crossing of every road in the haven.",
+      },
+      {
+        id: "gh3",
+        name: "The Founders' Rest",
+        type: "monument",
+        x: 40,
+        y: 51,
+        level: 30,
+        threat: 480,
+        blurb: "A domed barrow of the first oath-takers; the monument's true heart lies here.",
+      },
+      {
+        id: "gh4",
+        name: "Highreach Tower",
+        type: "poi",
+        x: 18,
+        y: 46,
+        level: 13,
+        threat: 130,
+        blurb: "A lonely tower on the western marches, watching the mountain passes.",
+      },
+      {
+        id: "gh5",
+        name: "Tidewatch Beacon",
+        type: "monument",
+        x: 88,
+        y: 24,
+        level: 22,
+        threat: 280,
+        blurb: "A clifftop lighthouse guiding ships past the eastern rocks.",
+      },
+      {
+        id: "gh6",
+        name: "Mossgate",
+        type: "poi",
+        x: 24,
+        y: 70,
+        level: 6,
+        threat: 55,
+        blurb: "A green-walled village where the southern roads meet — quiet, and glad of it.",
+      },
+    ],
+  },
 };
 
 /**
@@ -850,6 +937,14 @@ export const ATLAS_ZONE: Record<string, string> = {
   sc4: "ashen_quarry",
   sc5: "moonveil_glade",
   sc6: "frozen_hold",
+  // Greenhaven (Founders' Monument)
+  gh_city: "obsidian_labyrinth",
+  gh1: "briar_downs",
+  gh2: "kingsroad_marches",
+  gh3: "moonveil_glade",
+  gh4: "ruined_orchard",
+  gh5: "saltmere_flats",
+  gh6: "howling_warren",
 };
 
 /** The numbered points of interest on a region map (everything but the seat). */
