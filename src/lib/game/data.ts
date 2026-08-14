@@ -1592,11 +1592,15 @@ export const ITEMS: ItemDef[] = [
 
 export type EnemyArchetype = "physical" | "magical" | "mixed";
 
-/** Fraction of essence drops that come back as Souls (rest are Spirits). */
+/**
+ * Fraction of essence drops that come back as Souls (rest are Spirits). Kept
+ * near parity so a zone leans toward one kind but never starves the other — a
+ * single-archetype hunting ground must still fund the off-kind shots and runes.
+ */
 export const SOUL_SPLIT: Record<EnemyArchetype, number> = {
-  physical: 0.8,
+  physical: 0.65,
   mixed: 0.5,
-  magical: 0.2,
+  magical: 0.35,
 };
 
 /** Shot grades, cheapest first. */
@@ -2235,30 +2239,34 @@ export const ZONE_ARCHETYPE: Record<string, EnemyArchetype> = {
   sunless_throne: "magical",
 };
 
-/** Essence motes dropped per cleared run, solved to sustain the shot sink. */
+/**
+ * Essence motes dropped per cleared run. Raised ~2.5× over the old shots-only
+ * tuning: essence now feeds shots AND sharpening AND weapon runes off the same
+ * faucet, so the supply has to carry all three demands, not just live shot burn.
+ */
 export const ZONE_ESSENCE: Record<string, [number, number]> = {
-  wolf_fields: [2, 5],
-  ruined_orchard: [4, 8],
-  ashen_steppe: [15, 26],
-  frost_hollow: [27, 45],
-  wyrm_plateau: [52, 88],
-  millpond_reeds: [3, 6],
-  briar_downs: [4, 8],
-  kingsroad_marches: [11, 19],
-  saltmere_flats: [14, 24],
-  emberwood: [22, 37],
-  moonveil_glade: [30, 50],
-  stormbreak_coast: [45, 74],
-  cinderwaste: [70, 116],
-  sunken_crypt: [13, 23],
-  howling_warren: [4, 7],
-  drowned_chapel: [18, 30],
-  ashen_quarry: [26, 42],
-  obsidian_labyrinth: [34, 56],
-  abyss_gate: [56, 92],
-  frozen_hold: [66, 108],
-  wyrm_roost: [76, 126],
-  sunless_throne: [96, 158],
+  wolf_fields: [5, 12],
+  ruined_orchard: [10, 20],
+  ashen_steppe: [38, 65],
+  frost_hollow: [68, 112],
+  wyrm_plateau: [130, 220],
+  millpond_reeds: [8, 15],
+  briar_downs: [10, 20],
+  kingsroad_marches: [28, 48],
+  saltmere_flats: [35, 60],
+  emberwood: [55, 92],
+  moonveil_glade: [75, 125],
+  stormbreak_coast: [112, 185],
+  cinderwaste: [175, 290],
+  sunken_crypt: [33, 58],
+  howling_warren: [10, 18],
+  drowned_chapel: [45, 75],
+  ashen_quarry: [65, 105],
+  obsidian_labyrinth: [85, 140],
+  abyss_gate: [140, 230],
+  frozen_hold: [165, 270],
+  wyrm_roost: [190, 315],
+  sunless_throne: [240, 395],
 };
 
 /** Roles that swing steel use soulshots; the rest burn spiritshots. */
@@ -3395,7 +3403,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "wolf_fields",
     kills: 1400,
-    gold: 22000,
+    gold: 9000,
     rep: 180,
     reward: { item: "coarse_hide", qty: 90 },
     reward2: { item: "spirit_ore", qty: 20 },
@@ -3406,7 +3414,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "sunken_crypt",
     kills: 1900,
-    gold: 52000,
+    gold: 21000,
     rep: 300,
     reward: { item: "moon_silk", qty: 60 },
     reward2: { item: "ember_core", qty: 14 },
@@ -3417,7 +3425,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "ashen_steppe",
     kills: 2300,
-    gold: 86000,
+    gold: 34000,
     rep: 400,
     reward: { item: "ember_core", qty: 45 },
   },
@@ -3427,7 +3435,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "ashen_quarry",
     kills: 2600,
-    gold: 118000,
+    gold: 47000,
     rep: 480,
     reward: { item: "ember_core", qty: 60 },
     reward2: { item: "moon_silk", qty: 30 },
@@ -3438,7 +3446,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "frost_hollow",
     kills: 3000,
-    gold: 175000,
+    gold: 70000,
     rep: 620,
     reward: { item: "abyss_crystal", qty: 26 },
   },
@@ -3448,7 +3456,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "abyss_gate",
     kills: 3400,
-    gold: 265000,
+    gold: 105000,
     rep: 820,
     reward: { item: "abyss_crystal", qty: 40 },
     reward2: { item: "dragon_sinew", qty: 6 },
@@ -3459,7 +3467,7 @@ export const WEEKLY_POOL: DailyMissionDef[] = [
     cadence: "weekly",
     zoneId: "wyrm_roost",
     kills: 3800,
-    gold: 420000,
+    gold: 165000,
     rep: 1100,
     reward: { item: "dragon_sinew", qty: 18 },
   },
@@ -3473,7 +3481,7 @@ export const MONTHLY_POOL: DailyMissionDef[] = [
     cadence: "monthly",
     zoneId: "ashen_steppe",
     kills: 9000,
-    gold: 520000,
+    gold: 185000,
     rep: 2200,
     reward: { item: "ember_core", qty: 200 },
     reward2: { item: "moon_silk", qty: 120 },
@@ -3484,7 +3492,7 @@ export const MONTHLY_POOL: DailyMissionDef[] = [
     cadence: "monthly",
     zoneId: "frost_hollow",
     kills: 11000,
-    gold: 780000,
+    gold: 275000,
     rep: 3000,
     reward: { item: "abyss_crystal", qty: 120 },
     reward2: { item: "ember_core", qty: 160 },
@@ -3495,7 +3503,7 @@ export const MONTHLY_POOL: DailyMissionDef[] = [
     cadence: "monthly",
     zoneId: "abyss_gate",
     kills: 13000,
-    gold: 1150000,
+    gold: 400000,
     rep: 4200,
     reward: { item: "abyss_crystal", qty: 180 },
     reward2: { item: "dragon_sinew", qty: 30 },
@@ -3506,7 +3514,7 @@ export const MONTHLY_POOL: DailyMissionDef[] = [
     cadence: "monthly",
     zoneId: "wyrm_roost",
     kills: 15000,
-    gold: 1800000,
+    gold: 630000,
     rep: 5500,
     reward: { item: "dragon_sinew", qty: 60 },
     reward2: { item: "abyss_crystal", qty: 150 },

@@ -964,8 +964,9 @@ export function keepEffects(state: GameState) {
     capacity: lv("barracks") * 3,
     /** multiplier on resting recovery */
     restMult: 1 + lv("infirmary") * 0.3,
-    /** gold per hit point mended by the infirmary's surgeons */
-    mendCost: Math.max(1, Math.round(4 - lv("infirmary") * 0.6)),
+    /** gold per hit point mended by the infirmary's surgeons — floored so a
+     * maxed infirmary never trends toward free full heals */
+    mendCost: Math.max(2, Math.round(4 - lv("infirmary") * 0.6)),
     /** xp per resting champion per training tick */
     yardXp: lv("yard") * 6,
     /** skill mastery xp granted by one drill session */
@@ -1556,9 +1557,14 @@ export function loanCeiling(state: GameState): number {
   return Math.max(500, state.clanLevel * LEDGER.maxLoanPerLevel);
 }
 
-/** The premium the Compact asks to underwrite the host for a term (§6.3). */
+/**
+ * The premium the Compact asks to underwrite the host for a term (§6.3). Scaled
+ * to the host's actual exposure — the total it would pay out if the whole roster
+ * fell — so a large, high-level host can't be insured for a pittance.
+ */
 export function insurePremium(state: GameState): number {
-  return Math.max(150, Math.round(state.clanLevel * LEDGER.insurePremiumPerLevel));
+  const exposure = state.members.reduce((s, m) => s + insurePayout(m.level), 0);
+  return Math.max(200, Math.round(exposure * 0.05));
 }
 
 /** Is a Compact kit-insurance policy currently in force? */
