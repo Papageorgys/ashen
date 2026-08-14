@@ -263,26 +263,15 @@ type NavItem = {
   requiresClan?: boolean;
 };
 
+/** The map is the hub — its own prominent home button above the grouped menu. */
+const HOME_ITEM: NavItem = {
+  value: "banners",
+  label: "War Table",
+  icon: Swords,
+  hint: "The map — deploy your banners, reach the forge and vault",
+};
+
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
-  {
-    title: "Command",
-    items: [
-      { value: "banners", label: "War Table", icon: Swords, hint: "Deploy your banners" },
-      {
-        value: "bestiary",
-        label: "Bestiary",
-        icon: PawPrint,
-        hint: "Every creature your banners have faced",
-      },
-      {
-        value: "keep",
-        label: "Keep",
-        icon: Castle,
-        hint: "Upgrade your halls",
-        requiresClan: true,
-      },
-    ],
-  },
   {
     title: "Company",
     items: [
@@ -301,17 +290,24 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "Holdings",
     items: [
+      {
+        value: "keep",
+        label: "Keep",
+        icon: Castle,
+        hint: "Upgrade your halls",
+        requiresClan: true,
+      },
       { value: "warehouse", label: "Warehouse", icon: Package, hint: "Every drop your clan holds" },
       { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
       {
         value: "forge",
-        label: "Artisan",
+        label: "Forge",
         icon: Hammer,
-        hint: "Craft gear from spoils — quality varies",
+        hint: "Craft, sharpen and engrave — quality varies with your artisans",
       },
       {
         value: "sysforge",
-        label: "Sys Forge",
+        label: "Town Smithy",
         icon: Anvil,
         hint: "Public smithy — standard results, no artisans needed",
       },
@@ -320,6 +316,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "Realm",
     items: [
+      {
+        value: "bestiary",
+        label: "Bestiary",
+        icon: PawPrint,
+        hint: "Every creature your banners have faced",
+      },
       {
         value: "realm",
         label: "Realm",
@@ -353,7 +355,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   },
 ];
 
-const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+const ALL_ITEMS = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];
 
 function NavButton({
   item,
@@ -490,13 +492,44 @@ function Index() {
               )}
               {railOpen && <span>Collapse</span>}
             </button>
+
+            {/* the map is home — a prominent hub button above the grouped menu */}
+            <div className="flex shrink-0 lg:w-full">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger
+                    value={HOME_ITEM.value}
+                    aria-label={HOME_ITEM.label}
+                    className={`group flex w-full shrink-0 items-center rounded-sm border border-gold/40 bg-gold/[0.07] text-[9px] uppercase tracking-widest text-gold/90 transition-all hover:bg-gold/15 data-[state=active]:border-gold/70 data-[state=active]:bg-gold/15 data-[state=active]:text-gold ${
+                      railOpen
+                        ? "lg:flex-row lg:justify-start lg:gap-2 lg:px-2.5 lg:py-2 lg:text-[10px] flex-col gap-1 px-2 py-1.5"
+                        : "flex-col gap-1 px-2 py-2"
+                    }`}
+                  >
+                    <Swords className="h-[18px] w-[18px] shrink-0" aria-hidden />
+                    <span
+                      className={
+                        railOpen ? "max-w-full truncate" : "max-w-full truncate lg:sr-only"
+                      }
+                    >
+                      {HOME_ITEM.label}
+                    </span>
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p className="font-display text-sm text-gold">{HOME_ITEM.label}</p>
+                  <p className="text-xs text-muted-foreground">{HOME_ITEM.hint}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
             {NAV_GROUPS.map((group) => {
               const items = group.items.filter((i) => founded || !i.requiresClan);
               if (!items.length) return null;
               return (
                 <div
                   key={group.title}
-                  className="flex shrink-0 gap-1 lg:w-full lg:flex-col lg:gap-0.5"
+                  className="flex shrink-0 gap-1 border-l border-border/40 pl-1 lg:w-full lg:flex-col lg:gap-0.5 lg:border-l-0 lg:pl-0"
                 >
                   <div
                     className={`hidden px-1 pt-1 text-[9px] uppercase tracking-[0.2em] text-muted-foreground/70 ${
@@ -530,7 +563,7 @@ function Index() {
             <ClanHeader state={state} api={api} />
             <div className="stage-enter" key={activeTab}>
               <TabsContent value="banners" className="mt-0">
-                <PartyBoard state={state} api={api} now={now} />
+                <PartyBoard state={state} api={api} now={now} onOpenTool={setTab} />
               </TabsContent>
               <TabsContent value="keep" className="mt-0">
                 <ClanKeepPanel state={state} api={api} />

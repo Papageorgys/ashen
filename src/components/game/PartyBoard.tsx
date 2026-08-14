@@ -360,7 +360,17 @@ function PartyCard({
   );
 }
 
-export function PartyBoard({ state, api, now }: { state: GameState; api: ClanApi; now: number }) {
+export function PartyBoard({
+  state,
+  api,
+  now,
+  onOpenTool,
+}: {
+  state: GameState;
+  api: ClanApi;
+  now: number;
+  onOpenTool?: (tab: string) => void;
+}) {
   const unassigned = state.members.filter(
     (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
   );
@@ -434,7 +444,7 @@ export function PartyBoard({ state, api, now }: { state: GameState; api: ClanApi
         </div>
       </header>
 
-      <RealmAtlas state={state} api={api} now={now} />
+      <RealmAtlas state={state} api={api} now={now} {...(onOpenTool ? { onOpenTool } : {})} />
 
       <div className="grid gap-3 lg:grid-cols-2">
         {state.parties.map((p) => (

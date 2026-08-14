@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { Hammer, Package, Home as HomeIcon } from "lucide-react";
 import {
   ATLAS_MAPS,
   ATLAS_TYPE_LABEL,
@@ -218,6 +219,7 @@ export function RealmAtlas({
   api,
   now,
   className,
+  onOpenTool,
 }: {
   /** live game state — when supplied with `api`, play mode deploys real banners */
   state?: GameState;
@@ -225,6 +227,8 @@ export function RealmAtlas({
   /** ticking clock so marching/fighting banners show live progress */
   now?: number;
   className?: string;
+  /** jump straight to a tool panel (Forge, Warehouse) from the map's own toolbar */
+  onOpenTool?: (tab: string) => void;
 }) {
   const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
   const [mode, setMode] = useState<Mode>("view");
@@ -666,6 +670,35 @@ export function RealmAtlas({
             );
           })}
         </nav>
+        {/* quick tools — reach the forge and vault without leaving the map */}
+        {onOpenTool && (
+          <div
+            className="inline-flex overflow-hidden rounded-sm border border-white/10"
+            role="group"
+            aria-label="Map tools"
+          >
+            <button
+              type="button"
+              onClick={() => onOpenTool("forge")}
+              aria-label="Open the Forge"
+              title="Forge — craft, sharpen and engrave"
+              className="flex items-center gap-1 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-gold transition-colors hover:bg-gold/15"
+            >
+              <Hammer className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">Forge</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenTool("warehouse")}
+              aria-label="Open the Warehouse"
+              title="Warehouse — every drop your clan holds"
+              className="flex items-center gap-1 border-l border-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-gold transition-colors hover:bg-gold/15"
+            >
+              <Package className="h-3.5 w-3.5" aria-hidden />
+              <span className="hidden sm:inline">Vault</span>
+            </button>
+          </div>
+        )}
         <div
           className="inline-flex overflow-hidden rounded-sm border border-gold/40"
           role="group"
@@ -691,6 +724,18 @@ export function RealmAtlas({
           role="group"
           aria-label="Zoom"
         >
+          <button
+            type="button"
+            onClick={() => {
+              resetView();
+              if (currentId !== HOME_MAP) setCurrentId(HOME_MAP);
+            }}
+            aria-label="Home haven"
+            title="Home — back to Greenhaven"
+            className="border-r border-white/10 px-2 py-1 text-gold transition-colors hover:bg-gold/15"
+          >
+            <HomeIcon className="h-3.5 w-3.5" aria-hidden />
+          </button>
           <button
             type="button"
             onClick={() => zoomButton(-1)}
