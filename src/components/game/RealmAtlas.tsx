@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Hammer, Package, Home as HomeIcon } from "lucide-react";
+import {
+  Hammer,
+  Package,
+  Home as HomeIcon,
+  UserPlus,
+  Handshake,
+  Store,
+  ScrollText,
+  Castle,
+  Anvil,
+  PenLine,
+  type LucideIcon,
+} from "lucide-react";
 import {
   ATLAS_MAPS,
   ATLAS_TYPE_LABEL,
@@ -46,6 +58,21 @@ const RISK_COLOR: Record<RiskTier, string> = {
   tense: "#d8a24a",
   perilous: "#d1603a",
 };
+
+/**
+ * What you can do at your home city — the town's own services, reached by clicking
+ * the seat on the map. The map toolbar already carries the Forge and Vault, so
+ * those aren't repeated here; these are the rest of the hall's business.
+ */
+const CITY_ACTIONS: { tool: string; label: string; icon: LucideIcon; hint: string }[] = [
+  { tool: "recruit", label: "Recruit", icon: UserPlus, hint: "Swear new blades" },
+  { tool: "muster", label: "Muster", icon: Handshake, hint: "Petitions from party leaders" },
+  { tool: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
+  { tool: "daily", label: "Contracts", icon: ScrollText, hint: "Daily, weekly and monthly" },
+  { tool: "keep", label: "Keep", icon: Castle, hint: "Upgrade your halls" },
+  { tool: "sysforge", label: "Town Smithy", icon: Anvil, hint: "Standard-pattern smithing" },
+  { tool: "scriptorium", label: "Scrolls", icon: PenLine, hint: "Imprint spells into vellum" },
+];
 
 const MAP_BASE = `${import.meta.env.BASE_URL}maps/`;
 const MIN_ZOOM = 1;
@@ -1044,7 +1071,40 @@ export function RealmAtlas({
               </p>
             )}
 
-            {mode === "play" && selected.level != null && (
+            {/* home city — the town's own services, reached by clicking the seat */}
+            {selected.home && onOpenTool && (
+              <div className="flex flex-col gap-2">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Your home haven — hold court
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {CITY_ACTIONS.map((a) => {
+                    const Icon = a.icon;
+                    return (
+                      <button
+                        key={a.tool}
+                        type="button"
+                        onClick={() => onOpenTool(a.tool)}
+                        title={a.hint}
+                        className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2.5 py-2 text-left transition hover:border-gold/60 hover:bg-gold/10"
+                      >
+                        <Icon className="h-4 w-4 shrink-0 text-gold" aria-hidden />
+                        <span className="min-w-0">
+                          <span className="block truncate font-display text-xs text-gold">
+                            {a.label}
+                          </span>
+                          <span className="block truncate text-[9px] text-muted-foreground">
+                            {a.hint}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {mode === "play" && selected.level != null && !selected.home && (
               <div className="grid grid-cols-3 gap-2">
                 {[
                   ["Level", `${selZone ? selZone.reqLevel : selected.level}+`],
