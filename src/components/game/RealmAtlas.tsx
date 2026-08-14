@@ -6,6 +6,7 @@ import {
   ATLAS_ZONE,
   atlasMarker,
   bannerPointOnMap,
+  HOME_MAP,
   type AtlasLocation,
   type AtlasMap,
   type AtlasMapId,
@@ -210,7 +211,7 @@ export function RealmAtlas({
   now?: number;
   className?: string;
 }) {
-  const [currentId, setCurrentId] = useState<AtlasMapId>("aethyr");
+  const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
   const [mode, setMode] = useState<Mode>("view");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [held, setHeld] = useState<Record<string, boolean>>({});
@@ -808,6 +809,7 @@ export function RealmAtlas({
               const face = atlasMarker(map, loc);
               const isSel = selectedId === loc.id;
               const isRealm = loc.type === "realm";
+              const isHome = !!loc.home;
               // live vs demo occupancy for the play-mode marker dot
               const here = live ? partiesAt(zoneOf(loc)?.id) : [];
               const fighting = live ? here.some((p) => p.run) : held[loc.id];
@@ -831,6 +833,15 @@ export function RealmAtlas({
                       }}
                     />
                   )}
+                  {isHome && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-1/2 top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-gold/50 motion-safe:animate-pulse"
+                      style={{
+                        background: "radial-gradient(circle, #e7d7ac55 0%, transparent 70%)",
+                      }}
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -848,6 +859,16 @@ export function RealmAtlas({
                   >
                     <span aria-hidden="true">{face}</span>
                   </button>
+                  {/* home haven badge — every player starts here */}
+                  {isHome && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -left-1 -top-1 grid h-3 w-3 place-items-center rounded-full border border-black bg-gold text-[7px] leading-none text-black"
+                      title="Home haven"
+                    >
+                      ⌂
+                    </span>
+                  )}
                   {/* hold / march dot in play mode */}
                   {showDot && (
                     <span
@@ -861,11 +882,11 @@ export function RealmAtlas({
                   <div
                     className={cn(
                       "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-[2px] bg-black/75 px-1.5 py-px text-center font-display text-[10px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-                      isSel && "opacity-100",
+                      (isSel || isHome) && "opacity-100",
                     )}
                     style={{ color: "#e7d7ac" }}
                   >
-                    {loc.name}
+                    {isHome ? `${loc.name} · Home` : loc.name}
                   </div>
                 </div>
               );
