@@ -662,6 +662,9 @@ export function RealmAtlas({
         }[];
       }
     >();
+    // The continent is a zoomed-out realm-picker; banners live on the detailed
+    // region maps (and the home seat), so we don't repeat them on the overview.
+    if (ATLAS_MAPS[currentId].kind === "continent") return [];
     const homeLoc = ATLAS_MAPS[currentId].locations.find((l) => l.home);
     for (const p of state?.parties ?? []) {
       if (p.memberIds.length === 0) continue; // an empty banner isn't a host
