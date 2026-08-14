@@ -3,7 +3,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClanHeader } from "@/components/game/ClanHeader";
 import { PartyBoard } from "@/components/game/PartyBoard";
 import { RecruitPanel } from "@/components/game/RecruitPanel";
@@ -31,7 +30,6 @@ import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
-import { BossStrip } from "@/components/game/BossStrip";
 import { BossPanel } from "@/components/game/BossPanel";
 import { useWorldBoss } from "@/hooks/useWorldBoss";
 import { useSession } from "@/hooks/useSession";
@@ -55,8 +53,6 @@ import {
   Globe2,
   PawPrint,
   Skull,
-  PanelLeftClose,
-  PanelLeftOpen,
   Handshake,
   PenLine,
   ScrollText,
@@ -355,77 +351,20 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
 
 const ALL_ITEMS = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];
 
-/**
- * Field-kit tools opened as slide-over panels straight from the map's toolbar,
- * so they live in exactly one place — the hub — with no duplicate rail entry.
- */
-const TOOL_META: Record<string, { title: string; desc: string }> = {
-  forge: {
-    title: "Forge",
-    desc: "Craft from spoils, sharpen an edge, and engrave weapon runes.",
-  },
-  warehouse: {
-    title: "Warehouse",
-    desc: "Every drop, craft and reward your clan holds.",
-  },
-};
-
-function NavButton({
-  item,
-  active,
-  expanded,
-}: {
-  item: NavItem;
-  active: boolean;
-  expanded: boolean;
-}) {
-  const Icon = item.icon;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <TabsTrigger
-          value={item.value}
-          aria-label={item.label}
-          className={`group flex w-full shrink-0 items-center rounded-sm border border-transparent text-[9px] uppercase tracking-widest text-muted-foreground transition-all hover:text-gold/80 data-[state=active]:border-gold/60 data-[state=active]:bg-gold/10 data-[state=active]:text-gold ${
-            expanded
-              ? "lg:flex-row lg:justify-start lg:gap-2 lg:px-2.5 lg:py-1.5 lg:text-[10px] flex-col gap-1 px-2 py-1.5"
-              : "flex-col gap-1 px-2 py-1.5"
-          } ${active ? "rail-active" : ""}`}
-        >
-          <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
-          <span className={expanded ? "max-w-full truncate" : "max-w-full truncate lg:sr-only"}>
-            {item.label}
-          </span>
-        </TabsTrigger>
-      </TooltipTrigger>
-      <TooltipContent side="right">
-        <p className="font-display text-sm text-gold">{item.label}</p>
-        <p className="text-xs text-muted-foreground">{item.hint}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+/** Every screen, keyed by its value — the slide-over reads its title/blurb here. */
+const NAV_BY_VALUE: Record<string, NavItem> = Object.fromEntries(
+  ALL_ITEMS.map((i) => [i.value, i]),
+);
 
 function Index() {
   const { state, hydrated, api } = useClanGame();
   const { user, ready: authReady } = useSession();
   const navigate = useNavigate();
   const [now, setNow] = useState(() => Date.now());
-  const [tab, setTab] = useState("banners");
+  // the single open screen (slide-over); the map is always the base view
   const [tool, setTool] = useState<string | null>(null);
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
-  const [railOpen, setRailOpen] = useState(false);
   const boss = useWorldBoss(user?.id ?? null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setRailOpen(window.localStorage.getItem("rail-open") === "1");
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("rail-open", railOpen ? "1" : "0");
-  }, [railOpen]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -473,8 +412,43 @@ function Index() {
   }
 
   const founded = state.clanLevel >= 1;
-  const visible = ALL_ITEMS.filter((i) => founded || !i.requiresClan);
-  const activeTab = visible.some((i) => i.value === tab) ? tab : "banners";
+  const meta = tool ? NAV_BY_VALUE[tool] : null;
+
+  // every screen except the always-visible map renders inside the slide-over
+  const toolBody =
+    tool === "forge" ? (
+      <CraftPanel state={state} api={api} />
+    ) : tool === "warehouse" ? (
+      <WarehousePanel state={state} api={api} />
+    ) : tool === "keep" ? (
+      <ClanKeepPanel state={state} api={api} />
+    ) : tool === "muster" ? (
+      <MusterPanel state={state} api={api} />
+    ) : tool === "recruit" ? (
+      <RecruitPanel state={state} api={api} />
+    ) : tool === "skills" ? (
+      <SkillPanel state={state} api={api} />
+    ) : tool === "daily" ? (
+      <DailyPanel state={state} api={api} />
+    ) : tool === "realm" ? (
+      <RealmPanel state={state} api={api} />
+    ) : tool === "boss" ? (
+      <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
+    ) : tool === "world" ? (
+      <WorldPanel signedIn={!!user} myId={user?.id ?? null} />
+    ) : tool === "chronicle" ? (
+      <ChroniclePanel state={state} api={api} />
+    ) : tool === "legacy" ? (
+      <LegacyPanel state={state} api={api} />
+    ) : tool === "bestiary" ? (
+      <BestiaryPanel state={state} />
+    ) : tool === "scriptorium" ? (
+      <ScriptoriumPanel state={state} api={api} />
+    ) : tool === "market" ? (
+      <MarketPanel state={state} api={api} />
+    ) : tool === "sysforge" ? (
+      <SystemForgePanel state={state} api={api} />
+    ) : null;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -482,170 +456,54 @@ function Index() {
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <TitleBar state={state} email={user?.email ?? null} signedIn={!!user} />
-        <Tabs
-          value={activeTab}
-          onValueChange={setTab}
-          orientation="vertical"
-          className={`grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-0 lg:grid-rows-1 ${
-            railOpen
-              ? "lg:grid-cols-[11rem_minmax(0,1fr)_20rem]"
-              : "lg:grid-cols-[3.75rem_minmax(0,1fr)_20rem]"
-          }`}
-        >
-          <TabsList className="order-2 flex h-auto w-full items-stretch gap-1 overflow-x-auto rounded-none border-t border-border/60 bg-background/80 p-1 backdrop-blur lg:order-1 lg:w-auto lg:flex-col lg:items-stretch lg:gap-0.5 lg:overflow-y-auto lg:border-r lg:border-t-0 lg:bg-transparent lg:py-1">
-            <button
-              type="button"
-              onClick={() => setRailOpen((v) => !v)}
-              aria-label={railOpen ? "Collapse menu" : "Expand menu"}
-              className="hidden shrink-0 items-center gap-2 rounded-sm border border-transparent px-2 py-1.5 text-[9px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold/80 lg:flex"
-            >
-              {railOpen ? (
-                <PanelLeftClose className="h-4 w-4" />
-              ) : (
-                <PanelLeftOpen className="h-4 w-4" />
-              )}
-              {railOpen && <span>Collapse</span>}
-            </button>
-
-            {/* the map is home — a prominent hub button above the grouped menu */}
-            <div className="flex shrink-0 lg:w-full">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <TabsTrigger
-                    value={HOME_ITEM.value}
-                    aria-label={HOME_ITEM.label}
-                    className={`group flex w-full shrink-0 items-center rounded-sm border border-gold/40 bg-gold/[0.07] text-[9px] uppercase tracking-widest text-gold/90 transition-all hover:bg-gold/15 data-[state=active]:border-gold/70 data-[state=active]:bg-gold/15 data-[state=active]:text-gold ${
-                      railOpen
-                        ? "lg:flex-row lg:justify-start lg:gap-2 lg:px-2.5 lg:py-2 lg:text-[10px] flex-col gap-1 px-2 py-1.5"
-                        : "flex-col gap-1 px-2 py-2"
-                    }`}
-                  >
-                    <Swords className="h-[18px] w-[18px] shrink-0" aria-hidden />
-                    <span
-                      className={
-                        railOpen ? "max-w-full truncate" : "max-w-full truncate lg:sr-only"
-                      }
-                    >
-                      {HOME_ITEM.label}
-                    </span>
-                  </TabsTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p className="font-display text-sm text-gold">{HOME_ITEM.label}</p>
-                  <p className="text-xs text-muted-foreground">{HOME_ITEM.hint}</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-
-            {NAV_GROUPS.map((group) => {
-              const items = group.items.filter((i) => founded || !i.requiresClan);
-              if (!items.length) return null;
-              return (
-                <div
-                  key={group.title}
-                  className="flex shrink-0 gap-1 border-l border-border/40 pl-1 lg:w-full lg:flex-col lg:gap-0.5 lg:border-l-0 lg:pl-0"
-                >
-                  <div
-                    className={`hidden px-1 pt-1 text-[9px] uppercase tracking-[0.2em] text-muted-foreground/70 ${
-                      railOpen ? "lg:block" : "lg:hidden"
-                    }`}
-                  >
-                    {group.title}
-                  </div>
-                  {!railOpen && (
-                    <div className="hidden h-px w-full bg-border/50 lg:block" aria-hidden />
-                  )}
-                  {items.map((item) => (
-                    <NavButton
-                      key={item.value}
-                      item={item}
-                      active={activeTab === item.value}
-                      expanded={railOpen}
-                    />
-                  ))}
-                </div>
-              );
-            })}
-          </TabsList>
-
-          <div className="stage-scroll order-1 min-h-0 min-w-0 space-y-5 px-3 py-4 sm:px-5 lg:order-2">
-            {founded && (
-              <div className="sticky top-0 z-20 -mx-3 -mt-4 bg-background sm:-mx-5">
-                <BossStrip boss={boss} onOpen={() => setTab("boss")} />
+        {/* compact top nav — opens every screen as a panel over the always-visible map */}
+        <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60 bg-background/80 px-2 py-1 backdrop-blur">
+          {NAV_GROUPS.map((group, gi) => {
+            const items = group.items.filter((i) => founded || !i.requiresClan);
+            if (!items.length) return null;
+            return (
+              <div key={group.title} className="flex shrink-0 items-center gap-1">
+                {gi > 0 && <span className="mx-1 h-5 w-px shrink-0 bg-border/50" aria-hidden />}
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Tooltip key={item.value}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setTool(item.value)}
+                          aria-label={item.label}
+                          className="flex shrink-0 items-center gap-1.5 rounded-sm border border-transparent px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold/90"
+                        >
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                          <span className="hidden md:inline">{item.label}</span>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p className="font-display text-sm text-gold">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.hint}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
               </div>
-            )}
-            <ClanHeader state={state} api={api} />
-            <div className="stage-enter" key={activeTab}>
-              <TabsContent value="banners" className="mt-0">
-                <PartyBoard
-                  state={state}
-                  api={api}
-                  now={now}
-                  onOpenTool={(v) => (TOOL_META[v] ? setTool(v) : setTab(v))}
-                />
-              </TabsContent>
-              <TabsContent value="keep" className="mt-0">
-                <ClanKeepPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="muster" className="mt-0">
-                <MusterPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="recruit" className="mt-0">
-                <RecruitPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="skills" className="mt-0">
-                <SkillPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="daily" className="mt-0">
-                <DailyPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="realm" className="mt-0">
-                <RealmPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="boss" className="mt-0">
-                <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
-              </TabsContent>
-              <TabsContent value="world" className="mt-0">
-                <WorldPanel signedIn={!!user} myId={user?.id ?? null} />
-              </TabsContent>
-              <TabsContent value="chronicle" className="mt-0">
-                <ChroniclePanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="legacy" className="mt-0">
-                <section className="space-y-3">
-                  <header>
-                    <h2 className="font-display text-lg text-gold">Legacy</h2>
-                    <p className="text-xs text-muted-foreground">
-                      You cannot win the war. You can only be remembered in it. Your deeds, your
-                      renown, and the names you carve into the Monument.
-                    </p>
-                  </header>
-                  <LegacyPanel state={state} api={api} />
-                </section>
-              </TabsContent>
-              <TabsContent value="bestiary" className="mt-0">
-                <BestiaryPanel state={state} />
-              </TabsContent>
+            );
+          })}
+        </nav>
 
-              <TabsContent value="scriptorium" className="mt-0">
-                <ScriptoriumPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="market" className="mt-0">
-                <MarketPanel state={state} api={api} />
-              </TabsContent>
-              <TabsContent value="sysforge" className="mt-0">
-                <SystemForgePanel state={state} api={api} />
-              </TabsContent>
-            </div>
+        {/* the map is always the base view; every other screen opens over it */}
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="stage-scroll min-h-0 min-w-0 space-y-4 px-3 py-4 sm:px-5">
+            <ClanHeader state={state} api={api} />
             <div className="lg:hidden">
               <ExpeditionFeed state={state} now={now} />
             </div>
           </div>
 
-          <aside className="stage-scroll order-3 hidden min-h-0 border-l border-border/60 px-3 py-4 lg:block">
+          <aside className="stage-scroll hidden min-h-0 border-l border-border/60 px-3 py-4 lg:block">
             <ExpeditionFeed state={state} now={now} />
           </aside>
-        </Tabs>
+        </div>
         <ChatDock
           signedIn={!!user}
           myId={user?.id ?? null}
@@ -660,24 +518,17 @@ function Index() {
         />
       </div>
 
-      {/* field kit — the map's Forge and Vault open here, over the map, one home each */}
+      {/* every screen opens here, as a slide-over across the always-visible map */}
       <Sheet open={!!tool} onOpenChange={(o) => !o && setTool(null)}>
         <SheetContent
           side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl lg:max-w-4xl"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl lg:max-w-5xl"
         >
           <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 pr-12 text-left sm:text-left">
-            <SheetTitle className="font-display text-lg text-gold">
-              {tool ? (TOOL_META[tool]?.title ?? "") : ""}
-            </SheetTitle>
-            <SheetDescription className="text-xs">
-              {tool ? (TOOL_META[tool]?.desc ?? "") : ""}
-            </SheetDescription>
+            <SheetTitle className="font-display text-lg text-gold">{meta?.label ?? ""}</SheetTitle>
+            <SheetDescription className="text-xs">{meta?.hint ?? ""}</SheetDescription>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            {tool === "forge" && <CraftPanel state={state} api={api} />}
-            {tool === "warehouse" && <WarehousePanel state={state} api={api} />}
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{toolBody}</div>
         </SheetContent>
       </Sheet>
 
