@@ -2279,7 +2279,9 @@ export function useClanGame() {
         for (const m of resting) {
           for (const sk of m.skills) {
             if (sk.level >= MAX_SKILL_LEVEL) continue;
-            sk.xp += eff.drillXp;
+            // flat yard xp early, a fixed slice of the (steep) next level late, so
+            // drilling never becomes a rounding error against high-level mastery
+            sk.xp += Math.max(eff.drillXp, Math.round(xpForSkillLevel(sk.level) * 0.03));
             while (sk.level < MAX_SKILL_LEVEL && sk.xp >= xpForSkillLevel(sk.level)) {
               sk.xp -= xpForSkillLevel(sk.level);
               sk.level += 1;
