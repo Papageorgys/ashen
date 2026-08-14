@@ -37,7 +37,15 @@ import { AmbientStage } from "@/components/game/AmbientStage";
 import { TitleBar } from "@/components/game/TitleBar";
 import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -53,6 +61,7 @@ import {
   Globe2,
   PawPrint,
   Skull,
+  Menu,
   Handshake,
   PenLine,
   ScrollText,
@@ -456,46 +465,59 @@ function Index() {
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <TitleBar state={state} email={user?.email ?? null} signedIn={!!user} />
-        {/* compact top nav — opens every screen as a panel over the always-visible map */}
-        <nav className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60 bg-background/80 px-2 py-1 backdrop-blur">
-          {NAV_GROUPS.map((group, gi) => {
-            const items = group.items.filter((i) => founded || !i.requiresClan);
-            if (!items.length) return null;
-            return (
-              <div key={group.title} className="flex shrink-0 items-center gap-1">
-                {gi > 0 && <span className="mx-1 h-5 w-px shrink-0 bg-border/50" aria-hidden />}
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Tooltip key={item.value}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setTool(item.value)}
-                          aria-label={item.label}
-                          className="flex shrink-0 items-center gap-1.5 rounded-sm border border-transparent px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold/90"
-                        >
-                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                          <span className="hidden md:inline">{item.label}</span>
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <p className="font-display text-sm text-gold">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.hint}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </nav>
 
-        {/* the map is always the base view; every other screen opens over it */}
+        {/* the map is always the base view; every other screen opens over it, and
+            the whole game menu lives in a burger inside the map's own top bar */}
         <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="stage-scroll min-h-0 min-w-0 space-y-4 px-3 py-4 sm:px-5">
             <ClanHeader state={state} api={api} />
-            <PartyBoard state={state} api={api} now={now} onOpenTool={setTool} />
+            <PartyBoard
+              state={state}
+              api={api}
+              now={now}
+              onOpenTool={setTool}
+              navSlot={
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Open the game menu"
+                      className="flex shrink-0 items-center gap-1.5 rounded-sm border border-white/10 px-2 py-1 font-display text-[11px] uppercase tracking-[0.14em] text-gold transition-colors hover:border-gold/50 hover:bg-gold/10"
+                    >
+                      <Menu className="h-4 w-4" aria-hidden />
+                      <span className="hidden sm:inline">Menu</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    {NAV_GROUPS.map((group, gi) => {
+                      const items = group.items.filter((i) => founded || !i.requiresClan);
+                      if (!items.length) return null;
+                      return (
+                        <div key={group.title}>
+                          {gi > 0 && <DropdownMenuSeparator />}
+                          <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+                            {group.title}
+                          </DropdownMenuLabel>
+                          {items.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <DropdownMenuItem
+                                key={item.value}
+                                onSelect={() => setTool(item.value)}
+                                className="gap-2"
+                              >
+                                <Icon className="h-4 w-4 shrink-0 text-gold" aria-hidden />
+                                {item.label}
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              }
+            />
             <div className="lg:hidden">
               <ExpeditionFeed state={state} now={now} />
             </div>

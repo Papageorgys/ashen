@@ -365,11 +365,13 @@ export function PartyBoard({
   api,
   now,
   onOpenTool,
+  navSlot,
 }: {
   state: GameState;
   api: ClanApi;
   now: number;
   onOpenTool?: (tab: string) => void;
+  navSlot?: React.ReactNode;
 }) {
   const unassigned = state.members.filter(
     (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
@@ -444,7 +446,13 @@ export function PartyBoard({
         </div>
       </header>
 
-      <RealmAtlas state={state} api={api} now={now} {...(onOpenTool ? { onOpenTool } : {})} />
+      <RealmAtlas
+        state={state}
+        api={api}
+        now={now}
+        {...(onOpenTool ? { onOpenTool } : {})}
+        {...(navSlot ? { navSlot } : {})}
+      />
 
       <div className="grid gap-3 lg:grid-cols-2">
         {state.parties.map((p) => (
