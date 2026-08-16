@@ -8,8 +8,12 @@ import {
   frontierStandings,
   isContested,
   territoriesOf,
+  frontierObjectives,
+  nightPhase,
+  REALM_BOON,
   type FrontierEvent,
   type FrontierState,
+  type TerritoryId,
 } from "@/lib/game/frontier";
 
 const KIND_GLYPH: Record<FrontierEvent["kind"], string> = {
@@ -46,45 +50,108 @@ export function FrontierPanel({
   const varethHolder = FACTIONS[vareth.owner];
 
   const clanHeld = territoriesOf(f, "clan");
-  const holdsVareth = vareth.owner === "clan";
-  const spoilsPct = Math.round(
-    (Math.min(1.7, 1 + clanHeld.length * 0.06 + (holdsVareth ? 0.15 : 0)) - 1) * 100,
-  );
+  const night = nightPhase(f.tick);
+  const objectives = frontierObjectives(f);
 
   return (
     <div className="space-y-4">
-      {/* the payoff — war spoils feeding the clan's hunts */}
-      <section className="panel-ornate rounded-sm p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-            Your Banner
+      {/* the Long Night — a shared antagonist all players must repel */}
+      {night.active && (
+        <section className="rounded-sm border border-[#5b4a7a]/70 bg-[#1a1426] p-4">
+          <div className="flex items-center gap-2">
+            <span aria-hidden="true" className="text-lg text-[#b9a8e6]">
+              ☾
+            </span>
+            <h2 className="font-display text-base text-[#c9bbe8]">The Long Night is abroad</h2>
           </div>
-          <span
-            className={cn(
-              "rounded-[2px] px-2 py-0.5 font-display text-xs tabular-nums",
-              spoilsPct > 0 ? "bg-[#3fb0a6]/20 text-[#5fd0c6]" : "text-muted-foreground",
-            )}
-          >
-            War spoils +{spoilsPct}%
-          </span>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The dark rises across Aethyr and claws at every border. Commit to the fronts it holds
+            and drive it back — before it overruns the realms. It lifts in ~{night.ticksLeft * 20}m.
+          </p>
+        </section>
+      )}
+
+      {/* the payoff — per-realm war spoils feeding the clan's hunts */}
+      <section className="panel-ornate rounded-sm p-4">
+        <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+          Your Banner
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {clanHeld.length > 0 ? (
-            <>
+        {clanHeld.length > 0 ? (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-sm text-muted-foreground">
               Your banner holds{" "}
               <span className="text-[#5fd0c6]">
                 {clanHeld.length} {clanHeld.length === 1 ? "realm" : "realms"}
               </span>
-              {holdsVareth ? " and the seat of Vareth" : ""}. Every hunt brings home{" "}
-              <span className="text-gold">+{spoilsPct}%</span> more gold, xp and essence.
-            </>
-          ) : (
-            <>
-              Your banner holds no ground yet. Commit to a front on the war map to take a realm —
-              each one you hold lifts the spoils of every hunt.
-            </>
-          )}
-        </p>
+              . Each grants its own boon to every hunt:
+            </p>
+            {clanHeld.map((id) => {
+              const b = REALM_BOON[id as TerritoryId];
+              const parts = [
+                b.gold ? `+${Math.round(b.gold * 100)}% gold` : "",
+                b.essence ? `+${Math.round(b.essence * 100)}% essence` : "",
+                b.xp ? `+${Math.round(b.xp * 100)}% xp` : "",
+                b.find ? `+${b.find} find` : "",
+              ].filter(Boolean);
+              return (
+                <div
+                  key={id}
+                  className="flex items-center justify-between gap-2 rounded-sm border border-[#3fb0a6]/25 bg-[#3fb0a6]/[0.06] px-2.5 py-1.5"
+                >
+                  <span className="min-w-0 text-xs">
+                    <span className="text-[#5fd0c6]">{b.label}</span>
+                    <span className="text-muted-foreground"> — {b.blurb}</span>
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-gold">
+                    {parts.join(" · ")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your banner holds no ground yet. Commit to a front on the war map to take a realm — each
+            one grants a distinct boon to every hunt you make.
+          </p>
+        )}
+      </section>
+
+      {/* war objectives — the collective goals of the whole realm */}
+      <section className="panel rounded-sm p-4">
+        <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">
+          War Objectives
+        </h3>
+        <div className="mt-3 space-y-1.5">
+          {objectives.map((o) => (
+            <div key={o.id} className="flex items-start gap-2">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "mt-px grid h-4 w-4 shrink-0 place-items-center rounded-[3px] border text-[9px]",
+                  o.done
+                    ? "border-[#7ea86a] bg-[#7ea86a]/20 text-[#9fce88]"
+                    : "border-white/20 text-transparent",
+                )}
+              >
+                ✓
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className={cn("text-xs", o.done ? "text-[#9fce88]" : "text-foreground")}>
+                    {o.label}
+                  </span>
+                  {o.progress && (
+                    <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                      {o.progress.have}/{o.progress.need}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground">{o.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* the prize */}

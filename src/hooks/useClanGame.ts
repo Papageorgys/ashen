@@ -1040,12 +1040,13 @@ export function useClanGame() {
         if (p) p.stance = stance;
       }),
 
-    /** Denormalise what the clan holds in the shared war so runs can pay spoils. */
-    setWarSpoils: (held: number, vareth: boolean) =>
+    /** Denormalise which realms the clan holds in the shared war so runs pay spoils. */
+    setWarSpoils: (held: string[]) =>
       update((s) => {
-        const cur = s.warSpoils;
-        if (cur && cur.held === held && cur.vareth === vareth) return;
-        s.warSpoils = { held, vareth };
+        const cur = s.warSpoils?.held ?? [];
+        const same = cur.length === held.length && cur.every((h, i) => h === held[i]);
+        if (same) return;
+        s.warSpoils = { held };
       }),
 
     recallParty: (partyId: string) =>

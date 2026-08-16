@@ -87,7 +87,13 @@ import {
 } from "./scrolls";
 
 import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "./identity";
-import { initialFrontier, advanceFrontier, type FrontierState } from "./frontier";
+import {
+  initialFrontier,
+  advanceFrontier,
+  REALM_BOON,
+  type FrontierState,
+  type TerritoryId,
+} from "./frontier";
 import {
   CASTLE,
   RIVAL_BY_ID,
@@ -364,9 +370,9 @@ export interface GameState {
   realmTickAt?: number;
   /** the continental war — the living frontier of factions across Aethyr (§ HOI4 layer) */
   frontier?: FrontierState;
-  /** what the clan holds in the shared war, denormalised from the frontier so the
-   * run resolver can pay war spoils without the shared state (§ HOI4 → L2 loop) */
-  warSpoils?: { held: number; vareth: boolean } | undefined;
+  /** which realms the clan holds in the shared war, denormalised from the frontier
+   * so the run resolver can pay per-realm war spoils (§ HOI4 → L2 loop) */
+  warSpoils?: { held: string[] } | undefined;
   /** Inspiration — earned by backgrounds in the field, spent to reroll a failed forge */
   inspiration?: number;
   /** every scroll attempt, newest last — imprints at the desk and readings in the field */
@@ -993,18 +999,32 @@ export function forgeFee(state: GameState, gold: number) {
 }
 
 /**
- * War spoils — the payoff that makes the continental war worth fighting. Every
- * realm the clan holds in the shared frontier lifts the gold, xp and essence a
- * hunt brings home, and the seat of Castle Vareth most of all (§ HOI4 → L2 loop).
+ * War spoils — the payoff that makes the continental war worth fighting. Each
+ * realm the clan holds in the shared frontier grants a DISTINCT boon to every
+ * hunt: gold, xp, essence or drop-luck depending on the realm (§ HOI4 → L2 loop).
  */
-export function warSpoilsMult(state: GameState): number {
-  const w = state.warSpoils;
-  if (!w) return 1;
-  return Math.min(1.7, 1 + Math.max(0, w.held) * 0.06 + (w.vareth ? 0.15 : 0));
-}
-
-export function warSpoilsPct(state: GameState): number {
-  return Math.round((warSpoilsMult(state) - 1) * 100);
+export function warSpoilsChannels(state: GameState): {
+  gold: number;
+  xp: number;
+  essence: number;
+  find: number;
+} {
+  const out = { gold: 1, xp: 1, essence: 1, find: 0 };
+  const held = state.warSpoils?.held;
+  if (!Array.isArray(held)) return out;
+  for (const id of held) {
+    const b = REALM_BOON[id as TerritoryId];
+    if (!b) continue;
+    if (b.gold) out.gold += b.gold;
+    if (b.xp) out.xp += b.xp;
+    if (b.essence) out.essence += b.essence;
+    if (b.find) out.find += b.find;
+  }
+  out.gold = Math.min(1.8, out.gold);
+  out.xp = Math.min(1.8, out.xp);
+  out.essence = Math.min(1.8, out.essence);
+  out.find = Math.min(40, out.find);
+  return out;
 }
 
 /** What it costs the infirmary to put every wounded champion back on their feet. */
@@ -2848,7 +2868,8 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     if (Math.random() < 0.18) record[w.m.id]!.pkKills += 1;
   }
 
-  const find = ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find;
+  const spoils = warSpoilsChannels(state); // realms held in the shared war pay out
+  const find = ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find + spoils.find;
   const fallenNote = fallen.length
     ? ` ${fallenNames.join(", ")} fell and will be carried home.`
     : "";
@@ -2936,13 +2957,12 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
 
   const ratio = power / zone.threat;
   const scale = Math.min(1.6, 0.7 + ratio * 0.4);
-  const spoils = warSpoilsMult(state); // realms held in the shared war pay out here
   const gold = Math.round(
     rnd(zone.gold[0], zone.gold[1]) *
       scale *
       (1 + syn.gold / 100) *
       cond.gold *
-      spoils *
+      spoils.gold *
       (eliteMet ? ELITE.goldMult : 1),
   );
   const loot: { item: ItemId; qty: number }[] = [];
@@ -2980,7 +3000,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   // soul / spirit essence — split by what the zone's inhabitants are made of
   const band = ZONE_ESSENCE[zone.id];
   if (band) {
-    const total = Math.round(rnd(band[0], band[1]) * cond.essence * spoils);
+    const total = Math.round(rnd(band[0], band[1]) * cond.essence * spoils.essence);
     const soulShare = SOUL_SPLIT[ZONE_ARCHETYPE[zone.id] ?? "mixed"];
     const souls = Math.round(total * soulShare);
     const spirits = total - souls;
@@ -3015,7 +3035,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         (1 + syn.xp / 100) *
         (1 + (surging ? SURGE_XP_PCT / 100 : 0)) *
         cond.xp *
-        spoils *
+        spoils.xp *
         (eliteMet ? ELITE.xpMult : 1),
     ),
     kills,
