@@ -34,6 +34,7 @@ import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
 import { useWorldBoss } from "@/hooks/useWorldBoss";
 import { useFrontier } from "@/hooks/useFrontier";
+import { territoriesOf } from "@/lib/game/frontier";
 import { useSession } from "@/hooks/useSession";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { TitleBar } from "@/components/game/TitleBar";
@@ -390,6 +391,16 @@ function Index() {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
+
+  // feed the shared war back into the L2 economy: what the clan holds becomes the
+  // war-spoils multiplier on every run's gold / xp / essence
+  useEffect(() => {
+    if (!worldFrontier || !state) return;
+    const held = territoriesOf(worldFrontier, "clan").length;
+    const vareth = worldFrontier.control.vareth?.owner === "clan";
+    const cur = state.warSpoils;
+    if (!cur || cur.held !== held || cur.vareth !== vareth) api.setWarSpoils(held, vareth);
+  }, [worldFrontier, state, api]);
 
   const clanLevel = state?.clanLevel ?? 0;
   const holdsCastle = state?.castle?.holder === "player";
