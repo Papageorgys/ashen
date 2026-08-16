@@ -1040,6 +1040,14 @@ export function useClanGame() {
         if (p) p.stance = stance;
       }),
 
+    /** Denormalise what the clan holds in the shared war so runs can pay spoils. */
+    setWarSpoils: (held: number, vareth: boolean) =>
+      update((s) => {
+        const cur = s.warSpoils;
+        if (cur && cur.held === held && cur.vareth === vareth) return;
+        s.warSpoils = { held, vareth };
+      }),
+
     recallParty: (partyId: string) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);

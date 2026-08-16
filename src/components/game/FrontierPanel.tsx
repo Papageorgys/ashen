@@ -7,6 +7,7 @@ import {
   TERRITORIES,
   frontierStandings,
   isContested,
+  territoriesOf,
   type FrontierEvent,
   type FrontierState,
 } from "@/lib/game/frontier";
@@ -44,8 +45,48 @@ export function FrontierPanel({
   const vareth = f.control.vareth;
   const varethHolder = FACTIONS[vareth.owner];
 
+  const clanHeld = territoriesOf(f, "clan");
+  const holdsVareth = vareth.owner === "clan";
+  const spoilsPct = Math.round(
+    (Math.min(1.7, 1 + clanHeld.length * 0.06 + (holdsVareth ? 0.15 : 0)) - 1) * 100,
+  );
+
   return (
     <div className="space-y-4">
+      {/* the payoff — war spoils feeding the clan's hunts */}
+      <section className="panel-ornate rounded-sm p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+            Your Banner
+          </div>
+          <span
+            className={cn(
+              "rounded-[2px] px-2 py-0.5 font-display text-xs tabular-nums",
+              spoilsPct > 0 ? "bg-[#3fb0a6]/20 text-[#5fd0c6]" : "text-muted-foreground",
+            )}
+          >
+            War spoils +{spoilsPct}%
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {clanHeld.length > 0 ? (
+            <>
+              Your banner holds{" "}
+              <span className="text-[#5fd0c6]">
+                {clanHeld.length} {clanHeld.length === 1 ? "realm" : "realms"}
+              </span>
+              {holdsVareth ? " and the seat of Vareth" : ""}. Every hunt brings home{" "}
+              <span className="text-gold">+{spoilsPct}%</span> more gold, xp and essence.
+            </>
+          ) : (
+            <>
+              Your banner holds no ground yet. Commit to a front on the war map to take a realm —
+              each one you hold lifts the spoils of every hunt.
+            </>
+          )}
+        </p>
+      </section>
+
       {/* the prize */}
       <section className="panel-ornate rounded-sm p-4">
         <div className="text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
