@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { DRAG_MEMBER } from "@/lib/game/dnd";
+import type { FrontierState } from "@/lib/game/frontier";
 import { RealmAtlas } from "./RealmAtlas";
 import { Button } from "@/components/ui/button";
 import {
@@ -366,12 +367,14 @@ export function PartyBoard({
   now,
   onOpenTool,
   navSlot,
+  frontier,
 }: {
   state: GameState;
   api: ClanApi;
   now: number;
   onOpenTool?: (tab: string) => void;
   navSlot?: React.ReactNode;
+  frontier?: FrontierState | null;
 }) {
   const unassigned = state.members.filter(
     (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
@@ -452,6 +455,7 @@ export function PartyBoard({
         now={now}
         {...(onOpenTool ? { onOpenTool } : {})}
         {...(navSlot ? { navSlot } : {})}
+        {...(frontier ? { frontier } : {})}
       />
 
       <div className="grid gap-3 lg:grid-cols-2">
