@@ -396,10 +396,10 @@ function Index() {
   // war-spoils multiplier on every run's gold / xp / essence
   useEffect(() => {
     if (!worldFrontier || !state) return;
-    const held = territoriesOf(worldFrontier, "clan").length;
-    const vareth = worldFrontier.control.vareth?.owner === "clan";
-    const cur = state.warSpoils;
-    if (!cur || cur.held !== held || cur.vareth !== vareth) api.setWarSpoils(held, vareth);
+    const held = territoriesOf(worldFrontier, "clan");
+    const cur = state.warSpoils?.held ?? [];
+    const same = cur.length === held.length && cur.every((h, i) => h === held[i]);
+    if (!same) api.setWarSpoils(held);
   }, [worldFrontier, state, api]);
 
   const clanLevel = state?.clanLevel ?? 0;

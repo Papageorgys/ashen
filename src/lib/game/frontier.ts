@@ -207,6 +207,58 @@ export const FRONTIER_TICK_MS = 20 * 60 * 1000; // 20 minutes
 const MAX_CATCHUP = 200;
 const HOLD_FULL = 100;
 
+/* ------------------------------- Long Night -------------------------------- */
+/**
+ * The Long Night is a scheduled, SHARED antagonist: on a fixed cadence of the war
+ * clock the dark rises for a spell, the longnight faction surges, and it claws at
+ * every border. Because it's derived from the tick, every player faces the same
+ * Night at the same time — a realm-wide event to repel together.
+ */
+export const NIGHT_CYCLE = 144; // ticks between nightfalls (~2 days)
+export const NIGHT_LENGTH = 20; // ticks the dark holds (~7 hours)
+
+export function isLongNight(tick: number): boolean {
+  return tick % NIGHT_CYCLE >= NIGHT_CYCLE - NIGHT_LENGTH;
+}
+/** Ticks until the Night falls (or lifts, if it's already abroad). */
+export function nightPhase(tick: number): { active: boolean; ticksLeft: number } {
+  const into = tick % NIGHT_CYCLE;
+  const start = NIGHT_CYCLE - NIGHT_LENGTH;
+  return into >= start
+    ? { active: true, ticksLeft: NIGHT_CYCLE - into }
+    : { active: false, ticksLeft: start - into };
+}
+
+/* -------------------------------- Realm boons ------------------------------ */
+/**
+ * Each realm the clan holds grants a DISTINCT boon to every hunt — so which
+ * realms you take is a real strategic choice, not just a count. Values are the
+ * fraction added to that channel per realm held (find is a flat drop-luck bonus).
+ */
+export const REALM_BOON: Record<
+  TerritoryId,
+  { label: string; blurb: string; gold?: number; xp?: number; essence?: number; find?: number }
+> = {
+  gilded: { label: "The Compact's Ledgers", blurb: "Gold flows through every hunt.", gold: 0.14 },
+  ember_court: { label: "Ember Tithes", blurb: "Coin, wrung from the ash.", gold: 0.1 },
+  verdant: { label: "Verdant Groves", blurb: "Essence runs thick from the green.", essence: 0.16 },
+  sunless: { label: "Sunless Rites", blurb: "The dark gives up its essence.", essence: 0.12 },
+  hollow_covenant: { label: "Hollow Relics", blurb: "Rarer spoils rise to the surface.", find: 7 },
+  free_holds: {
+    label: "Free-Hold Drills",
+    blurb: "Banners learn faster in free country.",
+    xp: 0.14,
+  },
+  pale_wardens: { label: "Warden Discipline", blurb: "Hard lessons, well kept.", xp: 0.1 },
+  vareth: {
+    label: "The Seat of Vareth",
+    blurb: "The crown's own tithe on all Aethyr.",
+    gold: 0.08,
+    xp: 0.08,
+    essence: 0.08,
+  },
+};
+
 export function initialFrontier(now: number): FrontierState {
   const control = {} as Record<TerritoryId, TerritoryState>;
   for (const id of TERRITORY_IDS) {
@@ -277,6 +329,8 @@ export function advanceFrontier(
   for (let step = 0; step < steps; step++) {
     state.tick += 1;
     const rng = tickRng(state.tick, 0);
+    // the Night is scheduled on the war clock, shared by everyone (opts can force it)
+    const night = opts.longNight === true || isLongNight(state.tick);
 
     // 1. powers grow slowly with how much of the continent they hold (soft-capped
     //    so no one runs away with it)
@@ -291,7 +345,7 @@ export function advanceFrontier(
     }
 
     // 2. the Long Night, while abroad, marshals and claws at the edges
-    if (opts.longNight) {
+    if (night) {
       state.power.longnight = Math.min(500, (state.power.longnight ?? 100) + 6);
     } else {
       // recedes when the sun returns
@@ -317,7 +371,7 @@ export function advanceFrontier(
         if (!best || force > best.force) best = { f: att, force };
       }
       // the Long Night presses every border realm from beyond the map
-      if (opts.longNight) {
+      if (night) {
         const nf = perT("longnight") * FACTIONS.longnight.ambition * 0.6;
         if (holder !== "longnight" && (!best || nf > best.force))
           best = { f: "longnight", force: nf };
@@ -418,4 +472,46 @@ export function frontierStandings(state: FrontierState) {
 export function isContested(state: FrontierState, id: TerritoryId): boolean {
   const holder = state.control[id].owner;
   return TERRITORIES[id].adj.some((nb) => state.control[nb].owner !== holder);
+}
+
+/* -------------------------------- Objectives ------------------------------- */
+
+export interface WarObjective {
+  id: string;
+  label: string;
+  desc: string;
+  done: boolean;
+  progress?: { have: number; need: number };
+}
+
+/** Collective goals of the war, read live off the frontier — shared by all players. */
+export function frontierObjectives(state: FrontierState): WarObjective[] {
+  const clan = territoriesOf(state, "clan").length;
+  const nightHeld = TERRITORY_IDS.filter((id) => state.control[id].owner === "longnight");
+  const night = isLongNight(state.tick);
+  const objs: WarObjective[] = [
+    {
+      id: "seat",
+      label: "Seize the Seat",
+      desc: "Take Castle Vareth for the banners.",
+      done: state.control.vareth.owner === "clan",
+    },
+    {
+      id: "ascend",
+      label: "Ascendancy",
+      desc: "Hold three realms at once.",
+      done: clan >= 3,
+      progress: { have: clan, need: 3 },
+    },
+  ];
+  if (night || nightHeld.length > 0) {
+    objs.push({
+      id: "repel",
+      label: "Repel the Long Night",
+      desc: "Drive the dark from every realm.",
+      done: nightHeld.length === 0,
+      progress: { have: TERRITORY_IDS.length - nightHeld.length, need: TERRITORY_IDS.length },
+    });
+  }
+  return objs;
 }
