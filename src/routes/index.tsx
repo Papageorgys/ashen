@@ -384,7 +384,7 @@ function Index() {
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
   const boss = useWorldBoss(user?.id ?? null);
   // the one shared, server-ticked war; falls back to the local sim if unreachable
-  const worldFrontier = useFrontier(!!user);
+  const { frontier: worldFrontier, contest: contestFrontier } = useFrontier(!!user);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -490,6 +490,7 @@ function Index() {
               now={now}
               onOpenTool={setTool}
               frontier={worldFrontier}
+              onContest={contestFrontier}
               navSlot={
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

@@ -259,6 +259,7 @@ export function RealmAtlas({
   onOpenTool,
   navSlot,
   frontier: frontierProp,
+  onContest,
 }: {
   /** live game state — when supplied with `api`, play mode deploys real banners */
   state?: GameState;
@@ -272,8 +273,16 @@ export function RealmAtlas({
   navSlot?: React.ReactNode;
   /** the shared, server-ticked war — falls back to the local per-save sim */
   frontier?: FrontierState | null;
+  /** commit the clan to a front in the shared war */
+  onContest?: (
+    territory: TerritoryId,
+    power: number,
+    clanName: string,
+  ) => Promise<{ ok: boolean; contested: boolean; cooldownMs: number }>;
 }) {
   const frontier = frontierProp ?? state?.frontier ?? null;
+  const [contestMsg, setContestMsg] = useState<string | null>(null);
+  const [contesting, setContesting] = useState(false);
   const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
   // the war table (live: state + api wired) opens ready to command; the standalone
   // atlas opens in view mode for browsing lore
@@ -1161,11 +1170,72 @@ export function RealmAtlas({
               {selected.blurb}
             </p>
 
-            {live && selected.id === "vareth" && (
-              <p className="text-[12px] text-muted-foreground">
-                Held by <span className="text-gold">{varethHolder}</span>.
-              </p>
-            )}
+            {/* the continental war: who holds this ground, and a chance to take it */}
+            {map.kind === "continent" &&
+              frontier &&
+              selected.id in TERRITORIES &&
+              (() => {
+                const cell = frontier.control[selected.id as TerritoryId];
+                const holder = FACTIONS[cell.owner];
+                const mine = cell.owner === "clan";
+                const power = state
+                  ? Math.min(
+                      40,
+                      Math.max(1, Math.round(state.members.reduce((s, m) => s + m.level, 0) / 8)),
+                    )
+                  : 1;
+                const commit = async () => {
+                  if (!onContest || !state || contesting) return;
+                  setContesting(true);
+                  setContestMsg(null);
+                  const r = await onContest(selected.id as TerritoryId, power, state.clanName);
+                  setContesting(false);
+                  if (!r.ok) setContestMsg("The front could not be reached.");
+                  else if (r.cooldownMs > 0)
+                    setContestMsg(
+                      `Your banners are still regrouping — ${Math.ceil(r.cooldownMs / 60000)}m.`,
+                    );
+                  else setContestMsg("Your banners throw themselves at the line.");
+                };
+                return (
+                  <div className="flex flex-col gap-2 rounded-sm border border-white/10 bg-black/30 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ background: holder.hue }}
+                        />
+                        Held by <span style={{ color: holder.hue }}>{holder.name}</span>
+                      </span>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                        grip {Math.round(cell.hold)}
+                      </span>
+                    </div>
+                    {onContest && live && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={mine || contesting}
+                          onClick={commit}
+                          className="rounded-sm border border-forge-ember bg-forge-ember/80 py-1.5 font-display text-[11px] uppercase tracking-[0.14em] text-[#160d06] transition enabled:hover:brightness-110 disabled:opacity-40"
+                        >
+                          {mine
+                            ? "Your banner holds this ground"
+                            : contesting
+                              ? "Committing…"
+                              : `Commit to the front · +${power}`}
+                        </button>
+                        {contestMsg && (
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            {contestMsg}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
             {/* home city — its own actions, live only while a banner stands in the hall */}
             {selected.home &&

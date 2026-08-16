@@ -5,6 +5,10 @@ Server-authoritative tick for Aethyr's shared war (the HOI4 layer).
 - Reads the single `public.world_state` row, advances the frontier by however much
   real time has passed (`advanceFrontier`, 20-minute ticks), writes it back with
   the service-role key, and returns the current state.
+- With a `{ contest: { territory, power, clanName } }` body it also lets a signed-in
+  player commit their banners to a front — grinding the holder toward the shared
+  "clan" faction, capped and enforced by a 15-minute per-user cooldown tracked in
+  `public.frontier_contests` (user id taken from the JWT `sub`).
 - The simulation is a **copy of `src/lib/game/frontier.ts`** — edge functions
   can't import app source. Keep the two in sync when tuning the war. The sim is
   PURE and deterministic in `(state, now)`, so concurrent invocations converge and

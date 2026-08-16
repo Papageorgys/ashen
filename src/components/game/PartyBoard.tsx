@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { DRAG_MEMBER } from "@/lib/game/dnd";
-import type { FrontierState } from "@/lib/game/frontier";
+import type { FrontierState, TerritoryId } from "@/lib/game/frontier";
 import { RealmAtlas } from "./RealmAtlas";
+
+type ContestFn = (
+  territory: TerritoryId,
+  power: number,
+  clanName: string,
+) => Promise<{ ok: boolean; contested: boolean; cooldownMs: number }>;
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -368,6 +374,7 @@ export function PartyBoard({
   onOpenTool,
   navSlot,
   frontier,
+  onContest,
 }: {
   state: GameState;
   api: ClanApi;
@@ -375,6 +382,7 @@ export function PartyBoard({
   onOpenTool?: (tab: string) => void;
   navSlot?: React.ReactNode;
   frontier?: FrontierState | null;
+  onContest?: ContestFn;
 }) {
   const unassigned = state.members.filter(
     (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
@@ -456,6 +464,7 @@ export function PartyBoard({
         {...(onOpenTool ? { onOpenTool } : {})}
         {...(navSlot ? { navSlot } : {})}
         {...(frontier ? { frontier } : {})}
+        {...(onContest ? { onContest } : {})}
       />
 
       <div className="grid gap-3 lg:grid-cols-2">
