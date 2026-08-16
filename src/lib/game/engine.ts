@@ -87,6 +87,7 @@ import {
 } from "./scrolls";
 
 import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "./identity";
+import { initialFrontier, advanceFrontier, type FrontierState } from "./frontier";
 import {
   CASTLE,
   RIVAL_BY_ID,
@@ -361,6 +362,8 @@ export interface GameState {
   prospectsAt?: number;
   /** last time the realm advanced (rival growth, castle tax) */
   realmTickAt?: number;
+  /** the continental war — the living frontier of factions across Aethyr (§ HOI4 layer) */
+  frontier?: FrontierState;
   /** Inspiration — earned by backgrounds in the field, spent to reroll a failed forge */
   inspiration?: number;
   /** every scroll attempt, newest last — imprints at the desk and readings in the field */
@@ -1363,6 +1366,7 @@ export function initialState(founding: Founding): GameState {
     rivals: initialRivals(),
     castle: initialCastle(),
     realmTickAt: Date.now(),
+    frontier: initialFrontier(Date.now()),
     companies: [],
     inspiration: 0,
     log: [
@@ -1751,6 +1755,13 @@ export function realmPulse(state: GameState) {
   }
   state.longNight = ln;
   const nightSurge = ln.endsAt ? LONG_NIGHT.hostilitySurgePerHour * hours : 0;
+
+  // The continental war grinds on whether or not the player acts (§ HOI4 layer).
+  // Client-ticked here for now; the same pure sim will drive one shared war
+  // server-side. Long Night surges the frontier while it walks the realm.
+  state.frontier = advanceFrontier(state.frontier ?? initialFrontier(now), now, {
+    longNight: !!ln.endsAt,
+  });
 
   // Raw Ash never settles — a hoarded pile burns off over time (§6.2).
   if ((state.rawAsh ?? 0) > 0 && hours > 0) {

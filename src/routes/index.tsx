@@ -28,6 +28,7 @@ import { ChroniclePanel } from "@/components/game/ChroniclePanel";
 import { LegacyPanel } from "@/components/game/LegacyPanel";
 import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
+import { FrontierPanel } from "@/components/game/FrontierPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
@@ -62,6 +63,7 @@ import {
   PawPrint,
   Skull,
   Menu,
+  Crosshair,
   Handshake,
   PenLine,
   ScrollText,
@@ -320,6 +322,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Realm",
     items: [
       {
+        value: "frontier",
+        label: "The War",
+        icon: Crosshair,
+        hint: "The living frontier — factions warring across Aethyr",
+      },
+      {
         value: "bestiary",
         label: "Bestiary",
         icon: PawPrint,
@@ -441,6 +449,8 @@ function Index() {
       <DailyPanel state={state} api={api} />
     ) : tool === "realm" ? (
       <RealmPanel state={state} api={api} />
+    ) : tool === "frontier" ? (
+      <FrontierPanel state={state} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "world" ? (
