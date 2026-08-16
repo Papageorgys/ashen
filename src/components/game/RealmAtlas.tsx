@@ -38,6 +38,7 @@ import {
   RISK_LABEL,
   type RiskTier,
 } from "@/lib/game/engine";
+import { FACTIONS, isContested, TERRITORIES, type TerritoryId } from "@/lib/game/frontier";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -936,6 +937,16 @@ export function RealmAtlas({
               const isSel = selectedId === loc.id;
               const isRealm = loc.type === "realm";
               const isHome = !!loc.home;
+              // the continental war: tint each territory by whoever holds it now
+              const terr =
+                map.kind === "continent" && state?.frontier && loc.id in TERRITORIES
+                  ? state.frontier.control[loc.id as TerritoryId]
+                  : null;
+              const terrHue = terr ? FACTIONS[terr.owner].hue : null;
+              const terrContested =
+                terr && state?.frontier
+                  ? isContested(state.frontier, loc.id as TerritoryId)
+                  : false;
               // live vs demo occupancy for the play-mode marker dot
               const here = live ? partiesAt(zoneOf(loc)?.id) : [];
               const fighting = live ? here.some((p) => p.run) : held[loc.id];
@@ -947,6 +958,22 @@ export function RealmAtlas({
                   className="group absolute z-[5] -translate-x-1/2 -translate-y-1/2"
                   style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
                 >
+                  {/* frontier: a standing aura in the holder's colour, always shown */}
+                  {terrHue && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                      style={{
+                        background: `radial-gradient(circle, ${terrHue}55 0%, transparent 70%)`,
+                      }}
+                    />
+                  )}
+                  {terrContested && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-white/45 motion-safe:animate-pulse"
+                    />
+                  )}
                   {isRealm && (
                     <span
                       aria-hidden="true"
