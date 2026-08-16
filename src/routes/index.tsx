@@ -33,6 +33,7 @@ import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
 import { useWorldBoss } from "@/hooks/useWorldBoss";
+import { useFrontier } from "@/hooks/useFrontier";
 import { useSession } from "@/hooks/useSession";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { TitleBar } from "@/components/game/TitleBar";
@@ -382,6 +383,8 @@ function Index() {
   const [tool, setTool] = useState<string | null>(null);
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
   const boss = useWorldBoss(user?.id ?? null);
+  // the one shared, server-ticked war; falls back to the local sim if unreachable
+  const worldFrontier = useFrontier(!!user);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -450,7 +453,7 @@ function Index() {
     ) : tool === "realm" ? (
       <RealmPanel state={state} api={api} />
     ) : tool === "frontier" ? (
-      <FrontierPanel state={state} />
+      <FrontierPanel state={state} frontier={worldFrontier} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "world" ? (
@@ -486,6 +489,7 @@ function Index() {
               api={api}
               now={now}
               onOpenTool={setTool}
+              frontier={worldFrontier}
               navSlot={
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

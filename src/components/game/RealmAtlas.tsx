@@ -38,7 +38,13 @@ import {
   RISK_LABEL,
   type RiskTier,
 } from "@/lib/game/engine";
-import { FACTIONS, isContested, TERRITORIES, type TerritoryId } from "@/lib/game/frontier";
+import {
+  FACTIONS,
+  isContested,
+  TERRITORIES,
+  type FrontierState,
+  type TerritoryId,
+} from "@/lib/game/frontier";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -252,6 +258,7 @@ export function RealmAtlas({
   className,
   onOpenTool,
   navSlot,
+  frontier: frontierProp,
 }: {
   /** live game state — when supplied with `api`, play mode deploys real banners */
   state?: GameState;
@@ -263,7 +270,10 @@ export function RealmAtlas({
   onOpenTool?: (tab: string) => void;
   /** the game menu, rendered into the map's own top bar (a burger, in practice) */
   navSlot?: React.ReactNode;
+  /** the shared, server-ticked war — falls back to the local per-save sim */
+  frontier?: FrontierState | null;
 }) {
+  const frontier = frontierProp ?? state?.frontier ?? null;
   const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
   // the war table (live: state + api wired) opens ready to command; the standalone
   // atlas opens in view mode for browsing lore
@@ -939,14 +949,12 @@ export function RealmAtlas({
               const isHome = !!loc.home;
               // the continental war: tint each territory by whoever holds it now
               const terr =
-                map.kind === "continent" && state?.frontier && loc.id in TERRITORIES
-                  ? state.frontier.control[loc.id as TerritoryId]
+                map.kind === "continent" && frontier && loc.id in TERRITORIES
+                  ? frontier.control[loc.id as TerritoryId]
                   : null;
               const terrHue = terr ? FACTIONS[terr.owner].hue : null;
               const terrContested =
-                terr && state?.frontier
-                  ? isContested(state.frontier, loc.id as TerritoryId)
-                  : false;
+                terr && frontier ? isContested(frontier, loc.id as TerritoryId) : false;
               // live vs demo occupancy for the play-mode marker dot
               const here = live ? partiesAt(zoneOf(loc)?.id) : [];
               const fighting = live ? here.some((p) => p.run) : held[loc.id];

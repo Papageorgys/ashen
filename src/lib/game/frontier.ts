@@ -215,7 +215,7 @@ export function initialFrontier(now: number): FrontierState {
   const power: Partial<Record<FactionId, number>> = {};
   for (const f of Object.values(FACTIONS)) {
     if (f.id === "clan") continue;
-    power[f.id] = f.id === "crown" ? 40 : 100;
+    power[f.id] = f.id === "crown" ? 45 : 100;
   }
   return { tick: 0, updatedAt: now, control, power, events: [] };
 }
@@ -278,13 +278,15 @@ export function advanceFrontier(
     state.tick += 1;
     const rng = tickRng(state.tick, 0);
 
-    // 1. powers grow with how much of the continent they hold
+    // 1. powers grow slowly with how much of the continent they hold (soft-capped
+    //    so no one runs away with it)
+    const held: Partial<Record<FactionId, number>> = {};
     for (const f of Object.keys(state.power) as FactionId[]) {
       const owned = territoriesOf(state, f).length;
-      const def = FACTIONS[f];
+      held[f] = owned;
       state.power[f] = Math.min(
-        400,
-        (state.power[f] ?? 0) * (1 + 0.004 * def.ambition) + owned * 0.6,
+        260,
+        (state.power[f] ?? 0) * (1 + 0.0025 * FACTIONS[f].ambition) + owned * 0.5,
       );
     }
 
@@ -293,48 +295,55 @@ export function advanceFrontier(
       state.power.longnight = Math.min(500, (state.power.longnight ?? 100) + 6);
     } else {
       // recedes when the sun returns
-      state.power.longnight = Math.max(60, (state.power.longnight ?? 100) - 3);
+      state.power.longnight = Math.max(55, (state.power.longnight ?? 100) - 3);
     }
+
+    // per-territory strength: an empire spread over many holds defends each front
+    // thinly, so it overextends and can be pushed back — the key to a live war
+    const perT = (f: FactionId) => (state.power[f] ?? 0) / Math.max(1, held[f] ?? 0);
 
     // 3. each territory takes pressure from the strongest hostile neighbour
     for (const id of TERRITORY_IDS) {
       const cell = state.control[id];
       const holder = cell.owner;
-      const holderPower = state.power[holder] ?? 40;
+      const atHome = holder === TERRITORIES[id].base;
 
       // the fiercest adjacent attacker
       let best: { f: FactionId; force: number } | null = null;
       for (const nb of TERRITORIES[id].adj) {
         const att = state.control[nb].owner;
         if (att === holder) continue;
-        const force = (state.power[att] ?? 0) * FACTIONS[att].ambition;
+        const force = perT(att) * FACTIONS[att].ambition;
         if (!best || force > best.force) best = { f: att, force };
       }
       // the Long Night presses every border realm from beyond the map
       if (opts.longNight) {
-        const nf = (state.power.longnight ?? 0) * FACTIONS.longnight.ambition * 0.6;
+        const nf = perT("longnight") * FACTIONS.longnight.ambition * 0.6;
         if (holder !== "longnight" && (!best || nf > best.force))
           best = { f: "longnight", force: nf };
       }
-      if (!best) {
-        cell.hold = Math.min(HOLD_FULL, cell.hold + 4); // quiet border, dig in
-        continue;
-      }
 
-      // grind the holder's dug-in strength; defender's own power cushions it
-      const defence = 30 + holderPower * 0.25;
-      const bite = Math.max(0, (best.force - defence) * 0.12) * (0.7 + rng() * 0.6);
-      cell.hold -= bite;
+      if (best) {
+        // home ground is defended far more stubbornly than occupied land
+        const defence = 22 + perT(holder) * 0.5 + (atHome ? 18 : 0);
+        const bite = Math.max(0, best.force - defence) * 0.16 * (0.7 + rng() * 0.6);
+        cell.hold -= bite;
+      } else {
+        cell.hold = Math.min(HOLD_FULL, cell.hold + 3); // quiet border, dig in
+      }
+      // unrest: occupied land is never wholly at peace, and slips from its holder
+      if (!atHome) cell.hold -= 1.6;
       if (cell.hold > HOLD_FULL) cell.hold = HOLD_FULL;
 
       if (cell.hold <= 0) {
-        // the border moves
+        // the border moves — to the attacker, or (isolated unrest) back to its rightful holder
         const from = cell.owner;
-        cell.owner = best.f;
-        cell.hold = 35 + rng() * 20; // takes the ground but isn't yet secure
+        const winner: FactionId = best ? best.f : TERRITORIES[id].base;
+        cell.owner = winner;
+        cell.hold = 32 + rng() * 22; // takes the ground but isn't yet secure
         cell.since = state.tick;
         const fromName = FACTIONS[from].short;
-        const toName = FACTIONS[best.f].name;
+        const toName = FACTIONS[winner].name;
         if (id === "vareth") {
           pushEvent(
             state,
@@ -342,18 +351,29 @@ export function advanceFrontier(
               kind: "siege",
               text: `${toName} storms Castle Vareth, wresting the seat from ${fromName}.`,
               territory: id,
-              faction: best.f,
+              faction: winner,
             },
             now,
           );
-        } else if (best.f === "longnight") {
+        } else if (winner === "longnight") {
           pushEvent(
             state,
             {
               kind: "nightfall",
               text: `The Long Night overruns ${TERRITORIES[id].name}. The living flee before it.`,
               territory: id,
-              faction: best.f,
+              faction: winner,
+            },
+            now,
+          );
+        } else if (!best) {
+          pushEvent(
+            state,
+            {
+              kind: "muster",
+              text: `${TERRITORIES[id].name} throws off ${fromName} and raises its own banners again.`,
+              territory: id,
+              faction: winner,
             },
             now,
           );
@@ -364,7 +384,7 @@ export function advanceFrontier(
               kind: "conquest",
               text: `${toName} drives ${fromName} out of ${TERRITORIES[id].name}.`,
               territory: id,
-              faction: best.f,
+              faction: winner,
             },
             now,
           );

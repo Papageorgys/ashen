@@ -8,6 +8,7 @@ import {
   frontierStandings,
   isContested,
   type FrontierEvent,
+  type FrontierState,
 } from "@/lib/game/frontier";
 
 const KIND_GLYPH: Record<FrontierEvent["kind"], string> = {
@@ -22,8 +23,14 @@ const KIND_GLYPH: Record<FrontierEvent["kind"], string> = {
  * the seat of Castle Vareth, and the chronicle of the front as it moves. The war
  * advances on its own clock; this is the window onto it.
  */
-export function FrontierPanel({ state }: { state: GameState }) {
-  const f = state.frontier;
+export function FrontierPanel({
+  state,
+  frontier,
+}: {
+  state: GameState;
+  frontier?: FrontierState | null;
+}) {
+  const f = frontier ?? state.frontier;
   const standings = useMemo(() => (f ? frontierStandings(f) : []), [f]);
 
   if (!f) {
