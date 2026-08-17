@@ -147,6 +147,7 @@ import {
   canJoinClan,
   JOIN_REQ,
   nextClanReq,
+  ascendancyReq,
   regenRate,
   suggestFill,
   slotOf,
@@ -203,6 +204,7 @@ import {
   reaffirmCost,
   uid,
   xpForLevel,
+  xpForParagon,
   xpForSkillLevel,
   canImprint,
   scribeOdds,
@@ -573,31 +575,34 @@ export function useClanGame() {
               m.mp = Math.min(maxMp(m), v.mp);
             }
 
-            // character xp (capped at 52)
-            if (m.level < MAX_LEVEL) {
-              m.xp += Math.round(
-                res.xp *
-                  (lordLed ? 1 + LORD_BONUS.xp : 1) *
-                  tide.spoilMult *
-                  (1 + (traitField(m.trait).xp ?? 0)),
-              );
-              while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
-                m.xp -= xpForLevel(m.level);
-                m.level += 1;
-                pushLog(s, `${m.name} reached level ${m.level}.`, "good");
-                if (m.level % 10 === 0 || m.level === MAX_LEVEL) {
-                  addMark(
-                    m,
-                    "ascend",
-                    `Came into their strength at level ${m.level}, out in ${zoneName}.`,
-                    {
-                      bound: "level",
-                      where: zoneName,
-                    },
-                  );
-                }
+            // character xp — climbs to the cap, then Ascendant (Paragon) forever
+            m.xp += Math.round(
+              res.xp *
+                (lordLed ? 1 + LORD_BONUS.xp : 1) *
+                tide.spoilMult *
+                (1 + (traitField(m.trait).xp ?? 0)),
+            );
+            while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
+              m.xp -= xpForLevel(m.level);
+              m.level += 1;
+              pushLog(s, `${m.name} reached level ${m.level}.`, "good");
+              if (m.level % 10 === 0 || m.level === MAX_LEVEL) {
+                addMark(
+                  m,
+                  "ascend",
+                  `Came into their strength at level ${m.level}, out in ${zoneName}.`,
+                  { bound: "level", where: zoneName },
+                );
               }
-              if (m.level >= MAX_LEVEL) m.xp = 0;
+            }
+            if (m.level >= MAX_LEVEL) {
+              // the cap is not the end — overflow xp becomes Ascendant ranks
+              while (m.xp >= xpForParagon(m.paragon ?? 0)) {
+                m.xp -= xpForParagon(m.paragon ?? 0);
+                m.paragon = (m.paragon ?? 0) + 1;
+                if ((m.paragon ?? 0) % 5 === 0)
+                  pushLog(s, `${m.name} ascends to Paragon ${m.paragon}.`, "good");
+              }
             }
 
             // skill mastery xp
@@ -2516,7 +2521,24 @@ export function useClanGame() {
     levelUpClan: () =>
       update((s) => {
         const req = nextClanReq(s.clanLevel);
-        if (!req) return void toast.error("Your clan already stands at its peak.");
+        if (!req) {
+          // at the clan cap — the climb continues as Ascendant tiers
+          const a = s.ascendancy ?? 0;
+          const areq = ascendancyReq(a);
+          if (s.reputation < areq.rep || s.gold < areq.gold)
+            return void toast.error(
+              `Ascend the clan needs ${areq.rep.toLocaleString()} rep · ${areq.gold.toLocaleString()} gold.`,
+            );
+          s.reputation -= areq.rep;
+          s.gold -= areq.gold;
+          s.ascendancy = a + 1;
+          const slot = (a + 1) % 4 === 0 ? " A new banner slot opens." : "";
+          pushLog(s, `${s.clanName} ascends to Tier ${a + 1}.${slot}`, "good");
+          toast.success(`Clan Ascendancy — Tier ${a + 1}.`);
+          return;
+        }
+        if (s.reputation < req.rep || s.gold < req.gold)
+          return void toast.error("Not enough reputation or gold.");
         if (s.reputation < req.rep || s.gold < req.gold)
           return void toast.error("Not enough reputation or gold.");
         if (req.level === 1 && s.allegiance) {

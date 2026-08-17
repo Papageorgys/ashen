@@ -122,6 +122,8 @@ export interface Member {
   classId: string;
   level: number;
   xp: number;
+  /** Ascendant (Paragon) levels earned past the cap — the climb never ends */
+  paragon?: number;
   hp: number;
   mp: number;
   gear: ItemId[]; // one per slot: weapon / armor / jewelry
@@ -472,6 +474,8 @@ export interface GameState {
   discovered?: string[];
   /** the Ashen Legacy — permanent, carried across ascensions (§ ascension) */
   legacy?: LegacyState;
+  /** clan Ascendancy — levels climbed past the clan-level cap (§ paragon) */
+  ascendancy?: number;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -589,6 +593,20 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export function xpForLevel(level: number) {
   return Math.round(90 * Math.pow(level, 1.75));
+}
+
+/**
+ * Ascendant (Paragon) progression — once a champion reaches the level cap, all
+ * further experience flows into Ascendant levels that never stop. The cost per
+ * level rises steadily, so it's a true long-tail: always a next rank, never a
+ * wall. Each rank is a small, permanent lift to fighting power (see memberPower).
+ */
+export function xpForParagon(paragon: number): number {
+  return Math.round(xpForLevel(MAX_LEVEL) * (1 + paragon * 0.1));
+}
+/** The power a champion's Ascendant ranks add, as a multiplier (2% per rank). */
+export function paragonMult(m: Member): number {
+  return 1 + (m.paragon ?? 0) * 0.02;
 }
 
 /** Skill mastery curve — reaching 100 should be a lifetime's work. */
@@ -734,7 +752,11 @@ export function memberPower(m: Member) {
     (cls.power + main * 0.25) * (1 + m.level * 0.35) + gear + mastery + setBonus(m).power;
   const prof = perkSum([m.profession], "power");
   return Math.round(
-    base * (1 + (passiveSum(m, "power") + prof) / 100) * armorMastery(m).mult * woundFactor(m),
+    base *
+      (1 + (passiveSum(m, "power") + prof) / 100) *
+      armorMastery(m).mult *
+      woundFactor(m) *
+      paragonMult(m),
   );
 }
 
@@ -981,7 +1003,12 @@ export function partyPower(state: GameState, party: Party) {
   if (ms.length === MAX_PARTY_SIZE) mult += 0.15;
   mult += synergyBonus(ms).power / 100;
   mult += bondBonus(state, party);
-  return Math.round(base * Math.max(0.4, mult) * legacyEffects(state).powerMult);
+  return Math.round(
+    base *
+      Math.max(0.4, mult) *
+      legacyEffects(state).powerMult *
+      ascendancyEffects(state).powerMult,
+  );
 }
 
 /* ----------------------------- Warband at war ------------------------------ */
@@ -1054,7 +1081,10 @@ export function warbandPower(state: GameState): Warband {
     }
   }
   const bondEdge = Math.min(12, bondPairs * 1.5) - Math.min(8, rivalPairs);
-  const powered = ((weight + bondEdge) / WAR_WEIGHT_DIV) * legacyEffects(state).powerMult;
+  const powered =
+    ((weight + bondEdge) / WAR_WEIGHT_DIV) *
+    legacyEffects(state).powerMult *
+    ascendancyEffects(state).powerMult;
   const power = Math.max(1, Math.min(40, Math.round(powered)));
   return { power, fielded: fielded.length, wounded, away, bondPairs, rivalPairs };
 }
@@ -1067,9 +1097,40 @@ export function maxParties(clanLevel: number, sworn = false) {
 
 /* -------------------------------- Ascension -------------------------------- */
 
-/** Banner slots the clan can field — the clan-level cap plus any Legacy grant. */
+/**
+ * Clan Ascendancy — once the clan reaches its level cap, the climb continues as
+ * Ascendant tiers, funded by ever-steeper reputation and gold, each a small
+ * clan-wide lift (and a banner slot every fourth tier). Infinite by design.
+ */
+export function ascendancyReq(level: number): { rep: number; gold: number } {
+  return {
+    rep: Math.round(13000 * Math.pow(1.55, level)),
+    gold: Math.round(120000 * Math.pow(1.55, level)),
+  };
+}
+export interface AscendancyEffects {
+  goldMult: number;
+  xpMult: number;
+  powerMult: number;
+  bannerBonus: number;
+}
+export function ascendancyEffects(state: GameState): AscendancyEffects {
+  const a = state.ascendancy ?? 0;
+  return {
+    goldMult: 1 + a * 0.03,
+    xpMult: 1 + a * 0.03,
+    powerMult: 1 + a * 0.02,
+    bannerBonus: Math.floor(a / 4),
+  };
+}
+
+/** Banner slots the clan can field — the clan-level cap, Legacy and Ascendancy. */
 export function bannerCap(state: GameState): number {
-  return maxParties(state.clanLevel, !!state.allegiance) + legacyEffects(state).bannerBonus;
+  return (
+    maxParties(state.clanLevel, !!state.allegiance) +
+    legacyEffects(state).bannerBonus +
+    ascendancyEffects(state).bannerBonus
+  );
 }
 
 /** May the house pass into Legacy right now? Only at the pinnacle of the climb. */
@@ -3174,6 +3235,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
 
   const spoils = warSpoilsChannels(state); // realms held in the shared war pay out
   const leg = legacyEffects(state); // permanent boons carried across ascensions
+  const asc = ascendancyEffects(state); // clan tiers climbed past the level cap
   const find =
     (ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find + spoils.find) * leg.findMult;
   const fallenNote = fallen.length
@@ -3270,6 +3332,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       cond.gold *
       spoils.gold *
       leg.goldMult *
+      asc.goldMult *
       (eliteMet ? ELITE.goldMult : 1),
   );
   const loot: { item: ItemId; qty: number }[] = [];
@@ -3344,6 +3407,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         cond.xp *
         spoils.xp *
         leg.xpMult *
+        asc.xpMult *
         (eliteMet ? ELITE.xpMult : 1),
     ),
     kills,
