@@ -90,6 +90,7 @@ import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "./id
 import { initialFrontier, REALM_BOON, type FrontierState, type TerritoryId } from "./frontier";
 import { initialCourt, fillCharges, courtRankIndex, courtStanding, type CourtState } from "./court";
 import { legacyEffects, initialLegacy, type LegacyState } from "./legacy";
+import type { SeasonPass } from "./season";
 import type { TraitId } from "./traits";
 import { initialDomain, type DomainState } from "./logistics";
 import {
@@ -478,6 +479,8 @@ export interface GameState {
   ascendancy?: number;
   /** The Abyss — deepest depth cleared in the endless descent (§ endgame) */
   abyss?: { depth: number };
+  /** the season reward track — resets each Season of Ash (§ seasons) */
+  seasonPass?: SeasonPass;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */

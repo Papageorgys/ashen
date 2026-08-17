@@ -21,6 +21,7 @@ import {
 import { summonCurtain } from "@/lib/transition";
 import { playCue } from "@/lib/sound";
 import { initialLegacy, LEGACY_BOONS, type LegacyBoonId } from "@/lib/game/legacy";
+import { initialSeasonPass, SEASON_TIERS } from "@/lib/game/season";
 import { professionFromSeed } from "@/lib/game/professions";
 import {
   courtEffects,
@@ -271,6 +272,9 @@ function patch(loaded: GameState): GameState {
   loaded.bossCommitAt = loaded.bossCommitAt ?? {};
   // the Ashen Legacy (ascension meta-progression) arrived later
   loaded.legacy = loaded.legacy ?? initialLegacy();
+  // the season pass — reset it if the realm has turned to a new Season of Ash
+  if (!loaded.seasonPass || loaded.seasonPass.season !== (loaded.season ?? 1))
+    loaded.seasonPass = initialSeasonPass(loaded.season ?? 1);
   // the feudal court arrived later — swear every existing house to the crown, and
   // keep its charge board topped up so the King always has work waiting
   loaded.court = loaded.court ?? initialCourt();
@@ -381,6 +385,13 @@ export function useClanGame() {
     s.log = [{ id: uid(), at: Date.now(), text, tone }, ...s.log].slice(0, 60);
   };
 
+  /** Add points to this season's reward track (from deeds of note across the game). */
+  const awardSeason = (s: GameState, n: number) => {
+    if (n <= 0) return;
+    s.seasonPass = s.seasonPass ?? initialSeasonPass(s.season ?? 1);
+    s.seasonPass.points += Math.round(n);
+  };
+
   /** Grant royal favor and handle any court rank-ups (or coronation) it triggers.
    * The current court season scales what favor is worth this week. */
   const awardFavor = (s: GameState, amount: number) => {
@@ -475,6 +486,7 @@ export function useClanGame() {
           s.reputation += Math.round(
             res.rep * keepEffects(s).repMult * (lordLed ? 1.1 : 1) * court.repMult,
           );
+          awardSeason(s, res.rep * 0.6); // deeds in the field score the season track
           // the crown's charges read these durable tallies for their progress
           if (s.court) {
             s.court.stats.runs += 1;
@@ -1143,7 +1155,12 @@ export function useClanGame() {
         crest: s.crest ?? DEFAULT_CREST,
         profession: lord?.profession ?? "soldier",
       };
-      setState(initialState(founding, { legacy }));
+      const fresh = initialState(founding, { legacy });
+      // the season belongs to the realm, not the run — carry it across the ascension
+      if (s.season !== undefined) fresh.season = s.season;
+      if (s.seasonPass)
+        fresh.seasonPass = { ...s.seasonPass, points: s.seasonPass.points + gained * 2 };
+      setState(fresh);
       playCue("levelup");
       summonCurtain({ label: "A Legacy Passes On", sigil: "🜂", holdMs: 900 });
       toast.success(`${s.clanName} ascends.`, {
@@ -1182,6 +1199,7 @@ export function useClanGame() {
           const r = abyssReward(depth);
           s.gold += r.gold;
           s.inspiration = (s.inspiration ?? 0) + r.inspiration;
+          awardSeason(s, 30 + depth * 6); // a cleared floor is a season deed
           for (const id of p.memberIds) {
             const m = s.members.find((x) => x.id === id);
             if (!m) continue;
@@ -1214,6 +1232,29 @@ export function useClanGame() {
           toast.error(`Depth ${depth} holds — the banner is wounded.`);
           playCue("error");
         }
+      }),
+
+    /** Claim a reward tier on the season track once its points are earned. */
+    claimSeasonTier: (i: number) =>
+      update((s) => {
+        const tier = SEASON_TIERS[i];
+        if (!tier) return;
+        s.seasonPass = s.seasonPass ?? initialSeasonPass(s.season ?? 1);
+        if (s.seasonPass.claimed.includes(i)) return;
+        if (s.seasonPass.points < tier.points)
+          return void toast.error(`${tier.points} season points needed for that tier.`);
+        s.seasonPass.claimed.push(i);
+        const r = tier.reward;
+        if (r.gold) s.gold += r.gold;
+        if (r.inspiration) s.inspiration = (s.inspiration ?? 0) + r.inspiration;
+        if (r.legacy) {
+          s.legacy = s.legacy ?? initialLegacy();
+          s.legacy.points += r.legacy;
+          s.legacy.earned += r.legacy;
+        }
+        pushLog(s, `Season reward claimed — ${tier.label}.`, "good");
+        toast.success(`${tier.label} claimed.`);
+        playCue("coin");
       }),
 
     refreshRecruits: () =>
@@ -1942,6 +1983,7 @@ export function useClanGame() {
           `${renown.toLocaleString()} renown across ${deeds.length} deeds. The map is perturbed and the war begins again — but your name endures in the stone.`,
         );
         s.season = season + 1;
+        s.seasonPass = initialSeasonPass(season + 1); // the season track begins anew
         // perturbation: rivals surge back stronger, their claims reset; meta-clocks clear.
         s.rivals = initialRivals().map((r) => ({
           ...r,
