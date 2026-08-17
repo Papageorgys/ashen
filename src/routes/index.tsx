@@ -40,6 +40,7 @@ import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
 import { AbyssPanel } from "@/components/game/AbyssPanel";
 import { SeasonPanel } from "@/components/game/SeasonPanel";
+import { TownshipPanel } from "@/components/game/TownshipPanel";
 import { useWorldBoss } from "@/hooks/useWorldBoss";
 import { useFrontier } from "@/hooks/useFrontier";
 import { territoriesOf } from "@/lib/game/frontier";
@@ -85,6 +86,7 @@ import {
   Warehouse,
   ChevronsDown,
   CalendarDays,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -356,6 +358,13 @@ const MAP_NAV: MapNavGroup[] = [
     title: "Town",
     glyph: "⚒",
     items: [
+      {
+        value: "township",
+        label: "The Township",
+        icon: Building2,
+        hint: "The civic building sim — raise and upgrade the town around your seat",
+        requiresClan: true,
+      },
       { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
       {
         value: "forge",
@@ -605,6 +614,8 @@ function Index() {
       <AbyssPanel state={state} api={api} />
     ) : tool === "season" ? (
       <SeasonPanel state={state} api={api} />
+    ) : tool === "township" ? (
+      <TownshipPanel state={state} api={api} now={now} />
     ) : tool === "world" ? (
       <WorldPanel signedIn={!!user} myId={user?.id ?? null} />
     ) : tool === "chronicle" ? (

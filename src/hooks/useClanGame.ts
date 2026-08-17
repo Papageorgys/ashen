@@ -22,6 +22,14 @@ import { summonCurtain } from "@/lib/transition";
 import { playCue } from "@/lib/sound";
 import { initialLegacy, LEGACY_BOONS, type LegacyBoonId } from "@/lib/game/legacy";
 import { initialSeasonPass, SEASON_TIERS } from "@/lib/game/season";
+import {
+  BUILDINGS,
+  buildCost,
+  buildMs,
+  townshipEffects,
+  initialTownship,
+  type BuildingType,
+} from "@/lib/game/township";
 import { professionFromSeed } from "@/lib/game/professions";
 import {
   courtEffects,
@@ -272,6 +280,8 @@ function patch(loaded: GameState): GameState {
   loaded.bossCommitAt = loaded.bossCommitAt ?? {};
   // the Ashen Legacy (ascension meta-progression) arrived later
   loaded.legacy = loaded.legacy ?? initialLegacy();
+  // the Township (civic building sim) arrived later
+  loaded.township = loaded.township ?? initialTownship(Date.now());
   // the season pass — reset it if the realm has turned to a new Season of Ash
   if (!loaded.seasonPass || loaded.seasonPass.season !== (loaded.season ?? 1))
     loaded.seasonPass = initialSeasonPass(loaded.season ?? 1);
@@ -1255,6 +1265,55 @@ export function useClanGame() {
         pushLog(s, `Season reward claimed — ${tier.label}.`, "good");
         toast.success(`${tier.label} claimed.`);
         playCue("coin");
+      }),
+
+    /* -------------------------------- township ------------------------------- */
+
+    /** Raise a new building on an empty plot, or upgrade the one already there.
+     * Costs gold and Domain timber, and takes real time (a construction queue). */
+    buildTownship: (plotId: string, type: BuildingType) =>
+      update((s) => {
+        s.township = s.township ?? initialTownship(Date.now());
+        const plot = s.township.plots.find((p) => p.id === plotId);
+        if (!plot) return;
+        if (plot.constructing) return void toast("That plot is already under construction.");
+        if (plot.type && plot.type !== type)
+          return void toast.error("Raze the current building before raising another here.");
+        const def = BUILDINGS[type];
+        const toLevel = plot.level + 1;
+        if (toLevel > def.maxLevel) return void toast(`${def.name} is built to its limit.`);
+        const cost = buildCost(type, toLevel);
+        const timber = s.domain?.stock.timber ?? 0;
+        if (s.gold < cost.gold)
+          return void toast.error(`${cost.gold.toLocaleString()} gold needed.`);
+        if (timber < cost.timber)
+          return void toast.error(`${cost.timber} timber needed — haul it in via the Domain.`);
+        s.gold -= cost.gold;
+        if (s.domain) s.domain.stock.timber = timber - cost.timber;
+        const ms = buildMs(type, toLevel, townshipEffects(s).buildSpeed);
+        plot.type = type;
+        plot.constructing = { startedAt: Date.now(), until: Date.now() + ms, toLevel };
+        pushLog(
+          s,
+          `${def.name} — ${toLevel === 1 ? "construction begun" : `upgrade to level ${toLevel} begun`} (~${Math.ceil(ms / 60000)}m).`,
+          "info",
+        );
+        toast.success(`${def.name}: work begun.`, {
+          description: `Ready in ~${Math.ceil(ms / 60000)} minutes.`,
+        });
+        playCue("forge");
+      }),
+
+    /** Raze a building, clearing the plot for something else. */
+    razeTownship: (plotId: string) =>
+      update((s) => {
+        const plot = s.township?.plots.find((p) => p.id === plotId);
+        if (!plot || (!plot.type && plot.level === 0)) return;
+        const name = plot.type ? BUILDINGS[plot.type].name : "the works";
+        delete plot.type;
+        plot.level = 0;
+        delete plot.constructing;
+        pushLog(s, `${name} razed — the plot stands empty again.`, "info");
       }),
 
     refreshRecruits: () =>
