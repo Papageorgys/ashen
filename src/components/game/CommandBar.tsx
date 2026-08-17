@@ -26,7 +26,7 @@ import { Counter } from "@/components/game/Counter";
 import { DEFAULT_CREST } from "@/lib/game/identity";
 import { MAX_PARTY_SIZE } from "@/lib/game/data";
 import {
-  maxParties,
+  bannerCap,
   scoreClan,
   wornTitle,
   supplyCap,
@@ -108,7 +108,7 @@ export function CommandBar({
   signedIn: boolean;
 }) {
   const founded = state.clanLevel >= 1;
-  const slots = maxParties(state.clanLevel, !!state.allegiance);
+  const slots = bannerCap(state);
   const score = scoreClan(state);
   const supply = Math.floor(state.supply ?? 0);
   const cap = supplyCap(state);

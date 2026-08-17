@@ -10,7 +10,17 @@ import {
   initialRivals,
   resolveClash,
 } from "@/lib/game/rivals";
-import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "@/lib/game/identity";
+import {
+  DEFAULT_CREST,
+  MOTTOS,
+  randomPortrait,
+  portraitFromSeed,
+  type Crest,
+  type Portrait,
+} from "@/lib/game/identity";
+import { summonCurtain } from "@/lib/transition";
+import { playCue } from "@/lib/sound";
+import { initialLegacy, LEGACY_BOONS, type LegacyBoonId } from "@/lib/game/legacy";
 import { professionFromSeed } from "@/lib/game/professions";
 import {
   courtEffects,
@@ -124,6 +134,9 @@ import {
   DAMAGE_LABEL,
   type RuneType,
   initialState,
+  canAscend,
+  ascensionYield,
+  bannerCap,
   learnSkill as learnSkillFn,
   learnableSkills as learnableSkillsFn,
   skillCost as skillCostFn,
@@ -252,6 +265,8 @@ function patch(loaded: GameState): GameState {
   loaded.inspiration = loaded.inspiration ?? 0;
   // per-banner boss-charge cooldowns post-date older saves
   loaded.bossCommitAt = loaded.bossCommitAt ?? {};
+  // the Ashen Legacy (ascension meta-progression) arrived later
+  loaded.legacy = loaded.legacy ?? initialLegacy();
   // the feudal court arrived later — swear every existing house to the crown, and
   // keep its charge board topped up so the King always has work waiting
   loaded.court = loaded.court ?? initialCourt();
@@ -1090,6 +1105,60 @@ export function useClanGame() {
       setState(null);
     },
 
+    /** Pass the house into Legacy: bank the ascension's reward, then begin a
+     * fresh run from higher ground, carrying every permanent boon forward. */
+    ascend: () => {
+      const s = stateRef.current;
+      if (!s) return;
+      const gate = canAscend(s);
+      if (!gate.ok) return void toast.error(gate.why);
+      const gained = ascensionYield(s);
+      const prev = s.legacy ?? initialLegacy();
+      const renown = renownScore(deedsFromState(s));
+      const legacy = {
+        ascensions: prev.ascensions + 1,
+        points: prev.points + gained,
+        earned: prev.earned + gained,
+        boons: { ...prev.boons },
+        best: {
+          clanLevel: Math.max(prev.best?.clanLevel ?? 0, s.clanLevel),
+          renown: Math.max(prev.best?.renown ?? 0, renown),
+        },
+      };
+      // re-found under the same banner and bloodline, from higher ground
+      const lord = lordOf(s);
+      const founding: Founding = {
+        clanName: s.clanName,
+        motto: s.motto ?? MOTTOS[0]!,
+        lordName: s.leaderName,
+        classId: lord?.classId ?? "bulwark",
+        portrait: lord?.portrait ?? randomPortrait(),
+        crest: s.crest ?? DEFAULT_CREST,
+        profession: lord?.profession ?? "soldier",
+      };
+      setState(initialState(founding, { legacy }));
+      playCue("levelup");
+      summonCurtain({ label: "A Legacy Passes On", sigil: "🜂", holdMs: 900 });
+      toast.success(`${s.clanName} ascends.`, {
+        description: `+${gained} Legacy earned — the house begins anew, and stronger.`,
+      });
+    },
+
+    /** Spend Legacy points on a permanent boon. */
+    purchaseBoon: (id: LegacyBoonId) =>
+      update((s) => {
+        s.legacy = s.legacy ?? initialLegacy();
+        const def = LEGACY_BOONS[id];
+        const have = s.legacy.boons[id] ?? 0;
+        if (have >= def.maxLevel) return void toast("That boon is fully attuned.");
+        const cost = def.cost(have);
+        if (s.legacy.points < cost) return void toast.error(`${cost} Legacy needed for that rank.`);
+        s.legacy.points -= cost;
+        s.legacy.boons[id] = have + 1;
+        pushLog(s, `The Legacy deepens — ${def.name} attuned to rank ${have + 1}.`, "good");
+        toast.success(`${def.name} — rank ${have + 1}.`);
+      }),
+
     refreshRecruits: () =>
       update((s) => {
         const cost = 150 * Math.max(1, s.clanLevel);
@@ -1142,7 +1211,7 @@ export function useClanGame() {
 
     createParty: () =>
       update((s) => {
-        if (s.parties.length >= maxParties(s.clanLevel, !!s.allegiance))
+        if (s.parties.length >= bannerCap(s))
           return void toast.error(
             s.clanLevel < 1
               ? "Found your clan before raising a second banner."
@@ -2432,7 +2501,7 @@ export function useClanGame() {
         s.allegiance = null;
         const rival = s.rivals?.find((r) => r.id === clanId);
         if (rival) rival.hostility = Math.min(100, rival.hostility + 25);
-        while (s.parties.length > maxParties(s.clanLevel)) {
+        while (s.parties.length > bannerCap(s)) {
           const dropped = s.parties.pop();
           if (!dropped) break;
           for (const id of dropped.memberIds) {
@@ -2955,7 +3024,7 @@ export function useClanGame() {
         s.reputation += Math.round(companyPower(c) / 120);
 
         let partyId: string | null = null;
-        if (keepTogether && s.parties.length < maxParties(s.clanLevel, !!s.allegiance)) {
+        if (keepTogether && s.parties.length < bannerCap(s)) {
           partyId = uid();
           s.parties.push({ id: partyId, name: c.name, memberIds: [], run: null });
         }

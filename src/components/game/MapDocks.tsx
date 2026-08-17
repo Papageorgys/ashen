@@ -1,7 +1,7 @@
 import { Flag, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
-import { maxParties } from "@/lib/game/engine";
+import { bannerCap } from "@/lib/game/engine";
 
 /** How a banner reads at a glance — a coloured dot and a word. */
 function bannerStatus(p: GameState["parties"][number]): { label: string; tone: string } {
@@ -17,7 +17,7 @@ function bannerStatus(p: GameState["parties"][number]): { label: string; tone: s
  * this is the glance-and-go status.
  */
 export function BannerDock({ state, onManage }: { state: GameState; onManage: () => void }) {
-  const slots = maxParties(state.clanLevel, !!state.allegiance);
+  const slots = bannerCap(state);
   const parties = state.parties.slice(0, 6);
   return (
     <div className="pointer-events-auto absolute bottom-2 left-2 z-10 w-52 max-w-[46%] overflow-hidden rounded-sm border border-white/12 bg-black/70 backdrop-blur-sm">

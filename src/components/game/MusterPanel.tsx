@@ -9,7 +9,7 @@ import {
   companyPower,
   hasClan,
   keepLevel,
-  maxParties,
+  bannerCap,
   memberPower,
   prospectCost,
   type FreeCompany,
@@ -24,7 +24,9 @@ function BladeRow({ m }: { m: Member }) {
   const cls = CLASS_BY_ID[m.classId]!;
   return (
     <div className="flex items-center gap-2 rounded-sm border border-border/50 px-2 py-1">
-      {m.portrait && <Portrait data={m.portrait} classId={m.classId} className="h-6 w-6 shrink-0" />}
+      {m.portrait && (
+        <Portrait data={m.portrait} classId={m.classId} className="h-6 w-6 shrink-0" />
+      )}
       <ClassPicto classId={cls.id} size="sm" />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs">{m.name}</span>
@@ -114,7 +116,11 @@ function CompanyCard({
           <Button size="sm" variant="ghost" onClick={() => api.declineCompany(c.id)}>
             {c.kind === "petition" ? "Turn away" : "Dismiss"}
           </Button>
-          <Button size="sm" disabled={!check.ok} onClick={() => api.acceptCompany(c.id, keepTogether)}>
+          <Button
+            size="sm"
+            disabled={!check.ok}
+            onClick={() => api.acceptCompany(c.id, keepTogether)}
+          >
             {c.kind === "petition" ? "Accept oath" : "Send invitation"}
           </Button>
         </div>
@@ -130,7 +136,7 @@ export function MusterPanel({ state, api }: { state: GameState; api: ClanApi }) 
   const prospects = companies.filter((c) => c.kind === "prospect");
   const cap = clanCapacity(state.clanLevel, keepLevel(state, "barracks"), !!state.allegiance);
   const room = cap - state.members.length;
-  const bannerRoom = maxParties(state.clanLevel, !!state.allegiance) - state.parties.length;
+  const bannerRoom = bannerCap(state) - state.parties.length;
   const open = hasClan(state) || !!state.allegiance;
 
   return (
@@ -156,7 +162,10 @@ export function MusterPanel({ state, api }: { state: GameState; api: ClanApi }) 
 
       <div className="panel flex flex-wrap gap-x-6 gap-y-1 rounded-sm p-3 text-[11px] uppercase tracking-widest text-muted-foreground">
         <span>
-          Roster <span className="text-gold">{state.members.length}/{cap}</span>
+          Roster{" "}
+          <span className="text-gold">
+            {state.members.length}/{cap}
+          </span>
         </span>
         <span>
           Free places <span className="text-gold">{Math.max(0, room)}</span>
