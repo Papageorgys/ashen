@@ -454,8 +454,6 @@ export interface GameState {
   savedAt?: number;
   /** shared danger forges bonds — affinity keyed by a canonical "idA:idB" pair */
   affinity?: Record<string, number>;
-  /** wall-clock of this clan's last strike on the World Boss (strike cooldown) */
-  bossStrikeAt?: number;
   /** World Boss events whose spoils this clan has already claimed, by event id */
   bossClaims?: Record<string, boolean>;
   /** a shrine blessing that shields champions from death in the boss fight, for a day */

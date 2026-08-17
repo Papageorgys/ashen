@@ -1825,12 +1825,6 @@ export function useClanGame() {
 
     /* ------------------------------ world boss ------------------------------- */
 
-    /** Stamp the strike cooldown after a blow lands on the World Boss. */
-    markBossStrike: () =>
-      update((s) => {
-        s.bossStrikeAt = Date.now();
-      }),
-
     /**
      * Commit a banner to the World Boss: it breaks off farming to charge the
      * beast, then must regroup before it can charge again. Every charge risks a
