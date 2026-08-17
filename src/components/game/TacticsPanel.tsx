@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
-import { DAMAGE_LABEL, typeMultVs, memberPower } from "@/lib/game/engine";
+import { DAMAGE_LABEL, typeMultVs, memberPower, getAffinity, BOND_AT } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import { CLASS_BY_ID, MAX_PARTY_SIZE } from "@/lib/game/data";
 import { TRAITS } from "@/lib/game/traits";
@@ -14,8 +14,10 @@ import {
   tierById,
   isCovered,
   defaultRank,
+  downedMemberIds,
   COND_META,
   MOMENTUM_MAX,
+  BLOODED_MULT,
   TAC_TIERS,
   type TacState,
   type TacUnit,
@@ -37,6 +39,19 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
   // the formation-picking step: a banner chosen, its lines not yet set
   const [setupPartyId, setSetupPartyId] = useState<string | null>(null);
   const [formation, setFormation] = useState<Record<string, "front" | "back">>({});
+  const [blooded, setBlooded] = useState(false);
+
+  /** Member ids in a party that share a shield-bond with a banner-mate. */
+  function bondedInParty(ids: string[]): string[] {
+    const out = new Set<string>();
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++)
+        if (getAffinity(state, ids[i]!, ids[j]!) >= BOND_AT) {
+          out.add(ids[i]!);
+          out.add(ids[j]!);
+        }
+    return [...out];
+  }
 
   // banners that could enter: have champions and aren't in the field
   const restedBanners = state.parties.filter(
@@ -61,8 +76,9 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
     if (!setupPartyId) return;
     const members = membersOf(setupPartyId);
     if (members.length === 0) return;
-    setFought(members.map((m) => m.id));
-    setTac(startEncounter(members, tierId, formation));
+    const ids = members.map((m) => m.id);
+    setFought(ids);
+    setTac(startEncounter(members, tierId, formation, bondedInParty(ids)));
     setSetupPartyId(null);
     setPending(null);
     setClaimed(false);
@@ -219,6 +235,37 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
                 );
               })}
             </div>
+
+            {/* Blooded stakes — real wounds for richer spoils */}
+            <button
+              type="button"
+              onClick={() => setBlooded((b) => !b)}
+              className={cn(
+                "mt-3 flex w-full items-center justify-between gap-2 rounded-sm border p-2.5 text-left transition",
+                blooded
+                  ? "border-destructive/60 bg-destructive/[0.08]"
+                  : "border-border/60 bg-black/20 hover:border-destructive/40",
+              )}
+            >
+              <span className="min-w-0">
+                <span className="font-display text-xs text-gold">Blooded proving</span>
+                <span className="block text-[10px] leading-snug text-muted-foreground">
+                  Real stakes: any champion downed comes away with lasting wounds — but the spoils
+                  pay ×{BLOODED_MULT}.
+                </span>
+              </span>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.1em]",
+                  blooded
+                    ? "border-destructive text-destructive"
+                    : "border-white/20 text-muted-foreground",
+                )}
+              >
+                {blooded ? "On" : "Off"}
+              </span>
+            </button>
+
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
@@ -232,7 +279,7 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
                 onClick={begin}
                 className="flex-1 rounded-sm border border-forge-ember bg-forge-ember/80 py-1.5 font-display text-xs uppercase tracking-[0.12em] text-[#160d06] transition hover:brightness-110"
               >
-                Enter the proving ▸
+                Enter the {blooded ? "Blooded " : ""}proving ▸
               </button>
             </div>
           </section>
@@ -247,7 +294,9 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
     const reward = tacticalReward(
       tac,
       foughtMembers.filter((m): m is NonNullable<typeof m> => !!m),
+      blooded,
     );
+    const downed = downedMemberIds(tac);
     return (
       <div className="space-y-4">
         <section
@@ -275,11 +324,18 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
             <Spoil label="Royal favor" value={won ? `+${reward.favor}` : "—"} tone={won} />
           </div>
 
+          {reward.blooded && downed.length > 0 && (
+            <p className="mt-3 text-[11px] text-destructive">
+              {downed.length} champion{downed.length === 1 ? "" : "s"} came away wounded — tend them
+              in the Warband before they fight at full strength again.
+            </p>
+          )}
+
           {!claimed ? (
             <button
               type="button"
               onClick={() => {
-                api.finishTactics(fought, reward);
+                api.finishTactics(fought, reward, downed);
                 setClaimed(true);
               }}
               className="mt-4 rounded-sm border border-forge-ember bg-forge-ember/80 px-5 py-2 font-display text-sm uppercase tracking-[0.12em] text-[#160d06] transition hover:brightness-110"

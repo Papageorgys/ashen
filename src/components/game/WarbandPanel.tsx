@@ -13,6 +13,7 @@ import { TRAITS, traitsFor, type TraitDef } from "@/lib/game/traits";
 export function WarbandPanel({ state, api }: { state: GameState; api: ClanApi }) {
   const [open, setOpen] = useState<string | null>(null);
   const roster = [...state.members].sort((a, b) => b.level - a.level);
+  const woundedCount = state.members.filter((m) => (m.wound ?? 0) > 0).length;
 
   return (
     <div className="space-y-3">
@@ -23,6 +24,21 @@ export function WarbandPanel({ state, api }: { state: GameState; api: ClanApi })
           that shapes how they fight. Most of its weight lands in the Proving; a lighter share
           follows them into the field. Traits open as a champion levels.
         </p>
+        {woundedCount > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-sm border border-destructive/40 bg-destructive/[0.06] px-3 py-2">
+            <span className="text-[11px] text-destructive">
+              {woundedCount} champion{woundedCount === 1 ? " carries" : "s carry"} lingering wounds
+              — they fight weaker until mended. Wounds heal slowly at rest.
+            </span>
+            <button
+              type="button"
+              onClick={() => api.tendWounds()}
+              className="shrink-0 rounded-sm border border-forge-ember bg-forge-ember/80 px-2.5 py-1 font-display text-[10px] uppercase tracking-[0.1em] text-[#160d06] transition hover:brightness-110"
+            >
+              Tend the wounded
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="space-y-2">
@@ -41,6 +57,15 @@ export function WarbandPanel({ state, api }: { state: GameState; api: ClanApi })
                   </div>
                   <div className="text-[11px] capitalize text-muted-foreground">
                     {ROLE_LABEL[role]} · Lv {m.level}
+                    {(m.wound ?? 0) > 0 && (
+                      <span
+                        className="text-destructive"
+                        title="Lingering wounds sap fighting strength until mended"
+                      >
+                        {" "}
+                        · wounded −{Math.min(35, Math.round((m.wound ?? 0) * 3))}%
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
