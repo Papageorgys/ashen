@@ -9,10 +9,16 @@ import {
   THE_REALM,
   courtRank,
   courtRankIndex,
+  courtStanding,
   nextCourtRank,
   courtRankProgress,
   courtEffects,
   chargeProgress,
+  BOONS,
+  BOON_IDS,
+  canPetition,
+  charterSupply,
+  musterLaborers,
   type ChargeKind,
 } from "@/lib/game/court";
 import { throneWord, courtSeason, rivalHouses } from "@/lib/game/living";
@@ -44,11 +50,12 @@ const KIND_LABEL: Record<ChargeKind, string> = {
  */
 export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
   const court = state.court;
-  const favor = court?.favor ?? 0;
-  const rank = courtRank(favor);
-  const rankIndex = courtRankIndex(favor);
-  const next = nextCourtRank(favor);
-  const toNext = courtRankProgress(favor);
+  const favor = Math.floor(court?.favor ?? 0); // the spendable purse
+  const standing = Math.floor(courtStanding(state)); // cumulative — drives rank
+  const rank = courtRank(standing);
+  const rankIndex = courtRankIndex(standing);
+  const next = nextCourtRank(standing);
+  const toNext = courtRankProgress(standing);
   const eff = courtEffects(state);
   const crowned = !!court?.crowned || rankIndex >= CROWN_RANK;
 
@@ -59,14 +66,14 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
   const weekIdx = Math.floor(now / (7 * 86400000));
   const word = throneWord(dayIdx);
   const season = courtSeason(weekIdx);
-  const houses = useMemo(() => rivalHouses(dayIdx, favor), [dayIdx, favor]);
-  // where your house stands among the King's vassals
+  const houses = useMemo(() => rivalHouses(dayIdx, standing), [dayIdx, standing]);
+  // where your house stands among the King's vassals (by cumulative standing)
   const ranking = useMemo(
     () =>
-      [...houses, { name: "Your House", favor, scheme: "" }]
+      [...houses, { name: "Your House", favor: standing, scheme: "" }]
         .sort((a, b) => b.favor - a.favor)
         .findIndex((h) => h.name === "Your House") + 1,
-    [houses, favor],
+    [houses, standing],
   );
 
   return (
@@ -78,8 +85,8 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
         </div>
         <div className="mt-1 flex items-baseline justify-between gap-2">
           <h2 className="font-display text-xl text-gold">{rank.title}</h2>
-          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-            {favor} favor
+          <span className="shrink-0 text-[11px] tabular-nums text-gold">
+            {favor} favor <span className="text-muted-foreground">to spend</span>
           </span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -95,7 +102,7 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
                 Next: <span className="text-gold">{next.title}</span>
               </span>
               <span className="tabular-nums">
-                {favor}/{next.favor}
+                {standing}/{next.favor}
               </span>
             </div>
             <div className="mt-1 h-[5px] w-full overflow-hidden rounded-full bg-black/40">
@@ -120,6 +127,78 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
             every hunt.
           </p>
         )}
+      </section>
+
+      {/* royal boons — what the crown's favor BUYS: the sink that ties standing
+          back into the war, the roster and the domain */}
+      <section className="panel rounded-sm p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">
+            Petition the Crown
+          </h3>
+          <span className="text-[10px] tabular-nums text-muted-foreground">
+            {favor} favor to spend
+          </span>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Spend the favor you&apos;ve earned — your standing at court is untouched by it.
+        </p>
+        <div className="mt-3 space-y-2">
+          {BOON_IDS.map((id) => {
+            const def = BOONS[id];
+            const gate = canPetition(state, id);
+            const locked = rankIndex < def.minRank;
+            const effect =
+              id === "charter"
+                ? `+${charterSupply(rankIndex)} war supply`
+                : id === "healers"
+                  ? "mends every wound"
+                  : `+${musterLaborers(rankIndex)} domain laborers`;
+            return (
+              <div
+                key={id}
+                className={cn(
+                  "rounded-sm border p-2.5",
+                  locked
+                    ? "border-border/40 bg-black/10 opacity-60"
+                    : "border-border/60 bg-black/20",
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-[3px] border border-white/10 bg-black/40 text-sm"
+                  >
+                    {def.glyph}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-display text-sm text-gold">{def.name}</span>
+                      <span className="shrink-0 text-[10px] tabular-nums text-gold">
+                        {def.cost} favor
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                      {def.blurb}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[10px] tabular-nums text-[#7ea86a]">{effect}</span>
+                  <button
+                    type="button"
+                    disabled={!gate.ok}
+                    onClick={() => api.petitionBoon(id)}
+                    title={gate.ok ? def.blurb : gate.why}
+                    className="rounded-sm border border-gold/50 bg-gold/[0.08] px-3 py-1 font-display text-[11px] uppercase tracking-[0.12em] text-gold transition enabled:hover:bg-gold/20 disabled:opacity-40"
+                  >
+                    {locked ? `${COURT_RANKS[def.minRank]!.title}` : "Petition"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       {/* the living court — the word from the throne and the season's mood */}
