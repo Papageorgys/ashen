@@ -147,6 +147,7 @@ import {
   partyPower,
   longNightActive,
   supplyCap,
+  realmLevy,
   spoilRarity,
   chronicle,
   deathRisk,
@@ -1302,13 +1303,16 @@ export function useClanGame() {
 
     /** Denormalise which realms the clan holds in the shared war (with their
      * development) so runs pay spoils scaled by how developed each realm is. */
-    setWarSpoils: (held: Array<{ id: string; dev: number }>) =>
+    setWarSpoils: (held: Array<{ id: string; dev: number; pop?: number }>) =>
       update((s) => {
         const cur = s.warSpoils?.held ?? [];
         const same =
           cur.length === held.length &&
           cur.every(
-            (h, i) => h.id === held[i]?.id && Math.round(h.dev) === Math.round(held[i]!.dev),
+            (h, i) =>
+              h.id === held[i]?.id &&
+              Math.round(h.dev) === Math.round(held[i]!.dev) &&
+              Math.round(h.pop ?? 0) === Math.round(held[i]!.pop ?? 0),
           );
         if (same) return;
         s.warSpoils = { held };
@@ -1464,6 +1468,28 @@ export function useClanGame() {
         s.gold -= cost;
         s.domain.workers += n;
         pushLog(s, `Hired ${n} laborer${n === 1 ? "" : "s"} to the domain (${cost} gold).`, "info");
+      }),
+
+    /** Call up levies — free laborers from the populace of your held realms. */
+    callLevies: () =>
+      update((s) => {
+        if (!s.domain) return;
+        const now = Date.now();
+        const levy = realmLevy(s, now);
+        if (levy.count <= 0)
+          return void toast("Hold a realm on the frontier to call up its people.");
+        if (!levy.ready)
+          return void toast(`The levies muster again in ${Math.ceil(levy.readyIn / 60000)}m.`);
+        s.domain.workers += levy.count;
+        s.domain.leviedAt = now;
+        pushLog(
+          s,
+          `You call up ${levy.count} laborer${levy.count === 1 ? "" : "s"} from your realms to work the domain.`,
+          "good",
+        );
+        toast.success("Levies called up.", {
+          description: `+${levy.count} laborers from your held realms.`,
+        });
       }),
 
     /** Move a worker onto or off a node (delta +1 / −1). */

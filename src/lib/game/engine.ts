@@ -436,7 +436,7 @@ export interface GameState {
   /** which realms the clan holds in the shared war, denormalised from the frontier
    * so the run resolver can pay per-realm war spoils (§ HOI4 → L2 loop). Each realm
    * carries its development, which scales how richly it pays out. */
-  warSpoils?: { held: Array<{ id: string; dev: number }> } | undefined;
+  warSpoils?: { held: Array<{ id: string; dev: number; pop?: number }> } | undefined;
   /** Inspiration — earned by backgrounds in the field, spent to reroll a failed forge */
   inspiration?: number;
   /** every scroll attempt, newest last — imprints at the desk and readings in the field */
@@ -904,6 +904,27 @@ export function supplyCap(state: GameState): number {
   // a landed lord commands greater logistics — court rank widens the war chest
   const rank = courtRankIndex(courtStanding(state));
   return 60 + held * 40 + (state.keep?.vault ?? 0) * 20 + rank * 15;
+}
+
+/** How long before the held realms can be called on for laborers again. */
+export const LEVY_COOLDOWN_MS = 20 * 60 * 1000;
+
+/**
+ * The laborers the populace of your held realms can supply to the domain — the
+ * link that finally makes territory *population* mean something to the economy
+ * (a realm you hold is people, and people work the land). Free — they are your
+ * subjects — but they can only be called up so often.
+ */
+export function realmLevy(
+  state: GameState,
+  now: number,
+): { pool: number; count: number; ready: boolean; readyIn: number } {
+  const pool = (state.warSpoils?.held ?? []).reduce((n, h) => n + (h.pop ?? 0), 0);
+  const count = Math.min(6, Math.floor(pool / 12)); // ~one gang per realm's worth of people
+  const leviedAt = state.domain?.leviedAt ?? 0;
+  const elapsed = now - leviedAt;
+  const ready = count > 0 && elapsed >= LEVY_COOLDOWN_MS;
+  return { pool, count, ready, readyIn: Math.max(0, LEVY_COOLDOWN_MS - elapsed) };
 }
 /** What it costs to commit a banner to a front (spent on the push). */
 export const CONTEST_SUPPLY = 15;
