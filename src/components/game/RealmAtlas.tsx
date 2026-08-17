@@ -38,6 +38,7 @@ import {
   flameRestBill,
   CONTEST_SUPPLY,
   supplyCap,
+  warbandPower,
   RISK_LABEL,
   type RiskTier,
 } from "@/lib/game/engine";
@@ -1592,12 +1593,11 @@ export function RealmAtlas({
                 const cell = frontier.control[selected.id as TerritoryId];
                 const holder = FACTIONS[cell.owner];
                 const mine = cell.owner === "clan";
-                const power = state
-                  ? Math.min(
-                      40,
-                      Math.max(1, Math.round(state.members.reduce((s, m) => s + m.level, 0) / 8)),
-                    )
-                  : 1;
+                // the real levy the clan can throw at this front — gear and
+                // mastery lift it, wounds and absent champions sap it, bonds
+                // steady it, feuds fracture it (not a bare headcount)
+                const warband = state ? warbandPower(state) : null;
+                const power = warband?.power ?? 1;
                 const supply = Math.floor(state?.supply ?? 0);
                 const canSupply = supply >= CONTEST_SUPPLY;
                 const commit = async () => {
@@ -1752,6 +1752,46 @@ export function RealmAtlas({
                             {supply}/{state ? supplyCap(state) : 0} · costs {CONTEST_SUPPLY}
                           </span>
                         </div>
+
+                        {/* the levy you'd send — the real warband, so the commit
+                            number reads as who actually rides, not a headcount */}
+                        {warband && (
+                          <div className="flex flex-col gap-1 rounded-sm border border-white/10 bg-black/25 px-2 py-1.5">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-muted-foreground">Your levy</span>
+                              <span className="font-semibold tabular-nums text-gold">
+                                strength {power}/40
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] tabular-nums text-muted-foreground">
+                              <span>{warband.fielded} ride</span>
+                              {warband.wounded > 0 && (
+                                <span className="text-destructive">{warband.wounded} wounded</span>
+                              )}
+                              {warband.away > 0 && (
+                                <span className="text-[#d8a24a]">{warband.away} away hunting</span>
+                              )}
+                              {warband.bondPairs > 0 && (
+                                <span className="text-[#7ea86a]">
+                                  {warband.bondPairs} shield-bond
+                                  {warband.bondPairs === 1 ? "" : "s"}
+                                </span>
+                              )}
+                              {warband.rivalPairs > 0 && (
+                                <span className="text-destructive">
+                                  {warband.rivalPairs} feud{warband.rivalPairs === 1 ? "" : "s"}
+                                </span>
+                              )}
+                            </div>
+                            {warband.away > 0 && (
+                              <p className="text-[9px] leading-snug text-muted-foreground/80">
+                                Champions on the hunt can&apos;t be levied — recall a banner to ride
+                                with full strength.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         <button
                           type="button"
                           disabled={contesting || !canSupply}
