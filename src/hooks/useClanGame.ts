@@ -1609,6 +1609,40 @@ export function useClanGame() {
         toast.success(`+${gained} war supply shipped to the front.`);
       }),
 
+    /** Issue the domain's armour to the warband — the smithy's plate finally
+     * protects the champions who fight, mending wounds (1 armour per point). */
+    kitWarband: () =>
+      update((s) => {
+        if (!s.domain) return;
+        const armour = Math.floor(s.domain.goods.armour ?? 0);
+        const wounded = s.members
+          .filter((m) => (m.wound ?? 0) > 0)
+          .sort((a, b) => (b.wound ?? 0) - (a.wound ?? 0));
+        if (wounded.length === 0) return void toast("The warband bears no wounds to mend.");
+        if (armour < 1) return void toast.error("No armour in the stores to issue.");
+        let remain = armour;
+        let mended = 0;
+        for (const m of wounded) {
+          if (remain <= 0) break;
+          const need = m.wound ?? 0;
+          const use = Math.min(remain, need); // 1 armour mends 1 wound point
+          const left = need - use;
+          m.wound = left <= 0 ? undefined : left;
+          remain -= use;
+          mended += use;
+        }
+        const used = armour - remain;
+        s.domain.goods.armour = (s.domain.goods.armour ?? 0) - used;
+        pushLog(
+          s,
+          `The armory kits the warband — ${used} armour issued, ${mended} wound point${mended === 1 ? "" : "s"} mended.`,
+          "good",
+        );
+        toast.success("The warband is kitted from the stores.", {
+          description: `${used} armour issued — ${mended} wound point${mended === 1 ? "" : "s"} mended.`,
+        });
+      }),
+
     recallParty: (partyId: string) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);
