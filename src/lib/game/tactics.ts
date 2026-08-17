@@ -487,7 +487,11 @@ function makeFoes(members: Member[], tier: TacTier): TacUnit[] {
   return foes;
 }
 
-function allyUnit(m: Member, rank: "front" | "back", bonded: boolean): TacUnit {
+function allyUnit(
+  m: Member,
+  rank: "front" | "back",
+  bond: { power: number; mit: number },
+): TacUnit {
   const role = CLASS_BY_ID[m.classId]?.role ?? "blade";
   const st = memberStats(m);
   const mods = traitMods(m.trait);
@@ -495,12 +499,13 @@ function allyUnit(m: Member, rank: "front" | "back", bonded: boolean): TacUnit {
   let mit = Math.min(0.7, mitigation(m));
   if (mods.mit) mit *= mods.mit; // berserker guards worse
   if (rank === "front" && mods.frontMit) mit += mods.frontMit; // vanguard/warden dig in
-  if (bonded) mit += 0.05; // fighting beside a sworn friend
+  mit += bond.mit; // fighting beside sworn friends (or worse, beside a rival)
+  const bondTag = bond.power > 0.001 ? " · bonded" : bond.power < -0.001 ? " · rivalry" : "";
   return {
     id: `ally_${m.id}`,
     side: "ally",
     name: m.name,
-    sub: ROLE_LABEL[role] + (bonded ? " · bonded" : ""),
+    sub: ROLE_LABEL[role] + bondTag,
     role,
     dmgType: memberDamageType(m),
     rank,
@@ -508,8 +513,8 @@ function allyUnit(m: Member, rank: "front" | "back", bonded: boolean): TacUnit {
     maxHp: maxHp(m),
     mp: maxMp(m),
     maxMp: maxMp(m),
-    // a shield-bond lends strength on the field too
-    power: Math.round(memberPower(m) * (bonded ? 1.08 : 1)),
+    // bonds lend strength on the field; rivalries sap it
+    power: Math.round(memberPower(m) * (1 + bond.power)),
     mitigation: Math.min(0.85, Math.max(0, mit)),
     init: st.dex + m.level + rng(0, 10),
     down: false,
@@ -530,15 +535,14 @@ export function startEncounter(
   members: Member[],
   tierId: string,
   formation?: Record<string, "front" | "back">,
-  bondedIds?: string[],
+  bondMods?: Record<string, { power: number; mit: number }>,
 ): TacState {
   const tier = tierById(tierId);
-  const bonded = new Set(bondedIds ?? []);
   const allies = members.map((m) =>
     allyUnit(
       m,
       formation?.[m.id] ?? defaultRank(CLASS_BY_ID[m.classId]?.role ?? "blade"),
-      bonded.has(m.id),
+      bondMods?.[m.id] ?? { power: 0, mit: 0 },
     ),
   );
   const foes = makeFoes(members, tier);

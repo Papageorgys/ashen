@@ -115,9 +115,13 @@ import {
   resolveRun,
   addMark,
   BOND_AT,
+  RIVAL_AT,
   bumpAffinity,
   getAffinity,
   dropAffinity,
+  bondsOf,
+  partyPower,
+  longNightActive,
   spoilRarity,
   chronicle,
   deathRisk,
@@ -711,6 +715,10 @@ export function useClanGame() {
                       where,
                     },
                   );
+                  // grief pulls a survivor back from the others, too — they
+                  // withdraw, and their remaining bonds cool
+                  for (const bond of bondsOf(s, m.id))
+                    if (bond.value > 0) bumpAffinity(s, m.id, bond.id, -1.5);
                 } else {
                   const lostNames = lostThisRun.map((f) => f.name).join(", ");
                   addMark(
@@ -728,32 +736,59 @@ export function useClanGame() {
               for (const f of lostThisRun) dropAffinity(s, f.id);
             }
 
-            // bonds — shared danger forges affinity between those who came back together
+            // bonds — shared danger forges affinity between those who came back
+            // together, and how HARD-WON the run was decides how fast: routine
+            // farming barely bonds; a close, elite, or Long-Night fight forges
+            // it several times faster. A clear defeat can sour a pairing instead.
             const survived = res.participants.filter((id) => here(id));
-            for (let i = 0; i < survived.length; i++) {
-              for (let j = i + 1; j < survived.length; j++) {
-                const before = getAffinity(s, survived[i]!, survived[j]!);
-                const after = bumpAffinity(s, survived[i]!, survived[j]!, 1);
-                if (before < BOND_AT && after >= BOND_AT) {
-                  const a = here(survived[i]!);
-                  const b = here(survived[j]!);
-                  if (a && b) {
-                    addMark(
-                      a,
-                      "bond",
-                      `Fought through enough beside ${b.name} to trust no one else at their back.`,
-                      {
-                        bound: "loyalty",
-                      },
-                    );
-                    addMark(
-                      b,
-                      "bond",
-                      `Fought through enough beside ${a.name} to trust no one else at their back.`,
-                      {
-                        bound: "loyalty",
-                      },
-                    );
+            if (res.success) {
+              const threat = ZONE_BY_ID[zoneId]?.threat ?? 1;
+              const ratio = partyPower(s, party) / Math.max(1, threat);
+              let gain = 0.6;
+              if (ratio < 1.15) gain += 1.4;
+              else if (ratio < 1.6) gain += 0.6;
+              if (res.encounters?.some((e) => e.elite)) gain += 0.5;
+              if (longNightActive(s, now)) gain += 0.7;
+              for (let i = 0; i < survived.length; i++) {
+                for (let j = i + 1; j < survived.length; j++) {
+                  const before = getAffinity(s, survived[i]!, survived[j]!);
+                  const after = bumpAffinity(s, survived[i]!, survived[j]!, gain);
+                  if (before < BOND_AT && after >= BOND_AT) {
+                    const a = here(survived[i]!);
+                    const b = here(survived[j]!);
+                    if (a && b) {
+                      addMark(
+                        a,
+                        "bond",
+                        `Fought through enough beside ${b.name} to trust no one else at their back.`,
+                        { bound: "loyalty" },
+                      );
+                      addMark(
+                        b,
+                        "bond",
+                        `Fought through enough beside ${a.name} to trust no one else at their back.`,
+                        { bound: "loyalty" },
+                      );
+                    }
+                  }
+                }
+              }
+            } else {
+              // a beating breeds blame — some pairings sour toward rivalry
+              for (let i = 0; i < survived.length; i++) {
+                for (let j = i + 1; j < survived.length; j++) {
+                  if (Math.random() > 0.22) continue;
+                  const before = getAffinity(s, survived[i]!, survived[j]!);
+                  const after = bumpAffinity(s, survived[i]!, survived[j]!, -1.2);
+                  if (before > RIVAL_AT && after <= RIVAL_AT) {
+                    const a = here(survived[i]!);
+                    const b = here(survived[j]!);
+                    if (a && b)
+                      pushLog(
+                        s,
+                        `${a.name} and ${b.name} came to blame each other for ${where}. A rivalry festers.`,
+                        "bad",
+                      );
                   }
                 }
               }
