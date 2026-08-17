@@ -38,6 +38,7 @@ import { LogisticsPanel } from "@/components/game/LogisticsPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
+import { AbyssPanel } from "@/components/game/AbyssPanel";
 import { useWorldBoss } from "@/hooks/useWorldBoss";
 import { useFrontier } from "@/hooks/useFrontier";
 import { territoriesOf } from "@/lib/game/frontier";
@@ -81,6 +82,7 @@ import {
   UserPlus,
   Hammer,
   Warehouse,
+  ChevronsDown,
   type LucideIcon,
 } from "lucide-react";
 
@@ -405,6 +407,13 @@ const MAP_NAV: MapNavGroup[] = [
         hint: "The realm's daily World Boss",
         requiresClan: true,
       },
+      {
+        value: "abyss",
+        label: "The Abyss",
+        icon: ChevronsDown,
+        hint: "The endless descent — each depth harder, forever attuning your power",
+        requiresClan: true,
+      },
       { value: "world", label: "Ladder", icon: Globe2, hint: "Live rankings of every clan" },
       {
         value: "realm",
@@ -583,6 +592,8 @@ function Index() {
       <LogisticsPanel state={state} api={api} now={now} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
+    ) : tool === "abyss" ? (
+      <AbyssPanel state={state} api={api} />
     ) : tool === "world" ? (
       <WorldPanel signedIn={!!user} myId={user?.id ?? null} />
     ) : tool === "chronicle" ? (
