@@ -95,6 +95,7 @@ import {
   type TerritoryId,
 } from "./frontier";
 import { initialCourt, fillCharges, type CourtState } from "./court";
+import type { TraitId } from "./traits";
 import {
   CASTLE,
   RIVAL_BY_ID,
@@ -137,6 +138,9 @@ export interface Member {
   deaths?: number;
   /** artisans only — chosen crafting discipline */
   craftMastery?: CraftMastery | undefined;
+  /** a chosen build passive — plugs into the Proving's combat and the field
+   * (see traits.ts). Distinct from class/skills; how they fight, not what. */
+  trait?: TraitId | undefined;
   /** a rune engraved on their weapon — overrides the damage type they deal */
   weaponRune?: DamageType | undefined;
   /** whether this champion loads soulshots / spiritshots (default on) */

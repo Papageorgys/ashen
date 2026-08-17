@@ -23,6 +23,7 @@ import {
   type DamageType,
 } from "./engine";
 import { zoneMonsters, type Monster, type MonsterFamily } from "./monsters";
+import { traitMods, NO_MODS, type TraitMods } from "./traits";
 
 /* -------------------------------- Abilities -------------------------------- */
 
@@ -280,6 +281,8 @@ export interface TacUnit {
   guarding: boolean;
   cds: Record<string, number>;
   conds: TacCond[];
+  /** the champion's trait passives (empty for foes and the untraited) */
+  mods: TraitMods;
   kit: TacAbility[]; // allies only (empty for foes)
 }
 
@@ -326,29 +329,38 @@ function chillCut(u: TacUnit): number {
   return condOf(u, "chill")?.pot ?? 0;
 }
 
-/** Lay an element's condition on a target (refreshing, or stacking sunder). */
-function applyType(target: TacUnit, dmgType: DamageType, power: number): CondKind | null {
+/** Lay an element's condition on a target (refreshing, or stacking sunder). The
+ * striker's trait may deepen the mark (Elementalist) — boost scales potency,
+ * roundsBonus extends it. */
+function applyType(
+  target: TacUnit,
+  dmgType: DamageType,
+  power: number,
+  boost = 1,
+  roundsBonus = 0,
+): CondKind | null {
   const kind = TYPE_COND[dmgType];
   if (!kind) return null;
   const existing = condOf(target, kind);
+  const r = (base: number) => base + roundsBonus;
   if (kind === "burn") {
-    const pot = Math.max(1, Math.round(power * 0.22));
+    const pot = Math.max(1, Math.round(power * 0.22 * boost));
     if (existing) {
-      existing.rounds = 2;
+      existing.rounds = r(2);
       existing.pot = Math.max(existing.pot, pot);
-    } else target.conds.push({ kind, rounds: 2, pot });
+    } else target.conds.push({ kind, rounds: r(2), pot });
   } else if (kind === "sunder") {
     if (existing) {
-      existing.rounds = 3;
-      existing.pot = Math.min(0.3, existing.pot + 0.1);
-    } else target.conds.push({ kind, rounds: 3, pot: 0.1 });
+      existing.rounds = r(3);
+      existing.pot = Math.min(0.4, existing.pot + 0.1 * boost);
+    } else target.conds.push({ kind, rounds: r(3), pot: 0.1 * boost });
   } else if (kind === "chill") {
-    if (existing) existing.rounds = 2;
-    else target.conds.push({ kind, rounds: 2, pot: 0.3 });
+    if (existing) existing.rounds = r(2);
+    else target.conds.push({ kind, rounds: r(2), pot: 0.3 * boost });
   } else {
     // doom
-    if (existing) existing.rounds = 2;
-    else target.conds.push({ kind, rounds: 2, pot: 0.15 });
+    if (existing) existing.rounds = r(2);
+    else target.conds.push({ kind, rounds: r(2), pot: 0.15 * boost });
   }
   return kind;
 }
@@ -468,6 +480,7 @@ function makeFoes(members: Member[], tier: TacTier): TacUnit[] {
       guarding: false,
       cds: {},
       conds: [],
+      mods: NO_MODS,
       kit: [],
     });
   }
@@ -477,6 +490,11 @@ function makeFoes(members: Member[], tier: TacTier): TacUnit[] {
 function allyUnit(m: Member, rank: "front" | "back"): TacUnit {
   const role = CLASS_BY_ID[m.classId]?.role ?? "blade";
   const st = memberStats(m);
+  const mods = traitMods(m.trait);
+  // bake the always-on mitigation modifiers of the trait into the unit
+  let mit = Math.min(0.7, mitigation(m));
+  if (mods.mit) mit *= mods.mit; // berserker guards worse
+  if (rank === "front" && mods.frontMit) mit += mods.frontMit; // vanguard/warden dig in
   return {
     id: `ally_${m.id}`,
     side: "ally",
@@ -490,12 +508,13 @@ function allyUnit(m: Member, rank: "front" | "back"): TacUnit {
     mp: maxMp(m),
     maxMp: maxMp(m),
     power: memberPower(m),
-    mitigation: Math.min(0.7, mitigation(m)),
+    mitigation: Math.min(0.85, Math.max(0, mit)),
     init: st.dex + m.level + rng(0, 10),
     down: false,
     guarding: false,
     cds: {},
     conds: [],
+    mods,
     kit: abilityKit(role),
   };
 }
@@ -635,8 +654,8 @@ function nextTurn(s: TacState) {
   } while (currentUnit(s)?.down && guard++ < s.order.length * 2);
 }
 
-function critRoll(base: number, heavy: boolean): { dmg: number; crit: boolean } {
-  const chance = (heavy ? 0.25 : 0.12) + 0;
+function critRoll(base: number, heavy: boolean, critBonus = 0): { dmg: number; crit: boolean } {
+  const chance = (heavy ? 0.25 : 0.12) + critBonus;
   const crit = rand() < chance;
   const mult = crit ? 1.9 + rand() * 0.4 : 1;
   return { dmg: base * mult * (0.9 + rand() * 0.2), crit };
@@ -653,10 +672,19 @@ function hitFoe(
   heavy: boolean,
   single: boolean,
 ) {
+  const m = attacker.mods;
   const typeMult = foe.family ? typeMultVs(attacker.dmgType, foe.family) : 1;
+  // Executioner falls heavier on a bloodied foe
+  const execMult = m.exec && foe.hp / foe.maxHp < 0.35 ? 1 + m.exec : 1;
   const base =
-    attacker.power * potency * (1 + s.allyAtk.pct) * (1 + s.foeVuln.pct + vulnFrom(foe)) * typeMult;
-  const { dmg, crit } = critRoll(base, heavy);
+    attacker.power *
+    potency *
+    (m.dmg ?? 1) *
+    execMult *
+    (1 + s.allyAtk.pct) *
+    (1 + s.foeVuln.pct + vulnFrom(foe)) *
+    typeMult;
+  const { dmg, crit } = critRoll(base, heavy, m.crit ?? 0);
   // a back-rank foe is harder to reach by a single blow while its line stands
   const cover = single && isCovered(s, foe) ? 0.4 : 0;
   const mit = Math.max(0, foe.mitigation - (condOf(foe, "sunder")?.pot ?? 0)) + cover;
@@ -672,7 +700,13 @@ function hitFoe(
     const hurt = livingAllies(s).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
     if (hurt) hurt.hp = Math.min(hurt.maxHp, hurt.hp + Math.round(final * 0.25));
   }
-  const cond = applyType(foe, attacker.dmgType, attacker.power * potency);
+  const cond = applyType(
+    foe,
+    attacker.dmgType,
+    attacker.power * potency,
+    m.condBoost ?? 1,
+    m.condRounds ?? 0,
+  );
   if (foe.hp <= 0) {
     foe.hp = 0;
     foe.down = true;
@@ -687,7 +721,12 @@ function hitAlly(s: TacState, ally: TacUnit, foe: TacUnit) {
   const chill = 1 - chillCut(foe);
   const { dmg } = critRoll(foe.power * (heavy ? 1.4 : 1) * chill, heavy);
   const guardCut = ally.guarding ? 0.5 : 0;
-  const reduce = Math.min(0.85, ally.mitigation + s.allyDef.pct + guardCut - vulnFrom(ally));
+  // a Warden holding the front shields the back rank behind them
+  let ward = 0;
+  if (ally.rank === "back")
+    for (const u of livingAllies(s))
+      if (u.rank === "front" && u.mods.wardBack) ward = Math.max(ward, u.mods.wardBack);
+  const reduce = Math.min(0.85, ally.mitigation + s.allyDef.pct + guardCut + ward - vulnFrom(ally));
   const final = Math.max(1, Math.round(dmg * (1 - Math.max(0, reduce))));
   ally.hp -= final;
   const cond = applyType(ally, foe.dmgType, foe.power);
@@ -802,15 +841,27 @@ export function applyAction(prev: TacState, action: TacAction): TacState {
     case "heal": {
       const ally = (action.targetId && unitOf(s, action.targetId)) || allies[0];
       if (ally && ally.side === "ally") {
-        const amt = Math.round(actor.power * ability.potency * 0.7);
+        const amt = Math.round(
+          actor.power * ability.potency * 0.7 * (actor.mods.healCleanse ? 1.25 : 1),
+        );
         ally.hp = Math.min(ally.maxHp, ally.hp + amt);
-        pushLog(s, `${actor.name} ${ability.name} restores ${ally.name} by ${amt}.`);
+        let cleaned = "";
+        if (actor.mods.healCleanse && ally.conds.length) {
+          const c = ally.conds.shift();
+          if (c) cleaned = ` · cleansed ${COND_META[c.kind].label}`;
+        }
+        pushLog(s, `${actor.name} ${ability.name} restores ${ally.name} by ${amt}${cleaned}.`);
       }
       break;
     }
     case "heal_all": {
-      const amt = Math.round(actor.power * ability.potency * 0.7);
-      for (const ally of allies) ally.hp = Math.min(ally.maxHp, ally.hp + amt);
+      const amt = Math.round(
+        actor.power * ability.potency * 0.7 * (actor.mods.healCleanse ? 1.25 : 1),
+      );
+      for (const ally of allies) {
+        ally.hp = Math.min(ally.maxHp, ally.hp + amt);
+        if (actor.mods.healCleanse && ally.conds.length) ally.conds.shift();
+      }
       pushLog(s, `${actor.name} ${ability.name} heals the party by ${amt}.`);
       break;
     }
@@ -834,8 +885,12 @@ export function applyAction(prev: TacState, action: TacAction): TacState {
   }
 
   // momentum: an Onslaught spends the whole press; otherwise pressing builds it
+  // (a Zealot builds it faster)
   if (onslaught) s.momentum = 0;
-  s.momentum = Math.min(MOMENTUM_MAX, s.momentum + gained + kills * 25);
+  s.momentum = Math.min(
+    MOMENTUM_MAX,
+    s.momentum + (gained + kills * 25) * (actor.mods.momentum ?? 1),
+  );
 
   if (checkOver(s)) return s;
   nextTurn(s);

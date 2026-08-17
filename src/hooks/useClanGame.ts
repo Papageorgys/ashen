@@ -22,6 +22,7 @@ import {
   CROWN_RANK,
 } from "@/lib/game/court";
 import type { TacReward } from "@/lib/game/tactics";
+import { traitField, TRAITS, traitsFor, type TraitId } from "@/lib/game/traits";
 import {
   timeOfDay,
   atmosphere,
@@ -398,8 +399,18 @@ export function useClanGame() {
           const tide = longNightTide(s, now);
           // standing at the King's court pays a pension on every hunt (§ Court)
           const court = courtEffects(s);
+          // champions' traits follow them into the field (Berserker/Executioner
+          // pull richer spoils, and so on) — § traits.ts
+          const traitGold = res.participants.reduce(
+            (n, id) => n + (traitField(s.members.find((x) => x.id === id)?.trait).gold ?? 0),
+            0,
+          );
           s.gold += Math.round(
-            res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1) * tide.spoilMult * court.goldMult,
+            res.gold *
+              (lordLed ? 1 + LORD_BONUS.gold : 1) *
+              tide.spoilMult *
+              court.goldMult *
+              (1 + traitGold),
           );
           if (tide.ashTide > 0) s.rawAsh = (s.rawAsh ?? 0) + tide.ashTide;
           s.reputation += Math.round(
@@ -509,7 +520,12 @@ export function useClanGame() {
 
             // character xp (capped at 52)
             if (m.level < MAX_LEVEL) {
-              m.xp += Math.round(res.xp * (lordLed ? 1 + LORD_BONUS.xp : 1) * tide.spoilMult);
+              m.xp += Math.round(
+                res.xp *
+                  (lordLed ? 1 + LORD_BONUS.xp : 1) *
+                  tide.spoilMult *
+                  (1 + (traitField(m.trait).xp ?? 0)),
+              );
               while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
                 m.xp -= xpForLevel(m.level);
                 m.level += 1;
@@ -1266,6 +1282,23 @@ export function useClanGame() {
         if (!m) return;
         m.craftMastery = mastery;
         pushLog(s, `${m.name} devoted themselves to ${CRAFT_MASTERY_LABEL[mastery]}.`, "info");
+      }),
+
+    /** Choose (or clear) a champion's trait — their fighting build. Only a trait
+     * their role and level allow may be taken. */
+    setTrait: (memberId: string, trait: TraitId | null) =>
+      update((s) => {
+        const m = s.members.find((x) => x.id === memberId);
+        if (!m) return;
+        const role = CLASS_BY_ID[m.classId]?.role;
+        if (trait) {
+          if (!role || !traitsFor(role, m.level).some((t) => t.id === trait)) return;
+          m.trait = trait;
+          pushLog(s, `${m.name} takes the way of the ${TRAITS[trait].name}.`, "good");
+        } else {
+          m.trait = undefined;
+          pushLog(s, `${m.name} sets aside their trait.`, "info");
+        }
       }),
 
     /* ------------------------------- skills ------------------------------- */

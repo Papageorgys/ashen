@@ -4,6 +4,7 @@ import type { GameState } from "@/lib/game/engine";
 import { DAMAGE_LABEL, typeMultVs, memberPower } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import { CLASS_BY_ID, MAX_PARTY_SIZE } from "@/lib/game/data";
+import { TRAITS } from "@/lib/game/traits";
 import {
   startEncounter,
   applyAction,
@@ -192,6 +193,9 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
                       <div className="truncate text-xs text-gold">{m.name}</div>
                       <div className="text-[10px] capitalize text-muted-foreground">
                         {role} · Lv {m.level}
+                        {m.trait ? (
+                          <span className="text-gold/70"> · {TRAITS[m.trait].name}</span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="inline-flex overflow-hidden rounded-sm border border-white/10">

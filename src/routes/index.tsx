@@ -31,6 +31,7 @@ import { RealmPanel } from "@/components/game/RealmPanel";
 import { FrontierPanel } from "@/components/game/FrontierPanel";
 import { CourtPanel } from "@/components/game/CourtPanel";
 import { TacticsPanel } from "@/components/game/TacticsPanel";
+import { WarbandPanel } from "@/components/game/WarbandPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
@@ -69,6 +70,7 @@ import {
   Menu,
   Crosshair,
   Crown,
+  ShieldHalf,
   Handshake,
   PenLine,
   ScrollText,
@@ -301,6 +303,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       },
       { value: "skills", label: "Skills", icon: Sparkles, hint: "Train abilities" },
       {
+        value: "warband",
+        label: "Warband",
+        icon: ShieldHalf,
+        hint: "Choose each champion's trait — their fighting build",
+      },
+      {
         value: "tactics",
         label: "The Proving",
         icon: Swords,
@@ -494,6 +502,8 @@ function Index() {
       <CourtPanel state={state} api={api} />
     ) : tool === "tactics" ? (
       <TacticsPanel state={state} api={api} />
+    ) : tool === "warband" ? (
+      <WarbandPanel state={state} api={api} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "world" ? (
