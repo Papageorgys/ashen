@@ -371,8 +371,9 @@ export interface GameState {
   /** the continental war — the living frontier of factions across Aethyr (§ HOI4 layer) */
   frontier?: FrontierState;
   /** which realms the clan holds in the shared war, denormalised from the frontier
-   * so the run resolver can pay per-realm war spoils (§ HOI4 → L2 loop) */
-  warSpoils?: { held: string[] } | undefined;
+   * so the run resolver can pay per-realm war spoils (§ HOI4 → L2 loop). Each realm
+   * carries its development, which scales how richly it pays out. */
+  warSpoils?: { held: Array<{ id: string; dev: number }> } | undefined;
   /** Inspiration — earned by backgrounds in the field, spent to reroll a failed forge */
   inspiration?: number;
   /** every scroll attempt, newest last — imprints at the desk and readings in the field */
@@ -1012,13 +1013,18 @@ export function warSpoilsChannels(state: GameState): {
   const out = { gold: 1, xp: 1, essence: 1, find: 0 };
   const held = state.warSpoils?.held;
   if (!Array.isArray(held)) return out;
-  for (const id of held) {
+  for (const entry of held) {
+    // tolerate the old shape (a bare id) and the new one ({ id, dev })
+    const id = typeof entry === "string" ? entry : entry?.id;
+    const dev = typeof entry === "string" ? 20 : (entry?.dev ?? 20);
     const b = REALM_BOON[id as TerritoryId];
     if (!b) continue;
-    if (b.gold) out.gold += b.gold;
-    if (b.xp) out.xp += b.xp;
-    if (b.essence) out.essence += b.essence;
-    if (b.find) out.find += b.find;
+    // a developed realm pays far more than a freshly-taken one: 0.5x .. 1.5x
+    const mult = 0.5 + Math.max(0, Math.min(100, dev)) / 100;
+    if (b.gold) out.gold += b.gold * mult;
+    if (b.xp) out.xp += b.xp * mult;
+    if (b.essence) out.essence += b.essence * mult;
+    if (b.find) out.find += b.find * mult;
   }
   out.gold = Math.min(1.8, out.gold);
   out.xp = Math.min(1.8, out.xp);

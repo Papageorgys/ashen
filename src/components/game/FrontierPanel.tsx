@@ -87,11 +87,14 @@ export function FrontierPanel({
             </p>
             {clanHeld.map((id) => {
               const b = REALM_BOON[id as TerritoryId];
+              // spoils scale with the realm's development: 0.5x .. 1.5x
+              const dev = Math.round(f.control[id as TerritoryId]?.dev ?? 20);
+              const mult = 0.5 + Math.max(0, Math.min(100, dev)) / 100;
               const parts = [
-                b.gold ? `+${Math.round(b.gold * 100)}% gold` : "",
-                b.essence ? `+${Math.round(b.essence * 100)}% essence` : "",
-                b.xp ? `+${Math.round(b.xp * 100)}% xp` : "",
-                b.find ? `+${b.find} find` : "",
+                b.gold ? `+${Math.round(b.gold * mult * 100)}% gold` : "",
+                b.essence ? `+${Math.round(b.essence * mult * 100)}% essence` : "",
+                b.xp ? `+${Math.round(b.xp * mult * 100)}% xp` : "",
+                b.find ? `+${Math.round(b.find * mult)} find` : "",
               ].filter(Boolean);
               return (
                 <div
@@ -101,6 +104,14 @@ export function FrontierPanel({
                   <span className="min-w-0 text-xs">
                     <span className="text-[#5fd0c6]">{b.label}</span>
                     <span className="text-muted-foreground"> — {b.blurb}</span>
+                    <span className="mt-0.5 flex items-center gap-1.5">
+                      <span className="h-[3px] w-16 overflow-hidden rounded-full bg-black/40">
+                        <span className="block h-full bg-[#3fb0a6]" style={{ width: `${dev}%` }} />
+                      </span>
+                      <span className="text-[9px] tabular-nums text-muted-foreground">
+                        dev {dev}
+                      </span>
+                    </span>
                   </span>
                   <span className="shrink-0 text-[10px] tabular-nums text-gold">
                     {parts.join(" · ")}

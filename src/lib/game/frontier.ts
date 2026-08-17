@@ -187,6 +187,133 @@ export interface TerritoryState {
   hold: number;
   /** the tick the current holder took it */
   since: number;
+  /** development 0..100 — rises in peace, ravaged by war; scales the realm's spoils */
+  dev?: number;
+  /** population in thousands — grows by a birth rate set by peace, dev and farmsteads */
+  pop?: number;
+  /** what has been raised here, by building id */
+  builds?: Partial<Record<BuildingId, number>>;
+}
+
+/* -------------------------------- Buildings -------------------------------- */
+
+export type BuildingId =
+  "farmstead" | "market" | "foundry" | "muster_camp" | "bulwark" | "watchtower";
+
+export interface BuildingDef {
+  id: BuildingId;
+  label: string;
+  glyph: string;
+  blurb: string;
+  /** war works go up on a contested front; the rest are peacetime development */
+  war: boolean;
+  max: number;
+}
+
+export const BUILDINGS: Record<BuildingId, BuildingDef> = {
+  farmstead: {
+    id: "farmstead",
+    label: "Farmstead",
+    glyph: "🌾",
+    blurb: "Fields and families — the region grows and breeds faster.",
+    war: false,
+    max: 4,
+  },
+  market: {
+    id: "market",
+    label: "Market",
+    glyph: "⚖",
+    blurb: "Trade roads and counting-houses — the realm develops richer.",
+    war: false,
+    max: 3,
+  },
+  foundry: {
+    id: "foundry",
+    label: "Foundry",
+    glyph: "⚒",
+    blurb: "Forges and deep mines — steel, coin and steady growth.",
+    war: false,
+    max: 3,
+  },
+  muster_camp: {
+    id: "muster_camp",
+    label: "Muster Camp",
+    glyph: "⚑",
+    blurb: "Levies drill and re-form — the front recovers its grip faster.",
+    war: true,
+    max: 3,
+  },
+  bulwark: {
+    id: "bulwark",
+    label: "Bulwark",
+    glyph: "⛨",
+    blurb: "Walls, trenches and stakes — the front is far harder to break.",
+    war: true,
+    max: 3,
+  },
+  watchtower: {
+    id: "watchtower",
+    label: "Watchtower",
+    glyph: "👁",
+    blurb: "Warded beacons — the Long Night gains far less ground here.",
+    war: true,
+    max: 2,
+  },
+};
+
+export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
+
+/** Each realm's base fertility — how readily it rises when held in peace. */
+export const REALM_FERTILITY: Record<TerritoryId, number> = {
+  verdant: 0.55,
+  free_holds: 0.45,
+  gilded: 0.4,
+  ember_court: 0.3,
+  pale_wardens: 0.32,
+  hollow_covenant: 0.28,
+  sunless: 0.24,
+  vareth: 0.42,
+};
+
+const POP_SEED = 12; // starting population (thousands) of every territory
+const DEV_MAX = 100;
+const POP_MAX = 600;
+
+function clamp(lo: number, hi: number, v: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+function bcount(cell: TerritoryState, id: BuildingId): number {
+  return cell.builds?.[id] ?? 0;
+}
+
+/** The per-tick birth rate of a territory — the heart of "how fast a region rises". */
+export function birthRate(cell: TerritoryState, fertility: number, peaceful: boolean): number {
+  if (!peaceful) return -0.006; // war and the dark thin the living
+  const dev = cell.dev ?? 0;
+  return 0.004 + fertility * 0.012 + (dev / DEV_MAX) * 0.004 + bcount(cell, "farmstead") * 0.003;
+}
+
+/** Can the clan raise this building here right now? Gated by the territory's status. */
+export function canBuild(
+  state: FrontierState,
+  id: TerritoryId,
+  building: BuildingId,
+): { ok: boolean; why: string } {
+  const cell = state.control[id];
+  if (!cell || cell.owner !== "clan")
+    return { ok: false, why: "Your banner must hold this ground" };
+  const def = BUILDINGS[building];
+  if (bcount(cell, building) >= def.max)
+    return { ok: false, why: "Already built to its limit here" };
+  const front = isContested(state, id);
+  if (def.war && !front) return { ok: false, why: "War works go up only on a contested front" };
+  if (!def.war) {
+    if (front) return { ok: false, why: "Too near the front — secure the border first" };
+    if (state.tick - cell.since < 6)
+      return { ok: false, why: "Hold it in peace a while longer first" };
+  }
+  return { ok: true, why: "" };
 }
 
 export interface FrontierState {
@@ -262,7 +389,14 @@ export const REALM_BOON: Record<
 export function initialFrontier(now: number): FrontierState {
   const control = {} as Record<TerritoryId, TerritoryState>;
   for (const id of TERRITORY_IDS) {
-    control[id] = { owner: TERRITORIES[id].base, hold: HOLD_FULL, since: 0 };
+    control[id] = {
+      owner: TERRITORIES[id].base,
+      hold: HOLD_FULL,
+      since: 0,
+      dev: 20,
+      pop: POP_SEED,
+      builds: {},
+    };
   }
   const power: Partial<Record<FactionId, number>> = {};
   for (const f of Object.values(FACTIONS)) {
@@ -370,16 +504,21 @@ export function advanceFrontier(
         const force = perT(att) * FACTIONS[att].ambition;
         if (!best || force > best.force) best = { f: att, force };
       }
-      // the Long Night presses every border realm from beyond the map
+      // the Long Night presses every border realm from beyond the map — warded
+      // beacons on your ground turn much of it aside
       if (night) {
-        const nf = perT("longnight") * FACTIONS.longnight.ambition * 0.6;
+        const ward = holder === "clan" ? Math.min(0.7, bcount(cell, "watchtower") * 0.3) : 0;
+        const nf = perT("longnight") * FACTIONS.longnight.ambition * 0.6 * (1 - ward);
         if (holder !== "longnight" && (!best || nf > best.force))
           best = { f: "longnight", force: nf };
       }
 
       if (best) {
-        // home ground is defended far more stubbornly than occupied land
-        const defence = 22 + perT(holder) * 0.5 + (atHome ? 18 : 0);
+        // home ground is defended far more stubbornly than occupied land; your
+        // war works (bulwarks, muster camps) fortify a front you hold
+        const warWorks =
+          holder === "clan" ? bcount(cell, "bulwark") * 9 + bcount(cell, "muster_camp") * 5 : 0;
+        const defence = 22 + perT(holder) * 0.5 + (atHome ? 18 : 0) + warWorks;
         const bite = Math.max(0, best.force - defence) * 0.16 * (0.7 + rng() * 0.6);
         cell.hold -= bite;
       } else {
@@ -444,10 +583,72 @@ export function advanceFrontier(
           );
         }
       }
+
+      // 4. development & population — a realm rises when it is held in peace and
+      //    is ground down by war and the dark. This is "how fast a region rises":
+      //    fertility, its own development, farmsteads and its people all compound.
+      const secure = cell.hold > 55 && !isContested(state, id);
+      const peaceful = cell.owner !== "longnight" && !night && secure;
+      const fertility = REALM_FERTILITY[id];
+      const devWorks =
+        bcount(cell, "market") * 0.06 +
+        bcount(cell, "foundry") * 0.05 +
+        bcount(cell, "farmstead") * 0.03;
+      const rise = peaceful
+        ? 0.12 + fertility * 0.5 + devWorks + ((cell.pop ?? POP_SEED) / POP_MAX) * 0.2
+        : cell.owner === "longnight" || night
+          ? -0.7
+          : -0.16;
+      cell.dev = clamp(0, DEV_MAX, (cell.dev ?? 20) + rise);
+      cell.pop = clamp(
+        1,
+        POP_MAX,
+        (cell.pop ?? POP_SEED) * (1 + birthRate(cell, fertility, peaceful)),
+      );
     }
   }
 
   state.updatedAt = state.updatedAt + steps * FRONTIER_TICK_MS;
+  return state;
+}
+
+/**
+ * Raise a building on a territory the clan holds — a shared world action, applied
+ * server-side (and optimistically client-side). Returns a new state; a no-op if
+ * the build isn't allowed by the territory's current status.
+ */
+export function applyBuild(
+  prev: FrontierState,
+  id: TerritoryId,
+  building: BuildingId,
+  now: number,
+): FrontierState {
+  const gate = canBuild(prev, id, building);
+  if (!gate.ok) return prev;
+  const state: FrontierState = {
+    tick: prev.tick,
+    updatedAt: prev.updatedAt,
+    control: Object.fromEntries(TERRITORY_IDS.map((t) => [t, { ...prev.control[t] }])) as Record<
+      TerritoryId,
+      TerritoryState
+    >,
+    power: { ...prev.power },
+    events: [...prev.events],
+  };
+  const cell = state.control[id];
+  cell.builds = { ...(cell.builds ?? {}) };
+  cell.builds[building] = (cell.builds[building] ?? 0) + 1;
+  const def = BUILDINGS[building];
+  pushEvent(
+    state,
+    {
+      kind: "muster",
+      text: `Your banner raises a ${def.label} in ${TERRITORIES[id].name}.`,
+      territory: id,
+      faction: "clan",
+    },
+    now,
+  );
   return state;
 }
 

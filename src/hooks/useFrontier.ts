@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { FrontierState, TerritoryId } from "@/lib/game/frontier";
+import type { BuildingId, FrontierState, TerritoryId } from "@/lib/game/frontier";
 
 /**
  * Advance and read Aethyr's ONE shared war, and let the player commit to a front.
@@ -31,9 +31,16 @@ export interface ContestResult {
   cooldownMs: number;
 }
 
+export interface BuildResult {
+  ok: boolean;
+  built: boolean;
+  reason?: string | undefined;
+}
+
 export function useFrontier(enabled: boolean): {
   frontier: FrontierState | null;
   contest: (territory: TerritoryId, power: number, clanName: string) => Promise<ContestResult>;
+  build: (territory: TerritoryId, building: BuildingId, clanName: string) => Promise<BuildResult>;
 } {
   const [frontier, setFrontier] = useState<FrontierState | null>(null);
   const liveRef = useRef(true);
@@ -79,5 +86,17 @@ export function useFrontier(enabled: boolean): {
     return { ok: false, contested: false, cooldownMs: 0 };
   }, []);
 
-  return { frontier, contest };
+  const build = useCallback<
+    (territory: TerritoryId, building: BuildingId, clanName: string) => Promise<BuildResult>
+  >(async (territory, building, clanName) => {
+    const st = await invokeTick({ build: { territory, building, clanName } });
+    if (st) {
+      setFrontier(st);
+      const r = st as TickResult & { built?: boolean; reason?: string };
+      return { ok: true, built: !!r?.built, reason: r?.reason };
+    }
+    return { ok: false, built: false };
+  }, []);
+
+  return { frontier, contest, build };
 }
