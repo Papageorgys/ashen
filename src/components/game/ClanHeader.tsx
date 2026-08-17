@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { MAX_PARTY_SIZE } from "@/lib/game/data";
 import {
   nextClanReq,
+  ascendancyReq,
   maxParties,
   canJoinClan,
   JOIN_REQ,
@@ -52,6 +53,11 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
   const founded = state.clanLevel >= 1;
   const repPct = req ? Math.min(100, (state.reputation / req.rep) * 100) : 100;
   const goldPct = req ? Math.min(100, (state.gold / req.gold) * 100) : 100;
+  // past the clan cap: the climb continues as Ascendant tiers
+  const asc = state.ascendancy ?? 0;
+  const areq = ascendancyReq(asc);
+  const ascPct = Math.min(100, Math.min(state.reputation / areq.rep, state.gold / areq.gold) * 100);
+  const canAscend = state.reputation >= areq.rep && state.gold >= areq.gold;
   const sworn = state.allegiance ?? null;
   const join = canJoinClan(state);
   const [joinOpen, setJoinOpen] = useState(false);
@@ -62,7 +68,6 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
   return (
     <header className="panel-ornate rounded-sm p-4">
       <div className="flex flex-wrap items-end gap-4">
-
         <div className="min-w-56 flex-1 space-y-1">
           {req ? (
             <>
@@ -77,14 +82,31 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
               <Progress value={Math.min(repPct, goldPct)} />
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              Your clan stands at its peak. Fill every banner with {MAX_PARTY_SIZE} sworn blades.
-            </p>
+            <>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>
+                  Ascendancy {asc > 0 ? `Tier ${asc}` : "at the clan's peak"} — next tier:
+                </span>
+                <span className="tabular-nums">
+                  {state.reputation.toLocaleString()}/{areq.rep.toLocaleString()} rep ·{" "}
+                  {state.gold.toLocaleString()}/{areq.gold.toLocaleString()} gold
+                </span>
+              </div>
+              <Progress value={ascPct} />
+            </>
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          <Button disabled={!req} onClick={api.levelUpClan}>
-            {req ? (founded ? `Raise clan to level ${req.level}` : "Found your own clan") : "Max level"}
+          <Button
+            disabled={req ? false : !canAscend}
+            data-sfx={req ? undefined : "levelup"}
+            onClick={api.levelUpClan}
+          >
+            {req
+              ? founded
+                ? `Raise clan to level ${req.level}`
+                : "Found your own clan"
+              : `Ascend the clan · Tier ${asc + 1}`}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -101,7 +123,12 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
                     Break the oath to {RIVAL_BY_ID[sworn.clanId]?.name ?? sworn.clanName}
                   </DropdownMenuItem>
                 ) : (
-                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setJoinOpen(true); }}>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setJoinOpen(true);
+                    }}
+                  >
                     Join an existing clan
                   </DropdownMenuItem>
                 ))}
@@ -116,121 +143,131 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
           </DropdownMenu>
         </div>
         {!founded && !sworn && (
-            <Dialog open={joinOpen} onOpenChange={(o) => { setJoinOpen(o); if (!o) { setPending(null); setOathWord(""); } }}>
-              <DialogContent className="max-w-lg">
-
-                <DialogHeader>
-                  <DialogTitle className="font-display text-gold">Swear to a clan</DialogTitle>
-                  <DialogDescription>
-                    Keep your company and serve under another crest: {JOIN_REQ.rep} reputation buys
-                    you a captain's oath, a {JOIN_REQ.stipend} gold stipend, a second banner and
-                    peace with that clan. You can still found {state.clanName} later.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2">
-                  {RIVALS.map((r) => (
-                    <div
-                      key={r.id}
-                      className="flex items-start justify-between gap-3 rounded-sm border border-border/60 p-3"
-                    >
-                      <div>
-                        <div className="font-display text-sm" style={{ color: r.color }}>
-                          {r.name}
-                        </div>
-                        <p className="text-xs text-muted-foreground">{r.blurb}</p>
+          <Dialog
+            open={joinOpen}
+            onOpenChange={(o) => {
+              setJoinOpen(o);
+              if (!o) {
+                setPending(null);
+                setOathWord("");
+              }
+            }}
+          >
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="font-display text-gold">Swear to a clan</DialogTitle>
+                <DialogDescription>
+                  Keep your company and serve under another crest: {JOIN_REQ.rep} reputation buys
+                  you a captain's oath, a {JOIN_REQ.stipend} gold stipend, a second banner and peace
+                  with that clan. You can still found {state.clanName} later.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                {RIVALS.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-start justify-between gap-3 rounded-sm border border-border/60 p-3"
+                  >
+                    <div>
+                      <div className="font-display text-sm" style={{ color: r.color }}>
+                        {r.name}
                       </div>
-                      <Button
-                        size="sm"
-                        variant={pending === r.id ? "default" : "outline"}
-                        disabled={!join.ok}
-                        title={join.ok ? undefined : join.why}
-                        onClick={() => { setPending(pending === r.id ? null : r.id); setOathWord(""); }}
-                      >
-                        {pending === r.id ? "Selected" : "Review oath"}
-                      </Button>
+                      <p className="text-xs text-muted-foreground">{r.blurb}</p>
                     </div>
-                  ))}
-                  {!join.ok && <p className="text-xs text-muted-foreground">{join.why}</p>}
-                </div>
-
-                {pending && join.ok && (
-                  <div className="rounded-sm border border-gold/40 bg-background/40 p-3">
-                    <div className="mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Before you swear to {RIVAL_BY_ID[pending]?.name}
-                    </div>
-                    <div className="space-y-1 text-xs">
-                      <OathRow
-                        label="Reputation"
-                        before={state.reputation}
-                        after={state.reputation - JOIN_REQ.rep}
-                      />
-                      <OathRow
-                        label="Gold"
-                        before={state.gold}
-                        after={state.gold + JOIN_REQ.stipend}
-                      />
-                      <OathRow
-                        label="Banner slots"
-                        before={maxParties(state.clanLevel, false)}
-                        after={maxParties(state.clanLevel, true)}
-                      />
-                      <OathRow
-                        label={`Hostility of ${RIVAL_BY_ID[pending]?.name ?? ""}`}
-                        before={state.rivals?.find((x) => x.id === pending)?.hostility ?? 0}
-                        after={0}
-                      />
-                    </div>
-                    <p className="mt-2 text-[11px] text-muted-foreground">
-                      Rank becomes Sworn Captain. Your crest stays unfounded — you can found{" "}
-                      {state.clanName} later, which ends this oath.
-                    </p>
-                    <div className="mt-3 space-y-1">
-                      <label
-                        htmlFor="oath-word"
-                        className="text-[11px] uppercase tracking-widest text-muted-foreground"
-                      >
-                        Type <span className="text-gold">SWEAR</span> to seal the oath
-                      </label>
-                      <Input
-                        id="oath-word"
-                        value={oathWord}
-                        onChange={(e) => setOathWord(e.target.value)}
-                        placeholder="SWEAR"
-                        autoComplete="off"
-                        className="h-8 font-mono uppercase tracking-widest"
-                      />
-                    </div>
-                    <div className="mt-3 flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setPending(null);
-                          setOathWord("");
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={!oathConfirmed}
-                        title={oathConfirmed ? undefined : "Type SWEAR to confirm"}
-                        onClick={() => {
-                          api.joinClan(pending);
-                          setPending(null);
-                          setOathWord("");
-                          setJoinOpen(false);
-                        }}
-                      >
-                        Confirm oath
-                      </Button>
-                    </div>
+                    <Button
+                      size="sm"
+                      variant={pending === r.id ? "default" : "outline"}
+                      disabled={!join.ok}
+                      title={join.ok ? undefined : join.why}
+                      onClick={() => {
+                        setPending(pending === r.id ? null : r.id);
+                        setOathWord("");
+                      }}
+                    >
+                      {pending === r.id ? "Selected" : "Review oath"}
+                    </Button>
                   </div>
-                )}
-              </DialogContent>
-            </Dialog>
-        )}
+                ))}
+                {!join.ok && <p className="text-xs text-muted-foreground">{join.why}</p>}
+              </div>
 
+              {pending && join.ok && (
+                <div className="rounded-sm border border-gold/40 bg-background/40 p-3">
+                  <div className="mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Before you swear to {RIVAL_BY_ID[pending]?.name}
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <OathRow
+                      label="Reputation"
+                      before={state.reputation}
+                      after={state.reputation - JOIN_REQ.rep}
+                    />
+                    <OathRow
+                      label="Gold"
+                      before={state.gold}
+                      after={state.gold + JOIN_REQ.stipend}
+                    />
+                    <OathRow
+                      label="Banner slots"
+                      before={maxParties(state.clanLevel, false)}
+                      after={maxParties(state.clanLevel, true)}
+                    />
+                    <OathRow
+                      label={`Hostility of ${RIVAL_BY_ID[pending]?.name ?? ""}`}
+                      before={state.rivals?.find((x) => x.id === pending)?.hostility ?? 0}
+                      after={0}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Rank becomes Sworn Captain. Your crest stays unfounded — you can found{" "}
+                    {state.clanName} later, which ends this oath.
+                  </p>
+                  <div className="mt-3 space-y-1">
+                    <label
+                      htmlFor="oath-word"
+                      className="text-[11px] uppercase tracking-widest text-muted-foreground"
+                    >
+                      Type <span className="text-gold">SWEAR</span> to seal the oath
+                    </label>
+                    <Input
+                      id="oath-word"
+                      value={oathWord}
+                      onChange={(e) => setOathWord(e.target.value)}
+                      placeholder="SWEAR"
+                      autoComplete="off"
+                      className="h-8 font-mono uppercase tracking-widest"
+                    />
+                  </div>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setPending(null);
+                        setOathWord("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!oathConfirmed}
+                      title={oathConfirmed ? undefined : "Type SWEAR to confirm"}
+                      onClick={() => {
+                        api.joinClan(pending);
+                        setPending(null);
+                        setOathWord("");
+                        setJoinOpen(false);
+                      }}
+                    >
+                      Confirm oath
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
@@ -240,7 +277,6 @@ export function ClanHeader({ state, api }: { state: GameState; api: ClanApi }) {
             ? `Sworn service: fight under ${sworn.clanName} with two banners, or save ${req?.rep ?? 0} reputation and ${req?.gold ?? 0} gold to raise your own crest.`
             : `Choose your road: found your own clan, or swear your company to an established one and fight under their crest.`}
       </p>
-
     </header>
   );
 }

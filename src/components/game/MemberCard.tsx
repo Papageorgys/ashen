@@ -172,7 +172,6 @@ export function MemberCard({
         dropping && "border-gold ring-2 ring-gold/60",
       )}
     >
-
       <div className="flex items-start justify-between gap-3">
         {member.portrait && (
           <Portrait
@@ -191,7 +190,15 @@ export function MemberCard({
             )}
             <span className="text-xs text-primary">
               Lv {member.level}
-              {member.level >= MAX_LEVEL ? " (max)" : ""}
+              {member.level >= MAX_LEVEL && !member.paragon ? " (max)" : ""}
+              {member.paragon ? (
+                <span
+                  className="ml-1 text-[#b9a8e6]"
+                  title={`Ascendant — Paragon ${member.paragon}`}
+                >
+                  ✦{member.paragon}
+                </span>
+              ) : null}
             </span>
             {down && <span className="text-[10px] uppercase text-destructive">fallen</span>}
           </div>
@@ -200,9 +207,7 @@ export function MemberCard({
               {PROFESSION_BY_ID[member.profession]?.name}
             </div>
           )}
-          {member.title && (
-            <div className="text-[10px] italic text-gold/80">{member.title}</div>
-          )}
+          {member.title && <div className="text-[10px] italic text-gold/80">{member.title}</div>}
           {!compact && member.marks && member.marks.length > 0 && (
             <div
               className="truncate text-[10px] italic text-muted-foreground/90"
