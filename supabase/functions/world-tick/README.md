@@ -28,6 +28,11 @@ Server-authoritative tick for Aethyr's shared war (the HOI4 layer).
 - If the call fails (offline / not signed in), the client falls back to the
   per-save local sim ticked from `realmPulse`, so the game never depends on the
   shared world being reachable.
+- A `pg_cron` job (`world-tick-heartbeat`, migration
+  `supabase/migrations/20260817_world_tick_heartbeat.sql`) invokes this function
+  every 5 minutes via `pg_net` with the public anon key, so the shared war advances
+  on its own clock even with zero players online. The anon JWT carries no `sub`, so
+  the heartbeat only ticks the sim — it can never contest or build for anyone.
 
 The live function body is the source of truth (redeploy with `deploy_edge_function`
 to change it). This directory documents it; the migration lives in
