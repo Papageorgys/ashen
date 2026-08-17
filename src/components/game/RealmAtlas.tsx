@@ -1024,11 +1024,16 @@ export function RealmAtlas({
           role="application"
           tabIndex={0}
           aria-label={`${map.title} map — drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom`}
-          style={{ aspectRatio: `${map.aspect ?? 4 / 3}` }}
+          style={{
+            aspectRatio: `${map.aspect ?? 4 / 3}`,
+            // keep the map's ratio (so the percent hotspots stay aligned) but cap
+            // its HEIGHT to the viewport so it never dominates the page and needs
+            // scrolling — the width follows the ratio and the map is centered
+            width: `min(100%, calc(62dvh * ${map.aspect ?? 4 / 3}))`,
+          }}
           className={cn(
-            // full width, side to side; height follows the map's own ratio so the
-            // whole map fits with no crop and the percent hotspots stay aligned
-            "relative w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
+            // centered; height fits the screen, width follows the map's own ratio
+            "relative mx-auto max-w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
             zoom > 1 && "cursor-grab active:cursor-grabbing",
           )}
           onPointerDown={onPointerDown}
@@ -1570,9 +1575,10 @@ export function RealmAtlas({
           )}
         </div>
 
-        {/* codex */}
+        {/* codex — capped to the map's height and scrolled internally, so a long
+            read-out (clash, build orders) never stretches the page past the map */}
         {selected && (
-          <aside className="relative flex flex-col gap-3 border-t border-white/10 bg-[#191309] p-4 md:border-l md:border-t-0">
+          <aside className="stage-scroll relative flex max-h-[62dvh] flex-col gap-3 overflow-y-auto border-t border-white/10 bg-[#191309] p-4 md:border-l md:border-t-0">
             <button
               type="button"
               onClick={() => setSelectedId(null)}
