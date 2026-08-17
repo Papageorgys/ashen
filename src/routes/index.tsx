@@ -45,18 +45,11 @@ import { SoundLayer } from "@/components/game/SoundLayer";
 import { Curtain } from "@/components/game/Curtain";
 import { playCue } from "@/lib/sound";
 import { summonCurtain } from "@/lib/transition";
-import { TitleBar } from "@/components/game/TitleBar";
+import { CommandBar } from "@/components/game/CommandBar";
+import { NavRail } from "@/components/game/NavRail";
 import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -72,7 +65,6 @@ import {
   Globe2,
   PawPrint,
   Skull,
-  Menu,
   Crosshair,
   Crown,
   ShieldHalf,
@@ -489,12 +481,14 @@ function Index() {
     prev.current = { clanLevel, holdsCastle };
     if (!before) return;
     if (clanLevel > before.clanLevel) {
+      playCue("levelup");
       setFlourish({
         id: Date.now(),
         title: clanLevel === 1 ? "A Clan is Born" : `Clan Level ${clanLevel}`,
         subtitle: clanLevel === 1 ? "Your crest flies over Aethyr" : "The banners rise higher",
       });
     } else if (holdsCastle && !before.holdsCastle) {
+      playCue("levelup");
       setFlourish({ id: Date.now(), title: "Vareth Falls", subtitle: "The castle is yours" });
     }
   }, [state, clanLevel, holdsCastle]);
@@ -576,71 +570,34 @@ function Index() {
       <AmbientStage />
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
-        <TitleBar state={state} email={user?.email ?? null} signedIn={!!user} />
+        <CommandBar state={state} email={user?.email ?? null} signedIn={!!user} />
 
-        {/* the map is always the base view; every other screen opens over it, and
-            the whole game menu lives in a burger inside the map's own top bar */}
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="stage-scroll min-h-0 min-w-0 space-y-4 px-3 py-4 sm:px-5">
-            <ClanHeader state={state} api={api} />
-            <PartyBoard
-              state={state}
-              api={api}
-              now={now}
-              onOpenTool={setTool}
-              frontier={worldFrontier}
-              onContest={contestFrontier}
-              onBuild={buildFrontier}
-              navSlot={
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="Open the game menu"
-                      className="flex shrink-0 items-center gap-1.5 rounded-sm border border-white/10 px-2 py-1 font-display text-[11px] uppercase tracking-[0.14em] text-gold transition-colors hover:border-gold/50 hover:bg-gold/10"
-                    >
-                      <Menu className="h-4 w-4" aria-hidden />
-                      <span className="hidden sm:inline">Menu</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    {NAV_GROUPS.map((group, gi) => {
-                      const items = group.items.filter((i) => founded || !i.requiresClan);
-                      if (!items.length) return null;
-                      return (
-                        <div key={group.title}>
-                          {gi > 0 && <DropdownMenuSeparator />}
-                          <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
-                            {group.title}
-                          </DropdownMenuLabel>
-                          {items.map((item) => {
-                            const Icon = item.icon;
-                            return (
-                              <DropdownMenuItem
-                                key={item.value}
-                                onSelect={() => setTool(item.value)}
-                                className="gap-2"
-                              >
-                                <Icon className="h-4 w-4 shrink-0 text-gold" aria-hidden />
-                                {item.label}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              }
-            />
-            <div className="lg:hidden">
-              <ExpeditionFeed state={state} now={now} />
+        {/* the war table: a standing nav rail, the map (always the base view)
+            with the roster beneath it, and the live field report alongside */}
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <NavRail groups={NAV_GROUPS} active={tool} founded={founded} onSelect={setTool} />
+
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="stage-scroll min-h-0 min-w-0 space-y-4 px-3 py-4 sm:px-5">
+              <ClanHeader state={state} api={api} />
+              <PartyBoard
+                state={state}
+                api={api}
+                now={now}
+                onOpenTool={setTool}
+                frontier={worldFrontier}
+                onContest={contestFrontier}
+                onBuild={buildFrontier}
+              />
+              <div className="lg:hidden">
+                <ExpeditionFeed state={state} now={now} />
+              </div>
             </div>
-          </div>
 
-          <aside className="stage-scroll hidden min-h-0 border-l border-border/60 px-3 py-4 lg:block">
-            <ExpeditionFeed state={state} now={now} />
-          </aside>
+            <aside className="stage-scroll hidden min-h-0 border-l border-border/60 px-3 py-4 lg:block">
+              <ExpeditionFeed state={state} now={now} />
+            </aside>
+          </div>
         </div>
         <ChatDock
           signedIn={!!user}

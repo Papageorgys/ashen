@@ -1803,6 +1803,7 @@ export function RealmAtlas({
 
                         <button
                           type="button"
+                          data-sfx="deploy"
                           disabled={contesting || !canSupply}
                           onClick={commit}
                           className="rounded-sm border border-forge-ember bg-forge-ember/80 py-1.5 font-display text-[11px] uppercase tracking-[0.14em] text-[#160d06] transition enabled:hover:brightness-110 disabled:opacity-40"
