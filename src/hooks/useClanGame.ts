@@ -40,6 +40,7 @@ import {
   WORKER_CAP_PER_NODE,
   NODE_UPGRADE_MAX,
   SUPPLY_VALUE,
+  RAW_LABEL,
   type DomainState,
   type NodeType,
   type Workshop,
@@ -1020,13 +1021,29 @@ export function useClanGame() {
     return () => clearInterval(t);
   }, [update]);
 
-  /** the realm moves whether you watch it or not */
+  /** the realm moves whether you watch it or not — and its tidings, especially
+   * its losses, are surfaced rather than left to sink silently into the feed */
   useEffect(() => {
     const t = setInterval(() => {
       if (!stateRef.current) return;
       update((s) => {
+        const markId = s.log[0]?.id; // newest entry before the pulse
         realmPulse(s);
         musterPulse(s);
+        // everything the pulse just prepended, up to the mark
+        const fresh: { text: string; tone: "good" | "bad" | "info" }[] = [];
+        for (const e of s.log) {
+          if (e.id === markId) break;
+          fresh.push(e);
+        }
+        const losses = fresh.filter((e) => e.tone === "bad");
+        if (losses.length === 1) {
+          toast.error("Ill tidings from the realm.", { description: losses[0]!.text });
+        } else if (losses.length > 1) {
+          toast.error(`${losses.length} ill tidings from the realm.`, {
+            description: losses[losses.length - 1]!.text,
+          });
+        }
       });
     }, 15000);
     return () => clearInterval(t);
@@ -1041,9 +1058,24 @@ export function useClanGame() {
       const now = Date.now();
       // only tick when there's meaningful elapsed time, to avoid churn
       if (now - cur.domain.tickAt < 8000) return;
+      const lastRaidAt = cur.domain.raids?.[0]?.at ?? 0;
       update((s) => {
         if (!s.domain) return;
         s.domain = advanceDomain(s.domain, now, { longNight: longNightActive(s, now) });
+        // a caravan skimmed on the road was only a map flash before — put it in
+        // the field report and raise a toast so the loss is never missed
+        const top = s.domain.raids?.[0];
+        if (top && top.at > lastRaidAt && top.lost > 0) {
+          const lost = Math.round(top.lost);
+          pushLog(
+            s,
+            `Raiders skimmed a caravan — ${lost} ${RAW_LABEL[top.raw]} lost on the road.`,
+            "bad",
+          );
+          toast.error("A caravan was raided.", {
+            description: `${lost} ${RAW_LABEL[top.raw]} lost on the road.`,
+          });
+        }
       });
     }, 10000);
     return () => clearInterval(t);
