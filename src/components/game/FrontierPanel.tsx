@@ -37,6 +37,7 @@ export function FrontierPanel({
   frontier?: FrontierState | null;
 }) {
   const f = frontier ?? state.frontier;
+  const stale = !frontier && !!f; // showing the cached last-known war, server out of reach
   const standings = useMemo(() => (f ? frontierStandings(f) : []), [f]);
 
   if (!f) {
@@ -57,6 +58,14 @@ export function FrontierPanel({
 
   return (
     <div className="space-y-4">
+      {/* the shared war is out of reach — what's shown is the last state we saw */}
+      {stale && (
+        <p className="rounded-sm border border-[#d8a24a]/40 bg-[#d8a24a]/[0.06] px-3 py-2 text-[11px] leading-snug text-[#d8a24a]">
+          The shared war is out of reach. This is its last-known state — it will refresh when the
+          realm can be reached again.
+        </p>
+      )}
+
       {/* the Long Night — a shared antagonist all players must repel */}
       {night.active && (
         <section className="rounded-sm border border-[#5b4a7a]/70 bg-[#1a1426] p-4">

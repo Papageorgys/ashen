@@ -433,6 +433,13 @@ function Index() {
   // developed each realm is, so a long-held, built-up realm pays far richer
   useEffect(() => {
     if (!worldFrontier || !state) return;
+    // cache the authoritative server war so the offline view is its real
+    // last-known state, not a divergent local sim (guarded so we only write
+    // when it's genuinely newer — update() always clones, and an unconditional
+    // call would loop the effect)
+    if (!state.frontier || state.frontier.updatedAt < worldFrontier.updatedAt) {
+      api.cacheFrontier(worldFrontier);
+    }
     const held = territoriesOf(worldFrontier, "clan").map((id) => ({
       id,
       dev: Math.round(worldFrontier.control[id]?.dev ?? 20),
