@@ -15,6 +15,7 @@ import {
   chargeProgress,
   type ChargeKind,
 } from "@/lib/game/court";
+import { throneWord, courtSeason, rivalHouses } from "@/lib/game/living";
 
 const KIND_GLYPH: Record<ChargeKind, string> = {
   hunt: "⚔",
@@ -52,6 +53,21 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
   const crowned = !!court?.crowned || rankIndex >= CROWN_RANK;
 
   const charges = useMemo(() => court?.charges ?? [], [court?.charges]);
+
+  const now = Date.now();
+  const dayIdx = Math.floor(now / 86400000);
+  const weekIdx = Math.floor(now / (7 * 86400000));
+  const word = throneWord(dayIdx);
+  const season = courtSeason(weekIdx);
+  const houses = useMemo(() => rivalHouses(dayIdx, favor), [dayIdx, favor]);
+  // where your house stands among the King's vassals
+  const ranking = useMemo(
+    () =>
+      [...houses, { name: "Your House", favor, scheme: "" }]
+        .sort((a, b) => b.favor - a.favor)
+        .findIndex((h) => h.name === "Your House") + 1,
+    [houses, favor],
+  );
 
   return (
     <div className="space-y-4">
@@ -104,6 +120,27 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
             every hunt.
           </p>
         )}
+      </section>
+
+      {/* the living court — the word from the throne and the season's mood */}
+      <section className="rounded-sm border border-gold/20 bg-black/30 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            Word from the Throne
+          </span>
+          <span
+            className="rounded-[2px] px-1.5 py-px text-[9px] uppercase tracking-[0.08em]"
+            style={{
+              background: season.favorMult >= 1 ? "#7ea86a" : "#d1603a",
+              color: "#160d06",
+            }}
+            title={`${season.blurb} (favor ×${season.favorMult})`}
+          >
+            {season.name}
+          </span>
+        </div>
+        <p className="mt-1 text-xs italic leading-snug text-[#e7d7ac]">“{word}”</p>
+        <p className="mt-1 text-[10px] text-muted-foreground">{season.blurb}</p>
       </section>
 
       {/* the King's charges — the missions you answer to rise */}
@@ -186,6 +223,42 @@ export function CourtPanel({ state, api }: { state: GameState; api: ClanApi }) {
               The King has no charge for you at this hour.
             </p>
           )}
+        </div>
+      </section>
+
+      {/* the rival houses climbing beside you — a living court of schemers */}
+      <section className="panel rounded-sm p-4">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">
+            Rival Houses
+          </h3>
+          <span className="text-[10px] text-muted-foreground">
+            Your house stands <span className="text-gold">#{ranking}</span> at court
+          </span>
+        </div>
+        <div className="mt-3 space-y-1.5">
+          {houses
+            .slice()
+            .sort((a, b) => b.favor - a.favor)
+            .map((h) => (
+              <div
+                key={h.name}
+                className="flex items-center justify-between gap-2 rounded-sm border border-border/50 bg-black/20 px-2.5 py-1.5"
+              >
+                <span className="min-w-0 text-xs">
+                  <span className="text-[#e7d7ac]">{h.name}</span>
+                  <span className="text-muted-foreground"> — {h.scheme}</span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 text-[10px] tabular-nums",
+                    h.favor > favor ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  {h.favor}
+                </span>
+              </div>
+            ))}
         </div>
       </section>
 

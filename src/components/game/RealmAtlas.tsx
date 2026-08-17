@@ -53,6 +53,7 @@ import {
   type TerritoryId,
 } from "@/lib/game/frontier";
 import { courtRank, nextCourtRank, courtRankProgress, chargeProgress } from "@/lib/game/court";
+import { timeOfDay, realmProsperity } from "@/lib/game/living";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -1408,8 +1409,27 @@ export function RealmAtlas({
                   state && court
                     ? court.charges.filter((c) => chargeProgress(state, c).ready).length
                     : 0;
+                const tod = timeOfDay(clock);
+                const terrs = frontier ? Object.values(frontier.control) : [];
+                const avgDev = terrs.length
+                  ? terrs.reduce((n, c) => n + (c.dev ?? 20), 0) / terrs.length
+                  : 20;
+                const avgPop = terrs.length
+                  ? terrs.reduce((n, c) => n + (c.pop ?? 12), 0) / terrs.length
+                  : 12;
+                const pros = realmProsperity(avgDev, avgPop);
                 return (
                   <div className="flex flex-col gap-2">
+                    {/* state of the realm — the hour of the day and how Aethyr fares */}
+                    <div className="flex items-center justify-between gap-2 rounded-sm border border-white/10 bg-black/30 px-2.5 py-1.5 text-[10px]">
+                      <span className="text-muted-foreground">
+                        {tod.glyph} Aethyr rests in {tod.label}
+                      </span>
+                      <span style={{ color: pros.hue }} title={pros.blurb}>
+                        The realm is {pros.label}
+                      </span>
+                    </div>
+
                     {/* the feudal court — your standing and the crown's charges, in-world */}
                     <button
                       type="button"

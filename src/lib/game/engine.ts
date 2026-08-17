@@ -405,6 +405,8 @@ export interface GameState {
   /** the feudal court of the Crownlands — royal favor, rank, and the King's charges
    * (the "rise to the crown" pillar at home, mirror of the Frontier war abroad) */
   court?: CourtState;
+  /** the living realm's day-tag — guards the once-per-day ambient event boon */
+  livingDay?: string;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */

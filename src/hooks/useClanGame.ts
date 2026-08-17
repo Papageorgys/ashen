@@ -23,6 +23,17 @@ import {
 } from "@/lib/game/court";
 import type { TacReward } from "@/lib/game/tactics";
 import {
+  timeOfDay,
+  atmosphere,
+  champChatter,
+  fieldLetter,
+  realmRumor,
+  realmEvent,
+  courtSeason,
+  marketIndex,
+  travelingMerchant,
+} from "@/lib/game/living";
+import {
   CLAN_LEVELS,
   CLASS_BY_ID,
   MAX_LEVEL,
@@ -313,11 +324,14 @@ export function useClanGame() {
     s.log = [{ id: uid(), at: Date.now(), text, tone }, ...s.log].slice(0, 60);
   };
 
-  /** Grant royal favor and handle any court rank-ups (or coronation) it triggers. */
+  /** Grant royal favor and handle any court rank-ups (or coronation) it triggers.
+   * The current court season scales what favor is worth this week. */
   const awardFavor = (s: GameState, amount: number) => {
     if (!s.court || amount <= 0) return;
+    const weekIdx = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
+    const scaled = Math.round(amount * courtSeason(weekIdx).favorMult);
     const before = courtRankIndex(s.court.favor);
-    s.court.favor += amount;
+    s.court.favor += scaled;
     const after = courtRankIndex(s.court.favor);
     for (let r = before + 1; r <= after; r++) {
       const rank = COURT_RANKS[r]!;
@@ -863,6 +877,62 @@ export function useClanGame() {
         }
       });
     }, 5000);
+    return () => clearInterval(t);
+  }, [update]);
+
+  /** the living realm — the world quietly does something whether or not you act:
+   * champions mutter by the fire, banners write home, rumor drifts through the
+   * realm, and once a "day" (2 real hours) an event turns and brings its boon. */
+  const livingRef = useRef(0);
+  useEffect(() => {
+    const DAY_MS = 2 * 60 * 60 * 1000;
+    const t = setInterval(() => {
+      const cur = stateRef.current;
+      if (!cur || cur.members.length === 0) return;
+      const now = Date.now();
+      const dayIdx = Math.floor(now / DAY_MS);
+      const dayTag = `d${dayIdx}`;
+      const seed = Math.floor(now / 60000);
+      update((s) => {
+        // once per day: the realm's turning event and any boon it carries
+        if (s.livingDay !== dayTag) {
+          s.livingDay = dayTag;
+          const ev = realmEvent(dayIdx);
+          if (ev) {
+            if (ev.boon?.gold) s.gold += ev.boon.gold;
+            if (ev.boon?.rep) s.reputation += ev.boon.rep;
+            if (ev.boon?.inspiration) s.inspiration = (s.inspiration ?? 0) + ev.boon.inspiration;
+            if (ev.boon?.favor) awardFavor(s, ev.boon.favor);
+            pushLog(s, `${ev.title} — ${ev.text}`, ev.boon ? "good" : "info");
+            // the saga writes itself — notable turnings are kept in the Chronicle
+            if (ev.boon?.favor || ev.boon?.rep) chronicle(s, "rise", ev.title, ev.text);
+          }
+          return;
+        }
+        // otherwise a quiet line of ambient life, rotating through categories
+        const cat = livingRef.current++ % 4;
+        if (cat === 0) {
+          const resting = s.members.filter(
+            (m) => m.hp > 0 && !s.parties.some((p) => p.run && p.memberIds.includes(m.id)),
+          );
+          const m = resting[seed % Math.max(1, resting.length)];
+          if (m) pushLog(s, champChatter(m, CLASS_BY_ID[m.classId]?.role ?? "blade", seed), "info");
+        } else if (cat === 1) {
+          const deployed = s.parties.filter((p) => p.run || p.travel || p.farming);
+          const p = deployed[seed % Math.max(1, deployed.length)];
+          if (p) {
+            const zid = p.run?.zoneId ?? p.travel?.zoneId ?? p.farming ?? "";
+            pushLog(s, fieldLetter(p.name, ZONE_BY_ID[zid]?.name ?? "the field", seed), "info");
+          } else {
+            pushLog(s, realmRumor(seed), "info");
+          }
+        } else if (cat === 2) {
+          pushLog(s, realmRumor(seed), "info");
+        } else {
+          pushLog(s, atmosphere(timeOfDay(now).phase, seed), "info");
+        }
+      });
+    }, 75000);
     return () => clearInterval(t);
   }, [update]);
 
@@ -2217,7 +2287,15 @@ export function useClanGame() {
         const have = s.inventory[item] ?? 0;
         if (have < 1) return;
         s.inventory[item] = have - 1;
-        s.gold += Math.round((ITEM_BY_ID[item]?.value ?? 0) * keepEffects(s).sellMult);
+        // the living market breathes: today's index moves what a sale fetches, and
+        // a merchant passing through the square pays a little over the odds
+        const dayIdx = Math.floor(Date.now() / 86400000);
+        const idx = marketIndex(dayIdx);
+        const merchant = travelingMerchant(dayIdx);
+        const bonus = merchant ? 1 + merchant.discount * 0.5 : 1;
+        s.gold += Math.round(
+          (ITEM_BY_ID[item]?.value ?? 0) * keepEffects(s).sellMult * idx * bonus,
+        );
       }),
 
     /* ------------------------------- market ------------------------------- */

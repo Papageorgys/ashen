@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { LogIn, LogOut, UserRound } from "lucide-react";
 import {
@@ -15,7 +16,27 @@ import { DEFAULT_CREST } from "@/lib/game/identity";
 import { MAX_PARTY_SIZE } from "@/lib/game/data";
 import { maxParties, scoreClan, wornTitle, type GameState } from "@/lib/game/engine";
 import { CASTLE } from "@/lib/game/rivals";
+import { timeOfDay } from "@/lib/game/living";
 import { supabase } from "@/integrations/supabase/client";
+
+/** A small self-ticking clock chip — the realm's hour of the day. */
+function RealmClock() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const tod = timeOfDay(now);
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm border border-white/10 bg-black/30 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+      title={`Aethyr rests in ${tod.label}`}
+    >
+      <span aria-hidden="true">{tod.glyph}</span>
+      <span className="capitalize">{tod.label}</span>
+    </span>
+  );
+}
 
 function Readout({ label, value }: { label: string; value: number | string }) {
   return (
@@ -53,19 +74,20 @@ export function TitleBar({
             <h1 className="gilded truncate font-display text-xl leading-tight sm:text-2xl">
               {founded ? state.clanName : `${state.leaderName}'s Company`}
               {founded && wornTitle(state) ? (
-                <span className="ml-2 align-middle text-sm text-gold/80">
-                  {wornTitle(state)}
-                </span>
+                <span className="ml-2 align-middle text-sm text-gold/80">{wornTitle(state)}</span>
               ) : null}
             </h1>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {state.motto ? `“${state.motto}” · ` : ""}
-              {founded
-                ? `Clan level ${state.clanLevel} · ${slots} banner slots`
-                : state.allegiance
-                  ? `${state.allegiance.rank} of ${state.allegiance.clanName}`
-                  : `A free company of ${MAX_PARTY_SIZE}`}
-              {state.castle?.holder === "player" ? ` · holds ${CASTLE.name}` : ""}
+            <p className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
+              <span className="truncate">
+                {state.motto ? `“${state.motto}” · ` : ""}
+                {founded
+                  ? `Clan level ${state.clanLevel} · ${slots} banner slots`
+                  : state.allegiance
+                    ? `${state.allegiance.rank} of ${state.allegiance.clanName}`
+                    : `A free company of ${MAX_PARTY_SIZE}`}
+                {state.castle?.holder === "player" ? ` · holds ${CASTLE.name}` : ""}
+              </span>
+              <RealmClock />
             </p>
           </div>
         </div>
@@ -73,7 +95,9 @@ export function TitleBar({
         <div className="flex items-center gap-2">
           <div className="hidden items-center gap-1.5 md:flex">
             <Readout label="Gold" value={state.gold} />
-            {(state.rawAsh ?? 0) >= 1 && <Readout label="Ash" value={Math.round(state.rawAsh ?? 0)} />}
+            {(state.rawAsh ?? 0) >= 1 && (
+              <Readout label="Ash" value={Math.round(state.rawAsh ?? 0)} />
+            )}
             <Readout label="Rep" value={state.reputation} />
             <Readout label="Sworn" value={state.members.length} />
             <Readout label="Insp" value={state.inspiration ?? 0} />
@@ -90,7 +114,9 @@ export function TitleBar({
                   title={email ?? "Account"}
                 >
                   <UserRound className="h-3.5 w-3.5" aria-hidden />
-                  <span className="hidden max-w-[9rem] truncate sm:inline">{email ?? "Account"}</span>
+                  <span className="hidden max-w-[9rem] truncate sm:inline">
+                    {email ?? "Account"}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">

@@ -15,6 +15,7 @@ import {
   type FrontierState,
   type TerritoryId,
 } from "@/lib/game/frontier";
+import { realmProsperity, nightOmen } from "@/lib/game/living";
 
 const KIND_GLYPH: Record<FrontierEvent["kind"], string> = {
   conquest: "⚔",
@@ -51,6 +52,7 @@ export function FrontierPanel({
 
   const clanHeld = territoriesOf(f, "clan");
   const night = nightPhase(f.tick);
+  const omen = nightOmen(night.active, night.ticksLeft);
   const objectives = frontierObjectives(f);
 
   return (
@@ -69,6 +71,13 @@ export function FrontierPanel({
             and drive it back — before it overruns the realms. It lifts in ~{night.ticksLeft * 20}m.
           </p>
         </section>
+      )}
+
+      {/* a forewarning when the dark is near but not yet abroad */}
+      {!night.active && omen && (
+        <p className="rounded-sm border border-[#5b4a7a]/40 bg-[#140f1e] px-3 py-2 text-[11px] italic leading-snug text-[#b9a8e6]">
+          ☾ {omen}
+        </p>
       )}
 
       {/* the payoff — per-realm war spoils feeding the clan's hunts */}
@@ -233,6 +242,7 @@ export function FrontierPanel({
             const cell = f.control[id];
             const owner = FACTIONS[cell.owner];
             const front = isContested(f, id);
+            const pros = realmProsperity(cell.dev ?? 20, cell.pop ?? 12);
             return (
               <div
                 key={id}
@@ -252,6 +262,13 @@ export function FrontierPanel({
                   </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
+                  <span
+                    className="text-[8px] uppercase tracking-wider"
+                    style={{ color: pros.hue }}
+                    title={pros.blurb}
+                  >
+                    {pros.label}
+                  </span>
                   {front && (
                     <span className="rounded-[2px] bg-white/10 px-1 text-[8px] uppercase tracking-wider text-white/80">
                       front

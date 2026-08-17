@@ -81,6 +81,21 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
   clan: { id: "clan", name: "Your Banner", short: "Yours", hue: "#3fb0a6", ambition: 1.2 },
 };
 
+/** The named captains who lead each power — referenced in the war's dispatches so
+ * the front has faces, not just colours. */
+export const WARLORDS: Record<FactionId, string> = {
+  ember: "Marshal Corvane",
+  hollow: "The Hollow Cardinal",
+  free: "Captain Aldwig",
+  pale: "Warden Sisu",
+  verdant: "Green Mother Rone",
+  gilded: "Factor Beliste",
+  sunless: "The Choirmaster",
+  crown: "Lord Regent Vale",
+  longnight: "the Pale King",
+  clan: "your captains",
+};
+
 /* -------------------------------- Territories ------------------------------ */
 
 export type TerritoryId =
@@ -605,6 +620,38 @@ export function advanceFrontier(
         POP_MAX,
         (cell.pop ?? POP_SEED) * (1 + birthRate(cell, fertility, peaceful)),
       );
+    }
+
+    // ambient: on the live tick, a contested front crackles with a skirmish even
+    // when no border moves — so the war chronicle is never silent
+    if (step === steps - 1) {
+      const fronts = TERRITORY_IDS.filter(
+        (id) => state.control[id].owner !== "longnight" && isContested(state, id),
+      );
+      if (fronts.length && rng() < 0.55) {
+        const id = fronts[Math.floor(rng() * fronts.length)]!;
+        const cell = state.control[id];
+        let foe: FactionId = cell.owner;
+        for (const nb of TERRITORIES[id].adj) {
+          const o = state.control[nb].owner;
+          if (o !== cell.owner) {
+            foe = o;
+            break;
+          }
+        }
+        if (foe !== cell.owner) {
+          pushEvent(
+            state,
+            {
+              kind: "siege",
+              text: `${WARLORDS[foe]} of ${FACTIONS[foe].short} probes ${FACTIONS[cell.owner].short}'s line at ${TERRITORIES[id].name}. The front holds — for now.`,
+              territory: id,
+              faction: foe,
+            },
+            now,
+          );
+        }
+      }
     }
   }
 
