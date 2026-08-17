@@ -45,6 +45,7 @@ import {
   FACTIONS,
   isContested,
   TERRITORIES,
+  TERRITORY_IDS,
   BUILDINGS,
   BUILDING_IDS,
   canBuild,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/game/frontier";
 import { courtRank, nextCourtRank, courtRankProgress, chargeProgress } from "@/lib/game/court";
 import { timeOfDay, realmProsperity } from "@/lib/game/living";
+import { NODE_DEF, RAW_GLYPH, CARAVAN_MS, type Raw } from "@/lib/game/logistics";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -744,6 +746,81 @@ export function RealmAtlas({
     return [...groups.values()];
   })();
 
+  // the strategic overlay — everything in motion, drawn on the map itself:
+  // the war's front lines and battles, banners on the march, and the domain's
+  // caravans hauling raw to the city.
+  const strategic = (() => {
+    const map = ATLAS_MAPS[currentId];
+    const home = map.locations.find((l) => l.home);
+    const fronts: { x1: number; y1: number; x2: number; y2: number; key: string }[] = [];
+    const clashes: { x: number; y: number; key: string }[] = [];
+
+    // continental war: a line along every border where two powers meet, with a
+    // clash of arms burning at the midpoint
+    if (map.kind === "continent" && frontier) {
+      const locOf = (id: string) => map.locations.find((l) => l.id === id);
+      for (const id of TERRITORY_IDS) {
+        const a = locOf(id);
+        if (!a) continue;
+        const ownerA = frontier.control[id]?.owner;
+        for (const nb of TERRITORIES[id].adj) {
+          if (id >= nb) continue; // draw each border once
+          const ownerB = frontier.control[nb]?.owner;
+          if (!ownerB || ownerB === ownerA) continue; // not a front
+          const b = locOf(nb);
+          if (!b) continue;
+          fronts.push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y, key: `${id}-${nb}` });
+          clashes.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, key: `${id}-${nb}` });
+        }
+      }
+    }
+
+    // the domain's caravan network, drawn around the home seat on the home map
+    const routes: { x1: number; y1: number; x2: number; y2: number; key: string }[] = [];
+    const nodes: { x: number; y: number; glyph: string; key: string }[] = [];
+    const caravans: { x: number; y: number; glyph: string; key: string }[] = [];
+    const RAW_OFFSET: Record<Raw, [number, number]> = {
+      grain: [-16, -11],
+      timber: [16, -11],
+      iron: [-16, 12],
+      livestock: [16, 12],
+    };
+    if (currentId === HOME_MAP && home && state?.domain) {
+      const anchor = (raw: Raw) => ({
+        x: home.x + RAW_OFFSET[raw][0],
+        y: home.y + RAW_OFFSET[raw][1],
+      });
+      const haveRaw = new Set<Raw>(state.domain.nodes.map((n) => NODE_DEF[n.type].raw));
+      for (const raw of haveRaw) {
+        const an = anchor(raw);
+        routes.push({ x1: an.x, y1: an.y, x2: home.x, y2: home.y, key: raw });
+        nodes.push({ x: an.x, y: an.y, glyph: RAW_GLYPH[raw], key: raw });
+      }
+      for (const c of state.domain.caravans) {
+        const an = anchor(c.raw);
+        const p = Math.max(0, Math.min(1, 1 - (c.arrivesAt - clock) / CARAVAN_MS));
+        caravans.push({
+          x: an.x + (home.x - an.x) * p,
+          y: an.y + (home.y - an.y) * p,
+          glyph: RAW_GLYPH[c.raw],
+          key: c.id,
+        });
+      }
+    }
+
+    // banners on the march: a line from the home seat to where they are bound
+    const marches: { x1: number; y1: number; x2: number; y2: number; key: string }[] = [];
+    if (home) {
+      for (const p of state?.parties ?? []) {
+        if (!p.travel || p.run || !p.atlasLoc) continue;
+        const loc = map.locations.find((l) => l.id === p.atlasLoc);
+        if (loc) marches.push({ x1: home.x, y1: home.y, x2: loc.x, y2: loc.y, key: p.id });
+      }
+    }
+
+    return { fronts, clashes, routes, nodes, caravans, marches };
+  })();
+
   return (
     <div
       className={cn(
@@ -971,6 +1048,58 @@ export function RealmAtlas({
               pointerEvents: transit ? "none" : undefined,
             }}
           >
+            {/* strategic lines — front lines, caravan routes, and marches */}
+            <svg
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              aria-hidden="true"
+            >
+              {strategic.routes.map((r) => (
+                <line
+                  key={`route-${r.key}`}
+                  x1={r.x1}
+                  y1={r.y1}
+                  x2={r.x2}
+                  y2={r.y2}
+                  stroke="#5fd0c6"
+                  strokeOpacity="0.3"
+                  strokeWidth="1"
+                  strokeDasharray="2 2"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {strategic.marches.map((m) => (
+                <line
+                  key={`march-${m.key}`}
+                  x1={m.x1}
+                  y1={m.y1}
+                  x2={m.x2}
+                  y2={m.y2}
+                  stroke="#d8b45a"
+                  strokeOpacity="0.5"
+                  strokeWidth="1"
+                  strokeDasharray="1.5 2.5"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+              {strategic.fronts.map((f) => (
+                <line
+                  key={`front-${f.key}`}
+                  x1={f.x1}
+                  y1={f.y1}
+                  x2={f.x2}
+                  y2={f.y2}
+                  stroke="#d1603a"
+                  strokeOpacity="0.5"
+                  strokeWidth="1.5"
+                  strokeDasharray="3 2"
+                  vectorEffect="non-scaling-stroke"
+                  className="motion-safe:animate-pulse"
+                />
+              ))}
+            </svg>
+
             {map.locations.map((loc) => {
               const face = atlasMarker(map, loc);
               const isSel = selectedId === loc.id;
@@ -1169,6 +1298,55 @@ export function RealmAtlas({
                 </div>
               );
             })}
+
+            {/* battles — a clash of arms burns on every contested border */}
+            {strategic.clashes.map((c) => (
+              <div
+                key={`clash-${c.key}`}
+                aria-hidden="true"
+                className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${c.x}%`, top: `${c.y}%` }}
+              >
+                <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
+                  <span className="grid h-4 w-4 place-items-center rounded-full border border-[#d1603a]/70 bg-black/70 text-[9px] text-[#ff8a5c] shadow-[0_0_6px_oklch(0_0_0/0.7)] motion-safe:animate-pulse">
+                    ⚔
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {/* the domain's supply network — node anchors around the seat */}
+            {strategic.nodes.map((n) => (
+              <div
+                key={`node-${n.key}`}
+                aria-hidden="true"
+                className="pointer-events-none absolute z-[5] -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${n.x}%`, top: `${n.y}%` }}
+                title={n.key}
+              >
+                <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
+                  <span className="grid h-4 w-4 place-items-center rounded-[3px] border border-[#3fb0a6]/50 bg-black/60 text-[9px] opacity-80">
+                    {n.glyph}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {/* caravans hauling raw to the city, moving along their routes */}
+            {strategic.caravans.map((c) => (
+              <div
+                key={`car-${c.key}`}
+                aria-hidden="true"
+                className="pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${c.x}%`, top: `${c.y}%` }}
+              >
+                <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
+                  <span className="grid h-4 w-4 place-items-center rounded-full border border-[#5fd0c6]/70 bg-[#0e1a18] text-[9px] shadow-[0_1px_3px_oklch(0_0_0/0.7)]">
+                    {c.glyph}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* fly-in / fly-out overlay: cross-fades the incoming map over the top */}
