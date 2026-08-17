@@ -96,6 +96,7 @@ import {
 } from "./frontier";
 import { initialCourt, fillCharges, type CourtState } from "./court";
 import type { TraitId } from "./traits";
+import { initialDomain, type DomainState } from "./logistics";
 import {
   CASTLE,
   RIVAL_BY_ID,
@@ -471,6 +472,9 @@ export interface GameState {
   /** war supply — shipped home by the frontier realms you hold, and spent to
    * commit your banners to the front (§ frontier logistics) */
   supply?: number;
+  /** the domain's war-logistics chain — resource nodes, caravans, the city
+   * stockpile and workshops that craft raw into food/arms/mounts (§ logistics) */
+  domain?: DomainState;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -1498,6 +1502,7 @@ export function initialState(founding: Founding): GameState {
     realmTickAt: Date.now(),
     frontier: initialFrontier(Date.now()),
     court: initialCourt(),
+    domain: initialDomain(Date.now()),
     companies: [],
     inspiration: 0,
     log: [

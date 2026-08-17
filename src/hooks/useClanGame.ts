@@ -24,6 +24,23 @@ import {
 import type { TacReward } from "@/lib/game/tactics";
 import { traitField, TRAITS, traitsFor, type TraitId } from "@/lib/game/traits";
 import {
+  advanceDomain,
+  initialDomain,
+  freeWorkers,
+  shipmentValue,
+  NODE_DEF,
+  HIRE_COST,
+  CARAVAN_MS,
+  WORKER_CAP_PER_NODE,
+  NODE_UPGRADE_MAX,
+  SUPPLY_VALUE,
+  type DomainState,
+  type NodeType,
+  type Workshop,
+  type SmithyFocus,
+  type Good,
+} from "@/lib/game/logistics";
+import {
   timeOfDay,
   atmosphere,
   champChatter,
@@ -122,6 +139,7 @@ import {
   bondsOf,
   partyPower,
   longNightActive,
+  supplyCap,
   spoilRarity,
   chronicle,
   deathRisk,
@@ -231,6 +249,8 @@ function patch(loaded: GameState): GameState {
   loaded.court.stats = loaded.court.stats ?? { kills: 0, runs: 0, bossKills: 0 };
   loaded.court.charges = loaded.court.charges ?? [];
   fillCharges(loaded.court, loaded);
+  // the war-logistics domain post-dates older saves
+  loaded.domain = loaded.domain ?? initialDomain(Date.now());
   // banners now hold five — trim any legacy nine-strong party
   for (const p of loaded.parties) {
     if (p.memberIds.length > MAX_PARTY_SIZE) {
@@ -999,6 +1019,23 @@ export function useClanGame() {
     return () => clearInterval(t);
   }, [update]);
 
+  /** the war-logistics domain works its nodes, hauls caravans and crafts goods
+   * on its own clock — the supply chain runs whether or not you watch it */
+  useEffect(() => {
+    const t = setInterval(() => {
+      const cur = stateRef.current;
+      if (!cur?.domain) return;
+      const now = Date.now();
+      // only tick when there's meaningful elapsed time, to avoid churn
+      if (now - cur.domain.tickAt < 8000) return;
+      update((s) => {
+        if (!s.domain) return;
+        s.domain = advanceDomain(s.domain, now, { longNight: longNightActive(s, now) });
+      });
+    }, 10000);
+    return () => clearInterval(t);
+  }, [update]);
+
   const api = {
     start: (founding: Founding) => setState(initialState(founding)),
     reset: () => {
@@ -1325,6 +1362,136 @@ export function useClanGame() {
         for (const m of wounded) m.wound = undefined;
         pushLog(s, `The infirmary tends the warband's wounds (${cost} gold).`, "good");
         toast.success("The wounded are made whole.");
+      }),
+
+    /* --------------------------- war logistics ---------------------------- */
+
+    /** Hire laborers into the domain's workforce. */
+    hireWorkers: (n: number) =>
+      update((s) => {
+        if (!s.domain || n <= 0) return;
+        const cost = n * HIRE_COST;
+        if (s.gold < cost) return void toast.error(`Hiring ${n} asks ${cost} gold.`);
+        s.gold -= cost;
+        s.domain.workers += n;
+        pushLog(s, `Hired ${n} laborer${n === 1 ? "" : "s"} to the domain (${cost} gold).`, "info");
+      }),
+
+    /** Move a worker onto or off a node (delta +1 / −1). */
+    assignWorker: (nodeId: string, delta: number) =>
+      update((s) => {
+        const node = s.domain?.nodes.find((n) => n.id === nodeId);
+        if (!s.domain || !node) return;
+        if (delta > 0) {
+          if (freeWorkers(s.domain) <= 0) return void toast("No idle laborers to assign.");
+          if (node.workers >= WORKER_CAP_PER_NODE) return void toast("The node is fully manned.");
+          node.workers += 1;
+        } else if (node.workers > 0) {
+          node.workers -= 1;
+        }
+      }),
+
+    /** Break new ground: raise a resource node (costs gold and domain timber). */
+    buildNode: (type: NodeType) =>
+      update((s) => {
+        if (!s.domain) return;
+        const def = NODE_DEF[type];
+        const timber = s.domain.stock.timber ?? 0;
+        if (s.gold < def.gold) return void toast.error(`That asks ${def.gold} gold.`);
+        if (timber < def.timber) return void toast.error(`That asks ${def.timber} timber.`);
+        s.gold -= def.gold;
+        s.domain.stock.timber = timber - def.timber;
+        s.domain.nodes.push({ id: uid(), type, level: 1, workers: 0, raw: 0 });
+        pushLog(s, `Raised a ${def.label} in the domain.`, "good");
+      }),
+
+    /** Deepen a node — more output per worker. */
+    upgradeNode: (nodeId: string) =>
+      update((s) => {
+        const node = s.domain?.nodes.find((n) => n.id === nodeId);
+        if (!s.domain || !node || node.level >= NODE_UPGRADE_MAX) return;
+        const gold = node.level * 400;
+        const timber = node.level * 20;
+        if (s.gold < gold) return void toast.error(`That asks ${gold} gold.`);
+        if ((s.domain.stock.timber ?? 0) < timber)
+          return void toast.error(`That asks ${timber} timber.`);
+        s.gold -= gold;
+        s.domain.stock.timber = (s.domain.stock.timber ?? 0) - timber;
+        node.level += 1;
+        pushLog(s, `${NODE_DEF[node.type].label} deepened to level ${node.level}.`, "good");
+      }),
+
+    /** Build or upgrade a city workshop (mill / smithy / stable). */
+    upgradeWorkshop: (w: Workshop) =>
+      update((s) => {
+        if (!s.domain) return;
+        const level = s.domain.workshops[w] ?? 0;
+        if (level >= 3) return void toast("That workshop is at its height.");
+        const gold = (level + 1) * 350;
+        const timber = (level + 1) * 25;
+        if (s.gold < gold) return void toast.error(`That asks ${gold} gold.`);
+        if ((s.domain.stock.timber ?? 0) < timber)
+          return void toast.error(`That asks ${timber} timber.`);
+        s.gold -= gold;
+        s.domain.stock.timber = (s.domain.stock.timber ?? 0) - timber;
+        s.domain.workshops[w] = level + 1;
+        pushLog(
+          s,
+          `${w === "mill" ? "Mill & Granary" : w === "smithy" ? "Smithy" : "Stable"} raised to level ${level + 1}.`,
+          "good",
+        );
+      }),
+
+    /** Send a caravan to haul a node's piled raw to the city. */
+    dispatchCaravan: (nodeId: string) =>
+      update((s) => {
+        const node = s.domain?.nodes.find((n) => n.id === nodeId);
+        if (!s.domain || !node) return;
+        const qty = Math.floor(node.raw);
+        if (qty <= 0) return void toast("Nothing to haul yet.");
+        node.raw = 0;
+        s.domain.caravans.push({
+          id: uid(),
+          raw: NODE_DEF[node.type].raw,
+          qty,
+          arrivesAt: Date.now() + CARAVAN_MS,
+        });
+        pushLog(
+          s,
+          `A caravan sets out from the ${NODE_DEF[node.type].label} with ${qty} ${NODE_DEF[node.type].raw}.`,
+          "info",
+        );
+      }),
+
+    setSmithyFocus: (focus: SmithyFocus) =>
+      update((s) => {
+        if (s.domain) s.domain.smithyFocus = focus;
+      }),
+
+    /** Ship the city's finished goods to the front as war supply. */
+    shipToFront: () =>
+      update((s) => {
+        if (!s.domain) return;
+        const value = shipmentValue(s.domain);
+        if (value <= 0) return void toast("No finished goods to ship.");
+        const cap = supplyCap(s);
+        const room = Math.max(0, cap - (s.supply ?? 0));
+        if (room <= 0) return void toast("The supply train is already full.");
+        // spend goods, richest-value first, until supply is capped
+        let gained = 0;
+        for (const g of Object.keys(s.domain.goods) as Good[]) {
+          if (gained >= room) break;
+          const have = Math.floor(s.domain.goods[g] ?? 0);
+          if (have <= 0) continue;
+          const per = SUPPLY_VALUE[g];
+          const canTake = Math.min(have, Math.ceil((room - gained) / per));
+          gained += canTake * per;
+          s.domain.goods[g] = (s.domain.goods[g] ?? 0) - canTake;
+        }
+        gained = Math.min(room, gained);
+        s.supply = Math.min(cap, (s.supply ?? 0) + gained);
+        pushLog(s, `The supply train reaches the front — +${gained} war supply.`, "good");
+        toast.success(`+${gained} war supply shipped to the front.`);
       }),
 
     recallParty: (partyId: string) =>
