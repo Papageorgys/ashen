@@ -94,6 +94,7 @@ import {
   type FrontierState,
   type TerritoryId,
 } from "./frontier";
+import { initialCourt, fillCharges, type CourtState } from "./court";
 import {
   CASTLE,
   RIVAL_BY_ID,
@@ -401,6 +402,9 @@ export interface GameState {
   bossCommitAt?: Record<string, number>;
   /** the dawn muster — daily login reward and its consecutive-day streak */
   rally?: { lastDay: string; streak: number };
+  /** the feudal court of the Crownlands — royal favor, rank, and the King's charges
+   * (the "rise to the crown" pillar at home, mirror of the Frontier war abroad) */
+  court?: CourtState;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -1411,6 +1415,7 @@ export function initialState(founding: Founding): GameState {
     castle: initialCastle(),
     realmTickAt: Date.now(),
     frontier: initialFrontier(Date.now()),
+    court: initialCourt(),
     companies: [],
     inspiration: 0,
     log: [
@@ -1423,6 +1428,7 @@ export function initialState(founding: Founding): GameState {
     ],
     createdAt: Date.now(),
   };
+  fillCharges(state.court!, state);
   chronicle(
     state,
     "founding",

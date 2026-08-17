@@ -13,6 +13,15 @@ import {
 import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "@/lib/game/identity";
 import { professionFromSeed } from "@/lib/game/professions";
 import {
+  courtEffects,
+  initialCourt,
+  fillCharges,
+  chargeProgress,
+  courtRankIndex,
+  COURT_RANKS,
+  CROWN_RANK,
+} from "@/lib/game/court";
+import {
   CLAN_LEVELS,
   CLASS_BY_ID,
   MAX_LEVEL,
@@ -199,6 +208,12 @@ function patch(loaded: GameState): GameState {
   loaded.inspiration = loaded.inspiration ?? 0;
   // per-banner boss-charge cooldowns post-date older saves
   loaded.bossCommitAt = loaded.bossCommitAt ?? {};
+  // the feudal court arrived later — swear every existing house to the crown, and
+  // keep its charge board topped up so the King always has work waiting
+  loaded.court = loaded.court ?? initialCourt();
+  loaded.court.stats = loaded.court.stats ?? { kills: 0, runs: 0, bossKills: 0 };
+  loaded.court.charges = loaded.court.charges ?? [];
+  fillCharges(loaded.court, loaded);
   // banners now hold five — trim any legacy nine-strong party
   for (const p of loaded.parties) {
     if (p.memberIds.length > MAX_PARTY_SIZE) {
@@ -336,9 +351,20 @@ export function useClanGame() {
           const lordLed = ledPersonally(s, party);
           // The Long Night runs thick with Ash: braving it pays richer (§5).
           const tide = longNightTide(s, now);
-          s.gold += Math.round(res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1) * tide.spoilMult);
+          // standing at the King's court pays a pension on every hunt (§ Court)
+          const court = courtEffects(s);
+          s.gold += Math.round(
+            res.gold * (lordLed ? 1 + LORD_BONUS.gold : 1) * tide.spoilMult * court.goldMult,
+          );
           if (tide.ashTide > 0) s.rawAsh = (s.rawAsh ?? 0) + tide.ashTide;
-          s.reputation += Math.round(res.rep * keepEffects(s).repMult * (lordLed ? 1.1 : 1));
+          s.reputation += Math.round(
+            res.rep * keepEffects(s).repMult * (lordLed ? 1.1 : 1) * court.repMult,
+          );
+          // the crown's charges read these durable tallies for their progress
+          if (s.court) {
+            s.court.stats.runs += 1;
+            s.court.stats.kills += res.kills;
+          }
           const zoneName = ZONE_BY_ID[zoneId]?.name ?? "the field";
           const spoils = res.loot.map((l) => ({
             id: uid(),
@@ -1054,6 +1080,69 @@ export function useClanGame() {
         s.warSpoils = { held };
       }),
 
+    /** Answer one of the King's charges — pay any tribute due, collect favor and
+     * the crown's reward, climb the vassal ladder, and take a fresh charge. */
+    claimCharge: (id: string) =>
+      update((s) => {
+        if (!s.court) return;
+        const charge = s.court.charges.find((c) => c.id === id);
+        if (!charge) return;
+        const prog = chargeProgress(s, charge);
+        if (!prog.ready) return void toast("That charge is not yet fulfilled.");
+        // a tithe is paid in coin on delivery
+        if (charge.kind === "tithe") {
+          if (s.gold < charge.need)
+            return void toast.error(`The treasury needs ${charge.need} gold for this tithe.`);
+          s.gold -= charge.need;
+        }
+        const beforeRank = courtRankIndex(s.court.favor);
+        s.court.favor += charge.favor;
+        s.gold += charge.gold;
+        s.reputation += charge.rep;
+        // clear the charge and let the King set another
+        s.court.charges = s.court.charges.filter((c) => c.id !== id);
+        fillCharges(s.court, s);
+
+        const reward = [
+          `+${charge.favor} favor`,
+          charge.gold ? `${charge.gold} gold` : "",
+          charge.rep ? `${charge.rep} rep` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        pushLog(s, `Charge answered: ${charge.title}. ${reward}.`, "good");
+        toast.success(`The crown is pleased — ${charge.title}.`, { description: reward });
+
+        // did answering it raise you at court?
+        const afterRank = courtRankIndex(s.court.favor);
+        if (afterRank > beforeRank) {
+          for (let r = beforeRank + 1; r <= afterRank; r++) {
+            const rank = COURT_RANKS[r]!;
+            if (r >= CROWN_RANK) {
+              s.court.crowned = true;
+              pushLog(
+                s,
+                `The Ashen Throne is yours. You are crowned ${rank.title} — ${rank.holding}.`,
+                "good",
+              );
+              toast.success("You take the crown.", {
+                description: `Sovereign of the Crownlands.`,
+              });
+              chronicle(
+                s,
+                "rise",
+                "The Crown Taken",
+                `Crowned ${rank.title} — the Crownlands answer to your house.`,
+              );
+            } else {
+              pushLog(s, `The King raises you to ${rank.title} — ${rank.holding}.`, "good");
+              toast.success(`Raised at court: ${rank.title}.`, { description: rank.grant });
+            }
+          }
+          s.court.seenRank = afterRank;
+        }
+      }),
+
     recallParty: (partyId: string) =>
       update((s) => {
         const p = s.parties.find((x) => x.id === partyId);
@@ -1547,6 +1636,8 @@ export function useClanGame() {
         // raw Ash pours off a felled boss — spend or refine it before it burns (§6.2)
         s.rawAsh = (s.rawAsh ?? 0) + Math.max(10, Math.round(level * damageShare * 3));
         s.bossClaims = { ...(s.bossClaims ?? {}), [eventId]: true };
+        // the crown counts world-terrors felled toward the King's bounties (§ Court)
+        if (s.court) s.court.stats.bossKills += 1;
 
         // The beast's hoard — themed loot on top of gold/rep.
         const loot = rollBossLoot(level, damageShare, rank);
