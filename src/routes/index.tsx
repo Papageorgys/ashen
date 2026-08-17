@@ -39,6 +39,7 @@ import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
 import { AbyssPanel } from "@/components/game/AbyssPanel";
+import { SeasonPanel } from "@/components/game/SeasonPanel";
 import { useWorldBoss } from "@/hooks/useWorldBoss";
 import { useFrontier } from "@/hooks/useFrontier";
 import { territoriesOf } from "@/lib/game/frontier";
@@ -83,6 +84,7 @@ import {
   Hammer,
   Warehouse,
   ChevronsDown,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 
@@ -414,6 +416,13 @@ const MAP_NAV: MapNavGroup[] = [
         hint: "The endless descent — each depth harder, forever attuning your power",
         requiresClan: true,
       },
+      {
+        value: "season",
+        label: "Season",
+        icon: CalendarDays,
+        hint: "The season reward track — score it, then declare the Reckoning",
+        requiresClan: true,
+      },
       { value: "world", label: "Ladder", icon: Globe2, hint: "Live rankings of every clan" },
       {
         value: "realm",
@@ -594,6 +603,8 @@ function Index() {
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "abyss" ? (
       <AbyssPanel state={state} api={api} />
+    ) : tool === "season" ? (
+      <SeasonPanel state={state} api={api} />
     ) : tool === "world" ? (
       <WorldPanel signedIn={!!user} myId={user?.id ?? null} />
     ) : tool === "chronicle" ? (
