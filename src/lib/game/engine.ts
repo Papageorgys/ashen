@@ -91,6 +91,7 @@ import { initialFrontier, REALM_BOON, type FrontierState, type TerritoryId } fro
 import { initialCourt, fillCharges, courtRankIndex, courtStanding, type CourtState } from "./court";
 import { legacyEffects, initialLegacy, type LegacyState } from "./legacy";
 import type { SeasonPass } from "./season";
+import { townshipEffects, advanceTownship, initialTownship, type TownshipState } from "./township";
 import type { TraitId } from "./traits";
 import { initialDomain, type DomainState } from "./logistics";
 import {
@@ -481,6 +482,8 @@ export interface GameState {
   abyss?: { depth: number };
   /** the season reward track — resets each Season of Ash (§ seasons) */
   seasonPass?: SeasonPass;
+  /** the Township — the civic building sim raised around your seat (§ township) */
+  township?: TownshipState;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -927,7 +930,9 @@ export function supplyCap(state: GameState): number {
   const held = state.warSpoils?.held?.length ?? 0;
   // a landed lord commands greater logistics — court rank widens the war chest
   const rank = courtRankIndex(courtStanding(state));
-  return 60 + held * 40 + (state.keep?.vault ?? 0) * 20 + rank * 15;
+  return (
+    60 + held * 40 + (state.keep?.vault ?? 0) * 20 + rank * 15 + townshipEffects(state).supplyBonus
+  );
 }
 
 /** How long before the held realms can be called on for laborers again. */
@@ -1764,6 +1769,7 @@ export function initialState(founding: Founding, carry?: { legacy?: LegacyState 
     ],
     createdAt: Date.now(),
     legacy: legacy ?? initialLegacy(),
+    township: initialTownship(Date.now()),
   };
   fillCharges(state.court!, state);
   chronicle(
@@ -2205,6 +2211,16 @@ export function realmPulse(state: GameState) {
   if ((state.rawAsh ?? 0) > 0 && hours > 0) {
     const kept = (state.rawAsh ?? 0) * Math.pow(1 - RAW_ASH.decayPerHour, hours);
     state.rawAsh = kept < 0.5 ? 0 : kept;
+  }
+
+  // The Township works: constructions finish on their timers, and its built
+  // structures pay out passive gold, inspiration and supply each hour.
+  if (state.township) {
+    const t = advanceTownship(state.township, now, hours);
+    state.township = t.town;
+    if (t.gold > 0) state.gold += t.gold;
+    if (t.inspiration > 0) state.inspiration = (state.inspiration ?? 0) + t.inspiration;
+    if (t.supply > 0) state.supply = Math.min(supplyCap(state), (state.supply ?? 0) + t.supply);
   }
 
   // The Ledger comes due (§6.3): an overdue Compact debt compounds and bleeds standing.
@@ -3271,6 +3287,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   const spoils = warSpoilsChannels(state); // realms held in the shared war pay out
   const leg = legacyEffects(state); // permanent boons carried across ascensions
   const asc = ascendancyEffects(state); // clan tiers climbed past the level cap
+  const town = townshipEffects(state); // the township's counting house / war shrine
   const find =
     (ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find + spoils.find) * leg.findMult;
   const fallenNote = fallen.length
@@ -3368,6 +3385,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       spoils.gold *
       leg.goldMult *
       asc.goldMult *
+      town.huntGoldMult *
       (eliteMet ? ELITE.goldMult : 1),
   );
   const loot: { item: ItemId; qty: number }[] = [];
@@ -3443,6 +3461,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
         spoils.xp *
         leg.xpMult *
         asc.xpMult *
+        town.huntXpMult *
         (eliteMet ? ELITE.xpMult : 1),
     ),
     kills,
