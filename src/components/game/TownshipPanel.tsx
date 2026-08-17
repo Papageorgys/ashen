@@ -16,11 +16,55 @@ import {
 } from "@/lib/game/township";
 import { freeWorkers } from "@/lib/game/logistics";
 import { HoldfastMap } from "@/components/game/HoldfastMap";
+import { GameIcon, type IconName } from "@/components/game/GameIcon";
 import type { ClanApi } from "@/hooks/useClanGame";
 
 function mins(ms: number) {
   const m = Math.ceil(ms / 60000);
   return `${m}m`;
+}
+
+/** Which crafted icon stands for each building in menus and chips. */
+const BUILDING_ICON: Record<string, IconName> = {
+  market: "market",
+  granary: "supply",
+  guildhall: "anvil",
+  counting_house: "coin",
+  war_shrine: "flame",
+  library: "scroll",
+  watchtower: "tower",
+};
+
+const CHIP_TONE: Record<string, string> = {
+  gold: "border-gold/25 bg-gold/[0.05] text-gold",
+  violet: "border-[#8878b8]/25 bg-[#8878b8]/[0.06] text-[#c9bbe8]",
+  teal: "border-[#3fb0a6]/25 bg-[#3fb0a6]/[0.06] text-[#5fd0c6]",
+  green: "border-[#7ea86a]/30 bg-[#7ea86a]/[0.06] text-[#9cc487]",
+  ash: "border-white/10 bg-black/30 text-[#e7d7ac]",
+  muted: "border-white/10 bg-black/30 text-muted-foreground",
+};
+
+/** A small stat chip: a crafted icon + value, tinted as one unit. */
+function Chip({
+  tone,
+  icon,
+  title,
+  children,
+}: {
+  tone: keyof typeof CHIP_TONE | string;
+  icon: IconName;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 rounded-sm border px-2 py-1 ${CHIP_TONE[tone] ?? CHIP_TONE["muted"]}`}
+    >
+      <GameIcon name={icon} size={13} />
+      {children}
+    </span>
+  );
 }
 
 /**
@@ -68,49 +112,50 @@ export function TownshipPanel({
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
           {eff.goldPerHour > 0 && (
-            <span className="rounded-sm border border-gold/25 bg-gold/[0.05] px-2 py-1 text-gold">
-              🪙 +{Math.round(eff.goldPerHour)}/hr
-            </span>
+            <Chip tone="gold" icon="coin">
+              +{Math.round(eff.goldPerHour)}/hr
+            </Chip>
           )}
           {eff.inspirationPerHour > 0 && (
-            <span className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-[#c9bbe8]">
-              ⟡ +{eff.inspirationPerHour.toFixed(1)}/hr
-            </span>
+            <Chip tone="violet" icon="spark">
+              +{eff.inspirationPerHour.toFixed(1)}/hr
+            </Chip>
           )}
           {eff.supplyPerHour > 0 && (
-            <span className="rounded-sm border border-[#3fb0a6]/25 bg-[#3fb0a6]/[0.06] px-2 py-1 text-[#5fd0c6]">
-              📦 +{eff.supplyPerHour.toFixed(1)}/hr · cap +{eff.supplyBonus}
-            </span>
+            <Chip tone="teal" icon="supply">
+              +{eff.supplyPerHour.toFixed(1)}/hr · cap +{eff.supplyBonus}
+            </Chip>
           )}
           {eff.huntGoldMult > 1 && (
-            <span className="rounded-sm border border-gold/25 bg-gold/[0.05] px-2 py-1 text-gold">
+            <Chip tone="gold" icon="coin">
               hunt gold +{Math.round((eff.huntGoldMult - 1) * 100)}%
-            </span>
+            </Chip>
           )}
           {eff.huntXpMult > 1 && (
-            <span className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-[#e7d7ac]">
+            <Chip tone="ash" icon="flame">
               hunt xp +{Math.round((eff.huntXpMult - 1) * 100)}%
-            </span>
+            </Chip>
           )}
           {eff.buildSpeed < 1 && (
-            <span className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-[#e7d7ac]">
+            <Chip tone="ash" icon="anvil">
               build −{Math.round((1 - eff.buildSpeed) * 100)}%
-            </span>
+            </Chip>
           )}
           {eff.raidReduction > 0 && (
-            <span className="rounded-sm border border-[#7ea86a]/30 bg-[#7ea86a]/[0.06] px-2 py-1 text-[#9cc487]">
-              🗼 raids −{Math.round(eff.raidReduction * 100)}%
-            </span>
+            <Chip tone="green" icon="tower">
+              raids −{Math.round(eff.raidReduction * 100)}%
+            </Chip>
           )}
-          <span className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-muted-foreground">
-            🪵 {Math.floor(timber)} timber
-          </span>
-          <span
-            className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-muted-foreground"
+          <Chip tone="muted" icon="timber">
+            {Math.floor(timber)} timber
+          </Chip>
+          <Chip
+            tone="muted"
+            icon="worker"
             title="Idle Domain laborers you can put to work here (staffing lifts a building's output)."
           >
-            👷 {idle} idle · {staffed} at work
-          </span>
+            {idle} idle · {staffed} at work
+          </Chip>
         </div>
       </section>
 
@@ -179,8 +224,8 @@ function PlotActions({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <span className="text-lg" aria-hidden="true">
-            {def.glyph}
+          <span className="grid h-9 w-9 place-items-center rounded-sm border border-gold/25 bg-gold/[0.05] text-gold">
+            <GameIcon name={BUILDING_ICON[plot.type] ?? "home"} size={20} />
           </span>
           <div>
             <div className="font-display text-sm text-gold">
@@ -195,9 +240,10 @@ function PlotActions({
               type="button"
               disabled={!afford}
               onClick={() => plot.type && api.buildTownship(plot.id, plot.type)}
-              className="rounded-sm border border-forge-ember bg-forge-ember/80 px-3 py-1.5 text-[11px] uppercase tracking-[0.1em] text-[#160d06] transition enabled:hover:brightness-110 disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-sm border border-forge-ember bg-forge-ember/80 px-3 py-1.5 text-[11px] uppercase tracking-[0.1em] text-[#160d06] transition enabled:hover:brightness-110 disabled:opacity-40"
             >
-              Upgrade to {toLevel} · {cost.gold.toLocaleString()}g · {cost.timber}🪵 · {mins(time)}
+              Upgrade to {toLevel} · {cost.gold.toLocaleString()}g · {cost.timber}
+              <GameIcon name="timber" size={12} /> · {mins(time)}
             </button>
           )}
           {maxed && (
@@ -229,8 +275,9 @@ function PlotActions({
             >
               −
             </button>
-            <span className="min-w-[2.5rem] text-center text-xs tabular-nums text-[#9cc487]">
-              👷 {plot.workers ?? 0}/{maxStaff(plot)}
+            <span className="inline-flex min-w-[2.5rem] items-center justify-center gap-1 text-xs tabular-nums text-[#9cc487]">
+              <GameIcon name="worker" size={12} />
+              {plot.workers ?? 0}/{maxStaff(plot)}
             </span>
             <button
               type="button"
@@ -275,17 +322,18 @@ function PlotActions({
               className="rounded-sm border border-white/10 bg-black/20 p-2 text-left transition enabled:hover:border-gold/60 disabled:opacity-40"
             >
               <div className="flex items-center gap-1.5 text-sm text-gold">
-                <span aria-hidden="true">{def.glyph}</span>
+                <GameIcon name={BUILDING_ICON[t] ?? "home"} size={16} />
                 {def.name}
-                {!gate.ok && <span aria-hidden="true">🔒</span>}
+                {!gate.ok && <GameIcon name="lock" size={12} className="text-muted-foreground" />}
               </div>
               <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{def.blurb}</p>
-              <div className="mt-1 text-[9px] tabular-nums text-muted-foreground">
+              <div className="mt-1 flex items-center gap-1 text-[9px] tabular-nums text-muted-foreground">
                 {req && !gate.ok ? (
                   <span className="text-[#d8a24a]">Requires {BUILDINGS[req].name}</span>
                 ) : (
                   <>
-                    {cost.gold.toLocaleString()}g · {cost.timber}🪵 · {mins(time)}
+                    {cost.gold.toLocaleString()}g · {cost.timber}
+                    <GameIcon name="timber" size={11} /> · {mins(time)}
                   </>
                 )}
               </div>
