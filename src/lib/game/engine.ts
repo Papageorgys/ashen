@@ -205,8 +205,33 @@ export function addMark(
   m.marks = [entry, ...(m.marks ?? [])].slice(0, MARKS_CAP);
 }
 
-/** shared runs survived before two champions are shield-bonded */
+/** affinity at which two champions are shield-bonded */
 export const BOND_AT = 6;
+/** a bond cannot deepen past this */
+export const MAX_BOND = 12;
+/** at or below this, a pair are rivals — they fight worse side by side */
+export const RIVAL_AT = -4;
+/** the floor of ill-will */
+export const BOND_MIN = -8;
+/** how fast a bond frays per hour when the pair are kept apart */
+export const BOND_DRIFT_PER_HOUR = 0.3;
+
+export interface BondTier {
+  key: "rival" | "stranger" | "comrade" | "shieldbond" | "sworn";
+  name: string;
+  /** tactical: fraction added to each unit's power / mitigation when fielded together */
+  power: number;
+  mit: number;
+}
+
+/** The standing between two champions, by their affinity — its name and its bite. */
+export function bondTier(v: number): BondTier {
+  if (v <= RIVAL_AT) return { key: "rival", name: "Rivals", power: -0.08, mit: 0 };
+  if (v >= 10) return { key: "sworn", name: "Sworn", power: 0.14, mit: 0.08 };
+  if (v >= BOND_AT) return { key: "shieldbond", name: "Shield-bond", power: 0.08, mit: 0.05 };
+  if (v >= 3) return { key: "comrade", name: "Comrades", power: 0.03, mit: 0.02 };
+  return { key: "stranger", name: "Strangers", power: 0, mit: 0 };
+}
 
 /** canonical key for an unordered pair of champion ids */
 export function pairKey(a: string, b: string): string {
@@ -217,14 +242,42 @@ export function getAffinity(s: GameState, a: string, b: string): number {
   return s.affinity?.[pairKey(a, b)] ?? 0;
 }
 
-/** grant affinity to a pair who came back from the field together; returns the new total */
+/** shift a pair's affinity (up from shared danger, down from grief, drift or
+ * blame), clamped to the range of devotion and ill-will. Returns the new total. */
 export function bumpAffinity(s: GameState, a: string, b: string, n = 1): number {
   if (a === b) return 0;
   s.affinity ??= {};
   const k = pairKey(a, b);
-  const v = (s.affinity[k] ?? 0) + n;
+  const v = Math.max(BOND_MIN, Math.min(MAX_BOND, (s.affinity[k] ?? 0) + n));
   s.affinity[k] = v;
   return v;
+}
+
+/**
+ * Bonds are living: they fray when champions are kept apart, and slower for what
+ * was forged in blood. A pair fielded in the same banner right now holds firm;
+ * everyone else drifts toward indifference (rivalries cool more slowly). Call
+ * from the realm tick with the hours elapsed.
+ */
+export function driftBonds(s: GameState, hours: number): void {
+  if (!s.affinity || hours <= 0) return;
+  const party: Record<string, string> = {};
+  for (const p of s.parties) for (const id of p.memberIds) party[id] = p.id;
+  for (const k of Object.keys(s.affinity)) {
+    const [a, b] = k.split(":");
+    if (!a || !b) {
+      delete s.affinity[k];
+      continue;
+    }
+    if (party[a] && party[a] === party[b]) continue; // shoulder to shoulder — it holds
+    const v = s.affinity[k]!;
+    const rate = BOND_DRIFT_PER_HOUR * hours * (Math.abs(v) >= BOND_AT ? 0.35 : 1);
+    let nv = v;
+    if (v > 0) nv = Math.max(0, v - rate);
+    else if (v < 0) nv = Math.min(0, v + rate * 0.5);
+    if (Math.abs(nv) < 0.05) delete s.affinity[k];
+    else s.affinity[k] = nv;
+  }
 }
 
 /** sever every bond that references a champion who has left the roster */
@@ -1811,6 +1864,9 @@ export function realmPulse(state: GameState) {
   const marching = new Set(state.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
   for (const m of state.members)
     if ((m.wound ?? 0) > 0 && !marching.has(m.id)) m.wound = Math.max(0, (m.wound ?? 0) - 1);
+
+  // bonds are living — those kept apart slowly drift toward indifference
+  driftBonds(state, hours);
 
   const openZones = ZONES.filter((z) => z.reqLevel <= 52).map((z) => z.id);
 

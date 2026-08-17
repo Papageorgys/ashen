@@ -1,7 +1,14 @@
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
-import { DAMAGE_LABEL, typeMultVs, memberPower, getAffinity, BOND_AT } from "@/lib/game/engine";
+import {
+  DAMAGE_LABEL,
+  typeMultVs,
+  memberPower,
+  getAffinity,
+  bondTier,
+  RIVAL_AT,
+} from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import { CLASS_BY_ID, MAX_PARTY_SIZE } from "@/lib/game/data";
 import { TRAITS } from "@/lib/game/traits";
@@ -41,16 +48,25 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
   const [formation, setFormation] = useState<Record<string, "front" | "back">>({});
   const [blooded, setBlooded] = useState(false);
 
-  /** Member ids in a party that share a shield-bond with a banner-mate. */
-  function bondedInParty(ids: string[]): string[] {
-    const out = new Set<string>();
-    for (let i = 0; i < ids.length; i++)
-      for (let j = i + 1; j < ids.length; j++)
-        if (getAffinity(state, ids[i]!, ids[j]!) >= BOND_AT) {
-          out.add(ids[i]!);
-          out.add(ids[j]!);
-        }
-    return [...out];
+  /** Each fielded champion's net bond bonus: their strongest bond among the
+   * banner lends power and grit; a rival among them saps it. */
+  function bondModsFor(ids: string[]): Record<string, { power: number; mit: number }> {
+    const mods: Record<string, { power: number; mit: number }> = {};
+    for (const id of ids) {
+      let maxV = 0;
+      let minV = 0;
+      for (const other of ids) {
+        if (other === id) continue;
+        const v = getAffinity(state, id, other);
+        maxV = Math.max(maxV, v);
+        minV = Math.min(minV, v);
+      }
+      const best = bondTier(maxV);
+      let power = best.power;
+      if (minV <= RIVAL_AT) power += bondTier(minV).power; // a rival at your side
+      mods[id] = { power, mit: best.mit };
+    }
+    return mods;
   }
 
   // banners that could enter: have champions and aren't in the field
@@ -78,7 +94,7 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
     if (members.length === 0) return;
     const ids = members.map((m) => m.id);
     setFought(ids);
-    setTac(startEncounter(members, tierId, formation, bondedInParty(ids)));
+    setTac(startEncounter(members, tierId, formation, bondModsFor(ids)));
     setSetupPartyId(null);
     setPending(null);
     setClaimed(false);

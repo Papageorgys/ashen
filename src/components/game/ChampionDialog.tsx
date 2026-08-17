@@ -53,7 +53,7 @@ import {
   xpForLevel,
   xpForSkillLevel,
   bondsOf,
-  BOND_AT,
+  bondTier,
   type Member,
 } from "@/lib/game/engine";
 import { cn } from "@/lib/utils";
@@ -104,27 +104,27 @@ function Row({ label, value, tone }: { label: string; value: React.ReactNode; to
   );
 }
 
-function bondTier(v: number): string {
-  if (v >= BOND_AT * 2) return "Inseparable";
-  if (v >= BOND_AT) return "Shield-bond";
-  if (v >= 3) return "Trusted";
-  return "Marched together";
-}
-
-/** Those a champion has bled beside — bonds forged run after run. */
+/** Those a champion has bled beside — and the few they have come to blame.
+ * Bonds are living: forged in shared danger, frayed by time apart, soured by
+ * defeat, and severed by death. */
 function BondsPanel({ state, member }: { state: GameState; member: Member }) {
   const bonds = bondsOf(state, member.id)
-    .map((b) => ({ ...b, other: state.members.find((x) => x.id === b.id) }))
-    .filter((b) => b.other)
+    .map((b) => ({
+      ...b,
+      other: state.members.find((x) => x.id === b.id),
+      tier: bondTier(b.value),
+    }))
+    .filter((b) => b.other && b.tier.key !== "stranger")
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
     .slice(0, 8);
   return (
     <div className="panel space-y-2 rounded-sm px-3 py-2">
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-        Bonds — those {member.name} has bled beside
+        Bonds — forged in danger, frayed by time apart
       </div>
       {bonds.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No bonds yet — they are forged in the field, run after run.
+          No bonds yet — they are forged in the field, and forged faster in a hard fight.
         </p>
       ) : (
         <div className="grid gap-1">
@@ -134,10 +134,14 @@ function BondsPanel({ state, member }: { state: GameState; member: Member }) {
               <span
                 className={cn(
                   "shrink-0 text-[10px] uppercase tracking-widest",
-                  b.value >= BOND_AT ? "text-gold" : "text-muted-foreground",
+                  b.tier.key === "rival"
+                    ? "text-destructive"
+                    : b.tier.key === "sworn" || b.tier.key === "shieldbond"
+                      ? "text-gold"
+                      : "text-muted-foreground",
                 )}
               >
-                {bondTier(b.value)}
+                {b.tier.name}
               </span>
             </div>
           ))}
@@ -245,11 +249,7 @@ export function ChampionDialog({
                   <span className="font-display text-foreground">The Ashen Oath.</span> Swear this
                   champion to fall rather than yield — greater danger, and a legend if they die.
                 </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => api.swearOath(member.id)}
-                >
+                <Button size="sm" variant="outline" onClick={() => api.swearOath(member.id)}>
                   Swear the Oath
                 </Button>
               </div>
