@@ -381,6 +381,7 @@ export function PartyBoard({
   frontier,
   onContest,
   onBuild,
+  mapless,
 }: {
   state: GameState;
   api: ClanApi;
@@ -390,6 +391,8 @@ export function PartyBoard({
   frontier?: FrontierState | null;
   onContest?: ContestFn;
   onBuild?: BuildFn;
+  /** render only the banner/roster management, without the map (for a panel) */
+  mapless?: boolean;
 }) {
   const unassigned = state.members.filter(
     (m) => !state.parties.some((p) => p.memberIds.includes(m.id)),
@@ -464,16 +467,18 @@ export function PartyBoard({
         </div>
       </header>
 
-      <RealmAtlas
-        state={state}
-        api={api}
-        now={now}
-        {...(onOpenTool ? { onOpenTool } : {})}
-        {...(navSlot ? { navSlot } : {})}
-        {...(frontier ? { frontier } : {})}
-        {...(onContest ? { onContest } : {})}
-        {...(onBuild ? { onBuild } : {})}
-      />
+      {!mapless && (
+        <RealmAtlas
+          state={state}
+          api={api}
+          now={now}
+          {...(onOpenTool ? { onOpenTool } : {})}
+          {...(navSlot ? { navSlot } : {})}
+          {...(frontier ? { frontier } : {})}
+          {...(onContest ? { onContest } : {})}
+          {...(onBuild ? { onBuild } : {})}
+        />
+      )}
 
       <div className="grid gap-3 lg:grid-cols-2">
         {state.parties.map((p) => (

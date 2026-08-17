@@ -281,6 +281,8 @@ export function RealmAtlas({
   className,
   onOpenTool,
   navSlot,
+  fill,
+  overlays,
   frontier: frontierProp,
   onContest,
   onBuild,
@@ -291,6 +293,10 @@ export function RealmAtlas({
   /** ticking clock so marching/fighting banners show live progress */
   now?: number;
   className?: string;
+  /** fill the parent's height and let the map be the whole stage (dashboard mode) */
+  fill?: boolean;
+  /** HUD panels drawn over the map (banners, field report …) in fill mode */
+  overlays?: React.ReactNode;
   /** jump straight to a tool panel (Forge, Warehouse) from the map's own toolbar */
   onOpenTool?: (tab: string) => void;
   /** the game menu, rendered into the map's own top bar (a burger, in practice) */
@@ -895,12 +901,15 @@ export function RealmAtlas({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-sm border-2 border-map-ink/50 bg-[#0c0a06] shadow-[0_18px_40px_-24px_oklch(0_0_0/0.9)]",
+        "overflow-hidden border-map-ink/50 bg-[#0c0a06]",
+        fill
+          ? "flex h-full flex-col border-0"
+          : "rounded-sm border-2 shadow-[0_18px_40px_-24px_oklch(0_0_0/0.9)]",
         className,
       )}
     >
       {/* top bar: menu + breadcrumb + mode toggle */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#17130d] px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-[#17130d] px-3 py-2">
         {navSlot}
         <nav className="flex flex-1 items-center gap-1.5" aria-label="Atlas location">
           {crumbs.map((m, i) => {
@@ -1017,23 +1026,34 @@ export function RealmAtlas({
         </div>
       </div>
 
-      <div className={cn("grid", selected ? "md:grid-cols-[1fr_20rem]" : "grid-cols-1")}>
+      <div
+        className={cn(
+          fill
+            ? "relative min-h-0 flex-1"
+            : cn("grid", selected ? "md:grid-cols-[1fr_20rem]" : "grid-cols-1"),
+        )}
+      >
         {/* the map stage — pan with drag, zoom with wheel / double-click / buttons */}
         <div
           ref={viewportRef}
           role="application"
           tabIndex={0}
           aria-label={`${map.title} map — drag to pan, scroll or pinch to zoom, arrow keys to move, plus and minus to zoom`}
-          style={{
-            aspectRatio: `${map.aspect ?? 4 / 3}`,
-            // keep the map's ratio (so the percent hotspots stay aligned) but cap
-            // its HEIGHT to the viewport so it never dominates the page and needs
-            // scrolling — the width follows the ratio and the map is centered
-            width: `min(100%, calc(62dvh * ${map.aspect ?? 4 / 3}))`,
-          }}
+          style={
+            fill
+              ? undefined
+              : {
+                  aspectRatio: `${map.aspect ?? 4 / 3}`,
+                  // keep the map's ratio (so the percent hotspots stay aligned) but
+                  // cap its HEIGHT to the viewport so it never dominates the page —
+                  // the width follows the ratio and the map is centered
+                  width: `min(100%, calc(62dvh * ${map.aspect ?? 4 / 3}))`,
+                }
+          }
           className={cn(
-            // centered; height fits the screen, width follows the map's own ratio
-            "relative mx-auto max-w-full touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
+            "relative touch-none select-none overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold/60",
+            // fill the whole stage in dashboard mode, else centered and height-capped
+            fill ? "h-full w-full" : "mx-auto max-w-full",
             zoom > 1 && "cursor-grab active:cursor-grabbing",
           )}
           onPointerDown={onPointerDown}
@@ -1576,9 +1596,17 @@ export function RealmAtlas({
         </div>
 
         {/* codex — capped to the map's height and scrolled internally, so a long
-            read-out (clash, build orders) never stretches the page past the map */}
+            read-out (clash, build orders) never stretches the page past the map.
+            In dashboard (fill) mode it floats as an overlay on the map's right. */}
         {selected && (
-          <aside className="stage-scroll relative flex max-h-[62dvh] flex-col gap-3 overflow-y-auto border-t border-white/10 bg-[#191309] p-4 md:border-l md:border-t-0">
+          <aside
+            className={cn(
+              "stage-scroll relative flex flex-col gap-3 overflow-y-auto border-white/10 bg-[#191309] p-4",
+              fill
+                ? "absolute bottom-2 right-2 top-2 z-20 w-[19rem] max-w-[85%] rounded-sm border shadow-[0_18px_40px_-18px_#000]"
+                : "max-h-[62dvh] border-t md:border-l md:border-t-0",
+            )}
+          >
             <button
               type="button"
               onClick={() => setSelectedId(null)}
@@ -2216,6 +2244,9 @@ export function RealmAtlas({
             </div>
           </aside>
         )}
+
+        {/* HUD panels drawn over the map in dashboard mode (banners, field report) */}
+        {fill && overlays}
       </div>
 
       {/* war-state ticker — the whole front, read at a glance (continent only) */}
