@@ -42,7 +42,9 @@ import { territoriesOf } from "@/lib/game/frontier";
 import { useSession } from "@/hooks/useSession";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { SoundLayer } from "@/components/game/SoundLayer";
+import { Curtain } from "@/components/game/Curtain";
 import { playCue } from "@/lib/sound";
+import { summonCurtain } from "@/lib/transition";
 import { TitleBar } from "@/components/game/TitleBar";
 import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
@@ -430,6 +432,19 @@ function Index() {
     return () => clearInterval(t);
   }, []);
 
+  // the ashen curtain draws once as you enter the war table (after founding, or
+  // on returning to the realm) and lifts to reveal it
+  const booted = useRef(false);
+  useEffect(() => {
+    if (booted.current || !state) return;
+    booted.current = true;
+    summonCurtain({
+      label: state.clanLevel >= 1 ? state.clanName : `${state.leaderName}'s Company`,
+      sigil: "⚔",
+      holdMs: 700,
+    });
+  }, [state]);
+
   // the realm's voice: a whoosh as a screen opens over the map, a softer one as
   // it closes (the per-button click is handled globally by the SoundLayer)
   const prevTool = useRef<string | null>(null);
@@ -557,6 +572,7 @@ function Index() {
   return (
     <TooltipProvider delayDuration={200}>
       <SoundLayer />
+      <Curtain />
       <AmbientStage />
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
