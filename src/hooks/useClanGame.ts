@@ -251,6 +251,7 @@ function patch(loaded: GameState): GameState {
   fillCharges(loaded.court, loaded);
   // the war-logistics domain post-dates older saves
   loaded.domain = loaded.domain ?? initialDomain(Date.now());
+  loaded.discovered = loaded.discovered ?? [];
   // banners now hold five — trim any legacy nine-strong party
   for (const p of loaded.parties) {
     if (p.memberIds.length > MAX_PARTY_SIZE) {
@@ -1341,6 +1342,13 @@ export function useClanGame() {
             : `The banner is bested in the proving, but learns from the bout.`,
           reward.won ? "good" : "info",
         );
+      }),
+
+    /** Mark an atlas place as scouted, so it is no longer shrouded on the map. */
+    discover: (locId: string) =>
+      update((s) => {
+        s.discovered = s.discovered ?? [];
+        if (!s.discovered.includes(locId)) s.discovered.push(locId);
       }),
 
     /** Spend war supply to commit a banner to the front (returns nothing; the

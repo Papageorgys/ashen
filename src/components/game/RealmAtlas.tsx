@@ -45,6 +45,7 @@ import {
   FACTIONS,
   isContested,
   nightPhase,
+  territoryClash,
   TERRITORIES,
   TERRITORY_IDS,
   BUILDINGS,
@@ -53,6 +54,7 @@ import {
   birthRate,
   REALM_FERTILITY,
   type BuildingId,
+  type FrontierEvent,
   type FrontierState,
   type TerritoryId,
 } from "@/lib/game/frontier";
@@ -837,7 +839,49 @@ export function RealmAtlas({
       }
     }
 
-    return { fronts, clashes, routes, nodes, caravans, raids, marches };
+    // news from the front: the freshest realm-bound events pinned where they
+    // happened, so a conquest or a siege announces itself on the map
+    const alerts: {
+      x: number;
+      y: number;
+      glyph: string;
+      tone: string;
+      text: string;
+      rank: number;
+      key: string;
+    }[] = [];
+    if (map.kind === "continent" && frontier) {
+      const GLYPH: Record<FrontierEvent["kind"], string> = {
+        conquest: "🏴",
+        siege: "⚔",
+        nightfall: "🌑",
+        muster: "🚩",
+      };
+      const TONE: Record<FrontierEvent["kind"], string> = {
+        conquest: "#d1603a",
+        siege: "#d8a24a",
+        nightfall: "#7c5cff",
+        muster: "#5fd0c6",
+      };
+      let rank = 0;
+      for (const ev of frontier.events) {
+        if (!ev.territory) continue;
+        const loc = map.locations.find((l) => l.id === ev.territory);
+        if (!loc) continue;
+        alerts.push({
+          x: loc.x,
+          y: loc.y,
+          glyph: GLYPH[ev.kind],
+          tone: TONE[ev.kind],
+          text: ev.text,
+          rank,
+          key: ev.id,
+        });
+        if (++rank >= 3) break; // only the freshest few, so the map stays legible
+      }
+    }
+
+    return { fronts, clashes, routes, nodes, caravans, raids, marches, alerts };
   })();
 
   return (
@@ -1148,6 +1192,19 @@ export function RealmAtlas({
               const terrContested =
                 terr && frontier ? isContested(frontier, loc.id as TerritoryId) : false;
               const terrMine = terr?.owner === "clan";
+              // fog of war on the continent: a realm is known if you hold it, it
+              // borders land you hold, you've scouted it, or it's your seat.
+              // Everything else lies shrouded until a banner rides out to it.
+              const known =
+                !terr ||
+                map.kind !== "continent" ||
+                isHome ||
+                terrMine ||
+                (state?.discovered?.includes(loc.id) ?? false) ||
+                TERRITORIES[loc.id as TerritoryId].adj.some(
+                  (a) => frontier?.control[a as TerritoryId]?.owner === "clan",
+                );
+              const shrouded = !known;
               const terrDev = terr ? Math.round(terr.dev ?? 20) : 0;
               const terrBuilds = terr?.builds
                 ? Object.values(terr.builds).reduce((s, n) => s + (n ?? 0), 0)
@@ -1163,8 +1220,20 @@ export function RealmAtlas({
                   className="group absolute z-[5] -translate-x-1/2 -translate-y-1/2"
                   style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
                 >
-                  {/* frontier: a standing aura in the holder's colour, always shown */}
-                  {terrHue && (
+                  {/* the shroud: an unscouted realm reads only as fog until a
+                      banner rides out to it */}
+                  {shrouded && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                      style={{
+                        background:
+                          "radial-gradient(circle, #0a0810ee 0%, #0a081099 45%, transparent 72%)",
+                      }}
+                    />
+                  )}
+                  {/* frontier: a standing aura in the holder's colour, once known */}
+                  {!shrouded && terrHue && (
                     <span
                       aria-hidden="true"
                       className="pointer-events-none absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full"
@@ -1173,7 +1242,7 @@ export function RealmAtlas({
                       }}
                     />
                   )}
-                  {terrContested && (
+                  {!shrouded && terrContested && (
                     <span
                       aria-hidden="true"
                       className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-white/45 motion-safe:animate-pulse"
@@ -1181,7 +1250,7 @@ export function RealmAtlas({
                   )}
                   {/* grip ring — a realm's hold on itself: firm gold when secure,
                       thin and red and unsettled when the border is buckling */}
-                  {terr && (
+                  {!shrouded && terr && (
                     <span
                       aria-hidden="true"
                       className={cn(
@@ -1220,18 +1289,29 @@ export function RealmAtlas({
                     type="button"
                     onClick={() => {
                       if (moved.current) return;
+                      if (shrouded) {
+                        api?.discover(loc.id); // scouting lifts the shroud
+                        setSelectedId(loc.id);
+                        return;
+                      }
                       setSelectedId((s) => (s === loc.id ? null : loc.id));
                     }}
-                    aria-label={`${loc.name} — ${ATLAS_TYPE_LABEL[loc.type]}`}
+                    aria-label={
+                      shrouded
+                        ? "Unscouted realm — ride out to reveal it"
+                        : `${loc.name} — ${ATLAS_TYPE_LABEL[loc.type]}`
+                    }
                     className={cn(
-                      "grid place-items-center border font-display font-semibold text-gold shadow-[0_1px_3px_oklch(0_0_0/0.7)] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold group-hover:scale-125",
+                      "grid place-items-center border font-display font-semibold shadow-[0_1px_3px_oklch(0_0_0/0.7)] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold group-hover:scale-125",
                       isRealm ? "h-5 w-5 text-[11px]" : "h-4 w-4 text-[9px]",
                       markerShape(loc.type),
-                      "bg-[radial-gradient(circle_at_50%_35%,#2a2114,#0d0a06)]",
+                      shrouded
+                        ? "border-white/15 bg-[radial-gradient(circle_at_50%_35%,#171320,#0a0810)] text-white/35"
+                        : "text-gold bg-[radial-gradient(circle_at_50%_35%,#2a2114,#0d0a06)]",
                       isSel && "scale-110 ring-2 ring-gold",
                     )}
                   >
-                    <span aria-hidden="true">{face}</span>
+                    <span aria-hidden="true">{shrouded ? "?" : face}</span>
                   </button>
                   {/* home haven badge — every player starts here */}
                   {isHome && (
@@ -1281,9 +1361,9 @@ export function RealmAtlas({
                       "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-[2px] bg-black/75 px-1.5 py-px text-center font-display text-[10px] opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
                       (isSel || isHome) && "opacity-100",
                     )}
-                    style={{ color: "#e7d7ac" }}
+                    style={{ color: shrouded ? "#8a86a0" : "#e7d7ac" }}
                   >
-                    {isHome ? `${loc.name} · Home` : loc.name}
+                    {shrouded ? "Unscouted" : isHome ? `${loc.name} · Home` : loc.name}
                   </div>
                   {/* clan-held realms wear their development at a glance */}
                   {terrMine && (
@@ -1417,6 +1497,29 @@ export function RealmAtlas({
                 <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
                   <span className="grid h-4 w-4 place-items-center rounded-full border border-[#5fd0c6]/70 bg-[#0e1a18] text-[9px] shadow-[0_1px_3px_oklch(0_0_0/0.7)]">
                     {c.glyph}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {/* news pins — the freshest happenings announce themselves on the map */}
+            {strategic.alerts.map((a) => (
+              <div
+                key={`alert-${a.key}`}
+                aria-hidden="true"
+                className="pointer-events-none absolute z-[8] -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${a.x}%`, top: `${a.y}%` }}
+              >
+                <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
+                  <span
+                    className={cn(
+                      "flex -translate-y-5 items-center gap-1 whitespace-nowrap rounded-[3px] border bg-black/85 px-1.5 py-0.5 font-display text-[8px] leading-none",
+                      a.rank === 0 && "motion-safe:animate-pulse",
+                    )}
+                    style={{ borderColor: a.tone, color: a.tone, opacity: 1 - a.rank * 0.28 }}
+                  >
+                    <span className="text-[10px]">{a.glyph}</span>
+                    {a.text}
                   </span>
                 </div>
               </div>
@@ -1576,6 +1679,58 @@ export function RealmAtlas({
                         tone={peaceful ? "#7ea86a" : "#b8b2a4"}
                       />
                     </div>
+
+                    {/* the clash on the ground — who is pushing this realm and how hard */}
+                    {(() => {
+                      const clash = territoryClash(frontier, selected.id as TerritoryId);
+                      if (!clash.attacker || clash.pressure <= 0.02) return null;
+                      const trendTone =
+                        clash.trend === "falling"
+                          ? "#d1603a"
+                          : clash.trend === "slipping"
+                            ? "#d8a24a"
+                            : "#7ea86a";
+                      const trendWord =
+                        clash.trend === "falling"
+                          ? "line breaking"
+                          : clash.trend === "slipping"
+                            ? "line slipping"
+                            : "line holding";
+                      return (
+                        <div className="flex flex-col gap-1 rounded-sm border border-white/10 bg-black/25 px-2 py-1.5">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <span
+                                aria-hidden="true"
+                                className="inline-block h-1.5 w-1.5 rounded-full"
+                                style={{ background: FACTIONS[clash.attacker].hue }}
+                              />
+                              {clash.attackerName} presses
+                            </span>
+                            <span
+                              className="font-semibold uppercase tracking-[0.08em]"
+                              style={{ color: trendTone }}
+                            >
+                              {trendWord}
+                            </span>
+                          </div>
+                          <div className="h-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${Math.round(clash.pressure * 100)}%`,
+                                background: `linear-gradient(90deg, ${trendTone}88, ${trendTone})`,
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between text-[9px] tabular-nums text-muted-foreground">
+                            <span>foe {Math.round(clash.attackerForce)}</span>
+                            <span>defence {Math.round(clash.defence)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {mine && !peaceful && (
                       <p className="text-[10px] leading-snug text-muted-foreground">
                         {front
