@@ -13,7 +13,7 @@
 import type { GameState } from "./engine";
 
 export type BuildingType =
-  "market" | "granary" | "guildhall" | "counting_house" | "war_shrine" | "library";
+  "market" | "granary" | "guildhall" | "counting_house" | "war_shrine" | "library" | "watchtower";
 
 export interface BuildingDef {
   type: BuildingType;
@@ -90,6 +90,16 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
     timber: 30,
     minutes: 7,
   },
+  watchtower: {
+    type: "watchtower",
+    name: "Watchtower",
+    glyph: "🗼",
+    blurb: "Eyes on the roads — cuts the raiders' cut of every caravan the Domain sends.",
+    maxLevel: 4,
+    gold: 900,
+    timber: 45,
+    minutes: 7,
+  },
 };
 
 export const BUILDING_TYPES = Object.keys(BUILDINGS) as BuildingType[];
@@ -146,8 +156,21 @@ export interface Plot {
   type?: BuildingType;
   /** 0 = empty ground; ≥1 = built to this level */
   level: number;
+  /** laborers (drawn from the Domain's pool) staffing this building */
+  workers?: number;
   /** an in-progress raise/upgrade — completes when now ≥ until */
   constructing?: { startedAt: number; until: number; toLevel: number };
+}
+
+/** Each laborer staffing a building lifts its output by this much. */
+export const STAFF_BONUS = 0.15;
+/** A building can be staffed up to its level. */
+export function maxStaff(plot: Plot): number {
+  return plot.level;
+}
+/** Total laborers assigned across the whole township. */
+export function townWorkers(town: TownshipState | undefined): number {
+  return (town?.plots ?? []).reduce((n, p) => n + (p.workers ?? 0), 0);
 }
 
 export interface TownshipState {
@@ -183,6 +206,8 @@ export interface TownshipEffects {
   huntXpMult: number;
   /** construction time multiplier (<1 = faster) from Guild Halls */
   buildSpeed: number;
+  /** fraction the Watchtowers cut off caravan-raid losses (0..0.8) */
+  raidReduction: number;
 }
 
 /** Fold the township's BUILT structures into their standing effects. */
@@ -195,6 +220,7 @@ export function townshipEffectsOf(town: TownshipState | undefined): TownshipEffe
     huntGoldMult: 1,
     huntXpMult: 1,
     buildSpeed: 1,
+    raidReduction: 0,
   };
   if (!town) return eff;
   let guild = 0;
@@ -203,29 +229,36 @@ export function townshipEffectsOf(town: TownshipState | undefined): TownshipEffe
     const L = p.level;
     // a building packed among neighbours works its district harder
     const m = 1 + ADJ_BONUS * plotDistrict(town, i);
+    // and every laborer assigned lifts its output on top of that
+    const s = 1 + (p.workers ?? 0) * STAFF_BONUS;
+    const g = m * s;
     switch (p.type) {
       case "market":
-        eff.goldPerHour += 40 * L * m;
+        eff.goldPerHour += 40 * L * g;
         break;
       case "granary":
-        eff.supplyBonus += 18 * L * m;
-        eff.supplyPerHour += 0.6 * L * m;
+        eff.supplyBonus += 18 * L * m; // the cap is structural, not worked
+        eff.supplyPerHour += 0.6 * L * g;
         break;
       case "guildhall":
         guild += L; // build-speed is global, not district-boosted
         break;
       case "counting_house":
-        eff.huntGoldMult += 0.04 * L * m;
+        eff.huntGoldMult += 0.04 * L * g;
         break;
       case "war_shrine":
-        eff.huntXpMult += 0.04 * L * m;
+        eff.huntXpMult += 0.04 * L * g;
         break;
       case "library":
-        eff.inspirationPerHour += 0.5 * L * m;
+        eff.inspirationPerHour += 0.5 * L * g;
+        break;
+      case "watchtower":
+        eff.raidReduction += 0.12 * L * s; // staffed watchtowers see further
         break;
     }
   });
   eff.buildSpeed = Math.max(0.4, 1 - guild * 0.08); // each guild-hall level: -8% build time
+  eff.raidReduction = Math.min(0.8, eff.raidReduction);
   return eff;
 }
 

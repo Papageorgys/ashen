@@ -9,10 +9,14 @@ import {
   buildMs,
   canBuildType,
   plotDistrict,
+  townWorkers,
+  maxStaff,
   PREREQ,
   ADJ_BONUS,
+  STAFF_BONUS,
   type Plot,
 } from "@/lib/game/township";
+import { freeWorkers } from "@/lib/game/logistics";
 import type { ClanApi } from "@/hooks/useClanGame";
 
 function mins(ms: number) {
@@ -44,6 +48,8 @@ export function TownshipPanel({
 
   const plot = town.plots.find((p) => p.id === sel) ?? null;
   const built = town.plots.filter((p) => p.level > 0).length;
+  const staffed = townWorkers(town);
+  const idle = Math.max(0, (state.domain ? freeWorkers(state.domain) : 0) - staffed);
 
   return (
     <div className="space-y-4">
@@ -92,8 +98,19 @@ export function TownshipPanel({
               build −{Math.round((1 - eff.buildSpeed) * 100)}%
             </span>
           )}
+          {eff.raidReduction > 0 && (
+            <span className="rounded-sm border border-[#7ea86a]/30 bg-[#7ea86a]/[0.06] px-2 py-1 text-[#9cc487]">
+              🗼 raids −{Math.round(eff.raidReduction * 100)}%
+            </span>
+          )}
           <span className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-muted-foreground">
             🪵 {Math.floor(timber)} timber
+          </span>
+          <span
+            className="rounded-sm border border-white/10 bg-black/30 px-2 py-1 text-muted-foreground"
+            title="Idle Domain laborers you can put to work here (staffing lifts a building's output)."
+          >
+            👷 {idle} idle · {staffed} at work
           </span>
         </div>
       </section>
@@ -122,7 +139,7 @@ export function TownshipPanel({
       {/* the selected plot's actions */}
       {plot && (
         <section className="panel rounded-sm p-4">
-          <PlotActions plot={plot} state={state} api={api} timber={timber} now={now} />
+          <PlotActions plot={plot} state={state} api={api} timber={timber} idle={idle} now={now} />
         </section>
       )}
     </div>
@@ -167,6 +184,11 @@ function PlotTile({
             Lv {plot.level}
             {district > 0 && <span className="ml-0.5 text-[#7ea86a]">+{district * 8}%</span>}
           </span>
+          {(plot.workers ?? 0) > 0 && (
+            <span className="text-[8px] tabular-nums text-[#9cc487]">
+              👷 {plot.workers}/{maxStaff(plot)}
+            </span>
+          )}
         </>
       ) : (
         <span className="text-[10px] text-muted-foreground">empty</span>
@@ -191,12 +213,14 @@ function PlotActions({
   state,
   api,
   timber,
+  idle,
   now,
 }: {
   plot: Plot;
   state: GameState;
   api: ClanApi;
   timber: number;
+  idle: number;
   now: number;
 }) {
   const buildSpeed = townshipEffects(state).buildSpeed;
@@ -254,6 +278,40 @@ function PlotActions({
           >
             Raze
           </button>
+        </div>
+        {/* staffing — borrow idle Domain laborers to lift this building's output */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+            Laborers
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-sfx="off"
+              disabled={(plot.workers ?? 0) <= 0}
+              onClick={() => api.staffTownship(plot.id, -1)}
+              className="grid h-6 w-6 place-items-center rounded-sm border border-white/15 text-sm text-muted-foreground transition enabled:hover:border-gold/50 disabled:opacity-30"
+              aria-label="Recall a laborer"
+            >
+              −
+            </button>
+            <span className="min-w-[2.5rem] text-center text-xs tabular-nums text-[#9cc487]">
+              👷 {plot.workers ?? 0}/{maxStaff(plot)}
+            </span>
+            <button
+              type="button"
+              data-sfx="deploy"
+              disabled={idle <= 0 || (plot.workers ?? 0) >= maxStaff(plot)}
+              onClick={() => api.staffTownship(plot.id, 1)}
+              className="grid h-6 w-6 place-items-center rounded-sm border border-white/15 text-sm text-gold transition enabled:hover:border-gold/50 disabled:opacity-30"
+              aria-label="Assign a laborer"
+            >
+              +
+            </button>
+          </div>
+          <span className="text-[10px] text-muted-foreground">
+            {idle} idle · each laborer +{Math.round(STAFF_BONUS * 100)}% output
+          </span>
         </div>
       </div>
     );

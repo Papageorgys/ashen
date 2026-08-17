@@ -29,6 +29,8 @@ import {
   townshipEffects,
   initialTownship,
   canBuildType,
+  townWorkers,
+  maxStaff,
   type BuildingType,
 } from "@/lib/game/township";
 import { professionFromSeed } from "@/lib/game/professions";
@@ -1108,7 +1110,10 @@ export function useClanGame() {
       const lastRaidAt = cur.domain.raids?.[0]?.at ?? 0;
       update((s) => {
         if (!s.domain) return;
-        s.domain = advanceDomain(s.domain, now, { longNight: longNightActive(s, now) });
+        s.domain = advanceDomain(s.domain, now, {
+          longNight: longNightActive(s, now),
+          raidReduction: townshipEffects(s).raidReduction,
+        });
         // a caravan skimmed on the road was only a map flash before — put it in
         // the field report and raise a toast so the loss is never missed
         const top = s.domain.raids?.[0];
@@ -1318,8 +1323,28 @@ export function useClanGame() {
         const name = plot.type ? BUILDINGS[plot.type].name : "the works";
         delete plot.type;
         plot.level = 0;
+        delete plot.workers;
         delete plot.constructing;
         pushLog(s, `${name} razed — the plot stands empty again.`, "info");
+      }),
+
+    /** Staff (or unstaff) a township building with a Domain laborer (delta +1 / −1).
+     * The township borrows from the very same idle pool the resource nodes draw on. */
+    staffTownship: (plotId: string, delta: number) =>
+      update((s) => {
+        const plot = s.township?.plots.find((p) => p.id === plotId);
+        if (!s.township || !plot || !plot.type || plot.level < 1) return;
+        if (delta > 0) {
+          const idle = (s.domain ? freeWorkers(s.domain) : 0) - townWorkers(s.township);
+          if (idle <= 0) return void toast("No idle laborers — free some from the Domain's nodes.");
+          if ((plot.workers ?? 0) >= maxStaff(plot))
+            return void toast("This building is fully staffed for its level.");
+          plot.workers = (plot.workers ?? 0) + 1;
+        } else if ((plot.workers ?? 0) > 0) {
+          const next = (plot.workers ?? 0) - 1;
+          if (next <= 0) delete plot.workers;
+          else plot.workers = next;
+        }
       }),
 
     refreshRecruits: () =>
@@ -1739,7 +1764,9 @@ export function useClanGame() {
         const node = s.domain?.nodes.find((n) => n.id === nodeId);
         if (!s.domain || !node) return;
         if (delta > 0) {
-          if (freeWorkers(s.domain) <= 0) return void toast("No idle laborers to assign.");
+          // the township staffs from the very same pool — count its draw too
+          const idle = freeWorkers(s.domain) - townWorkers(s.township);
+          if (idle <= 0) return void toast("No idle laborers to assign.");
           if (node.workers >= WORKER_CAP_PER_NODE) return void toast("The node is fully manned.");
           node.workers += 1;
         } else if (node.workers > 0) {
