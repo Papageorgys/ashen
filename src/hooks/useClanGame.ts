@@ -21,6 +21,7 @@ import {
   COURT_RANKS,
   CROWN_RANK,
 } from "@/lib/game/court";
+import type { TacReward } from "@/lib/game/tactics";
 import {
   CLAN_LEVELS,
   CLASS_BY_ID,
@@ -310,6 +311,36 @@ export function useClanGame() {
 
   const pushLog = (s: GameState, text: string, tone: "good" | "bad" | "info") => {
     s.log = [{ id: uid(), at: Date.now(), text, tone }, ...s.log].slice(0, 60);
+  };
+
+  /** Grant royal favor and handle any court rank-ups (or coronation) it triggers. */
+  const awardFavor = (s: GameState, amount: number) => {
+    if (!s.court || amount <= 0) return;
+    const before = courtRankIndex(s.court.favor);
+    s.court.favor += amount;
+    const after = courtRankIndex(s.court.favor);
+    for (let r = before + 1; r <= after; r++) {
+      const rank = COURT_RANKS[r]!;
+      if (r >= CROWN_RANK) {
+        s.court.crowned = true;
+        pushLog(
+          s,
+          `The Ashen Throne is yours. You are crowned ${rank.title} — ${rank.holding}.`,
+          "good",
+        );
+        toast.success("You take the crown.", { description: "Sovereign of the Crownlands." });
+        chronicle(
+          s,
+          "rise",
+          "The Crown Taken",
+          `Crowned ${rank.title} — the Crownlands answer to your house.`,
+        );
+      } else {
+        pushLog(s, `The King raises you to ${rank.title} — ${rank.holding}.`, "good");
+        toast.success(`Raised at court: ${rank.title}.`, { description: rank.grant });
+      }
+    }
+    if (after > before) s.court.seenRank = after;
   };
 
   const update = useCallback((fn: (draft: GameState) => void) => {
@@ -1095,8 +1126,6 @@ export function useClanGame() {
             return void toast.error(`The treasury needs ${charge.need} gold for this tithe.`);
           s.gold -= charge.need;
         }
-        const beforeRank = courtRankIndex(s.court.favor);
-        s.court.favor += charge.favor;
         s.gold += charge.gold;
         s.reputation += charge.rep;
         // clear the charge and let the King set another
@@ -1113,34 +1142,38 @@ export function useClanGame() {
         pushLog(s, `Charge answered: ${charge.title}. ${reward}.`, "good");
         toast.success(`The crown is pleased — ${charge.title}.`, { description: reward });
 
-        // did answering it raise you at court?
-        const afterRank = courtRankIndex(s.court.favor);
-        if (afterRank > beforeRank) {
-          for (let r = beforeRank + 1; r <= afterRank; r++) {
-            const rank = COURT_RANKS[r]!;
-            if (r >= CROWN_RANK) {
-              s.court.crowned = true;
-              pushLog(
-                s,
-                `The Ashen Throne is yours. You are crowned ${rank.title} — ${rank.holding}.`,
-                "good",
-              );
-              toast.success("You take the crown.", {
-                description: `Sovereign of the Crownlands.`,
-              });
-              chronicle(
-                s,
-                "rise",
-                "The Crown Taken",
-                `Crowned ${rank.title} — the Crownlands answer to your house.`,
-              );
-            } else {
-              pushLog(s, `The King raises you to ${rank.title} — ${rank.holding}.`, "good");
-              toast.success(`Raised at court: ${rank.title}.`, { description: rank.grant });
-            }
+        // grant favor (and handle any rank-up / coronation it triggers)
+        awardFavor(s, charge.favor);
+      }),
+
+    /** Apply the spoils of a tactical proving — xp to the champions who fought,
+     * gold/reputation to the clan, favor toward the court, and a tally for the
+     * King's patrol charges. Champions cannot die in the proving, so no hp is
+     * written back. */
+    finishTactics: (participantIds: string[], reward: TacReward) =>
+      update((s) => {
+        s.gold += Math.max(0, Math.round(reward.gold));
+        s.reputation += Math.max(0, Math.round(reward.rep));
+        if (s.court) s.court.stats.runs += 1;
+        awardFavor(s, reward.favor);
+        for (const id of participantIds) {
+          const m = s.members.find((x) => x.id === id);
+          if (!m || m.level >= MAX_LEVEL || reward.xp <= 0) continue;
+          m.xp += reward.xp;
+          while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
+            m.xp -= xpForLevel(m.level);
+            m.level += 1;
+            pushLog(s, `${m.name} reached level ${m.level}.`, "good");
           }
-          s.court.seenRank = afterRank;
+          if (m.level >= MAX_LEVEL) m.xp = 0;
         }
+        pushLog(
+          s,
+          reward.won
+            ? `The banner takes the proving — ${reward.gold} gold, +${reward.favor} favor.`
+            : `The banner is bested in the proving, but learns from the bout.`,
+          reward.won ? "good" : "info",
+        );
       }),
 
     recallParty: (partyId: string) =>

@@ -30,6 +30,7 @@ import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
 import { FrontierPanel } from "@/components/game/FrontierPanel";
 import { CourtPanel } from "@/components/game/CourtPanel";
+import { TacticsPanel } from "@/components/game/TacticsPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
@@ -299,6 +300,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: "Petitions and invitations from party leaders",
       },
       { value: "skills", label: "Skills", icon: Sparkles, hint: "Train abilities" },
+      {
+        value: "tactics",
+        label: "The Proving",
+        icon: Swords,
+        hint: "Command a banner in a turn-based bout",
+      },
       { value: "daily", label: "Contracts", icon: ScrollText, hint: "Daily, weekly and monthly" },
       { value: "scriptorium", label: "Scrolls", icon: PenLine, hint: "Imprint spells into vellum" },
     ],
@@ -485,6 +492,8 @@ function Index() {
       <FrontierPanel state={state} frontier={worldFrontier} />
     ) : tool === "court" ? (
       <CourtPanel state={state} api={api} />
+    ) : tool === "tactics" ? (
+      <TacticsPanel state={state} api={api} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "world" ? (
