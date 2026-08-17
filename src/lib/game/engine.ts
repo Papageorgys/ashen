@@ -939,6 +939,80 @@ export function partyPower(state: GameState, party: Party) {
   return Math.round(base * Math.max(0.4, mult));
 }
 
+/* ----------------------------- Warband at war ------------------------------ */
+
+/** The champions free to march to a front — those not away on a run or the march. */
+export function fieldableMembers(state: GameState): Member[] {
+  const away = new Set<string>();
+  for (const p of state.parties ?? []) {
+    if (p.run || p.travel) for (const id of p.memberIds) away.add(id);
+  }
+  return state.members.filter((m) => !away.has(m.id));
+}
+
+/** A read on the levy a clan can throw at a front right now. */
+export interface Warband {
+  /** 1..40 — what the shared war is actually told */
+  power: number;
+  /** champions riding to the front */
+  fielded: number;
+  /** of the riders, how many carry a lingering wound */
+  wounded: number;
+  /** champions absent on hunts or the march, unavailable to levy */
+  away: number;
+  /** shield-bonds among the riders (steady the line) */
+  bondPairs: number;
+  /** blood-feuds among the riders (fracture it) */
+  rivalPairs: number;
+}
+
+/** Keeps the old level-sum/8 feel and the 1..40 commit ceiling the server expects. */
+const WAR_WEIGHT_DIV = 8;
+
+/**
+ * One champion's weight in a levy, anchored to level so the commit scale holds:
+ * gear and mastery lift it, a lingering wound saps it, a chosen trait sharpens
+ * it. For a raw, unkitted, untraited champion this is exactly their level — so a
+ * green roster levies precisely as the old Σlevel/8 did, and only a real warband
+ * pulls away from it.
+ */
+function memberWarWeight(m: Member): number {
+  const gearP = m.gear.reduce((s, g) => s + (ITEM_BY_ID[g]?.power ?? 0), 0);
+  const gearEdge = Math.min(0.6, gearP / (m.level * 12 + 30)); // 0..0.6, how kitted for their level
+  const traitEdge = m.trait ? 0.12 : 0; // a specialised veteran fights harder in a line
+  return m.level * woundFactor(m) * (1 + gearEdge + traitEdge);
+}
+
+/**
+ * The real fighting strength a clan can commit to a front — not a headcount.
+ * Champions away on hunts can't be levied; wounds sap those who ride; shield-
+ * bonds among the riders steady the line while feuds pull it apart. Scaled to the
+ * shared war's 1..40 commit range so the front resolves on who actually rides.
+ */
+export function warbandPower(state: GameState): Warband {
+  const fielded = fieldableMembers(state);
+  const away = state.members.length - fielded.length;
+  let wounded = 0;
+  let weight = 0;
+  for (const m of fielded) {
+    if ((m.wound ?? 0) > 0) wounded++;
+    weight += memberWarWeight(m);
+  }
+  // camaraderie in the ranks: shield-bonds steady a levy, feuds fracture it
+  let bondPairs = 0;
+  let rivalPairs = 0;
+  for (let i = 0; i < fielded.length; i++) {
+    for (let j = i + 1; j < fielded.length; j++) {
+      const aff = getAffinity(state, fielded[i]!.id, fielded[j]!.id);
+      if (aff >= BOND_AT) bondPairs++;
+      else if (aff <= RIVAL_AT) rivalPairs++;
+    }
+  }
+  const bondEdge = Math.min(12, bondPairs * 1.5) - Math.min(8, rivalPairs);
+  const power = Math.max(1, Math.min(40, Math.round((weight + bondEdge) / WAR_WEIGHT_DIV)));
+  return { power, fielded: fielded.length, wounded, away, bondPairs, rivalPairs };
+}
+
 export function maxParties(clanLevel: number, sworn = false) {
   /** Level 0 = no clan of your own: one free company, two if you serve another clan. */
   if (clanLevel < 1) return sworn ? 2 : 1;
