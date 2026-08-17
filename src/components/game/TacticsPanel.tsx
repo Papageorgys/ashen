@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
 import { DAMAGE_LABEL, typeMultVs, memberPower } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
-import { MAX_PARTY_SIZE } from "@/lib/game/data";
+import { CLASS_BY_ID, MAX_PARTY_SIZE } from "@/lib/game/data";
 import {
   startEncounter,
   applyAction,
@@ -11,6 +11,10 @@ import {
   tacticalReward,
   abilityTarget,
   tierById,
+  isCovered,
+  defaultRank,
+  COND_META,
+  MOMENTUM_MAX,
   TAC_TIERS,
   type TacState,
   type TacUnit,
@@ -29,21 +33,36 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
   const [tierId, setTierId] = useState<string>(TAC_TIERS[0]!.id);
   const [pending, setPending] = useState<TacAbility | null>(null);
   const [claimed, setClaimed] = useState(false);
+  // the formation-picking step: a banner chosen, its lines not yet set
+  const [setupPartyId, setSetupPartyId] = useState<string | null>(null);
+  const [formation, setFormation] = useState<Record<string, "front" | "back">>({});
 
   // banners that could enter: have champions and aren't in the field
   const restedBanners = state.parties.filter(
     (p) => p.memberIds.length > 0 && !p.run && !p.travel && !p.farming,
   );
 
-  function begin(partyId: string) {
-    const party = state.parties.find((p) => p.id === partyId);
-    if (!party) return;
-    const members = party.memberIds
+  const membersOf = (partyId: string) =>
+    (state.parties.find((p) => p.id === partyId)?.memberIds ?? [])
       .map((id) => state.members.find((m) => m.id === id))
       .filter((m): m is NonNullable<typeof m> => !!m);
+
+  /** Move from the banner list into the formation step. */
+  function chooseBanner(partyId: string) {
+    const f: Record<string, "front" | "back"> = {};
+    for (const m of membersOf(partyId))
+      f[m.id] = defaultRank(CLASS_BY_ID[m.classId]?.role ?? "blade");
+    setFormation(f);
+    setSetupPartyId(partyId);
+  }
+
+  function begin() {
+    if (!setupPartyId) return;
+    const members = membersOf(setupPartyId);
     if (members.length === 0) return;
     setFought(members.map((m) => m.id));
-    setTac(startEncounter(members, tierId));
+    setTac(startEncounter(members, tierId, formation));
+    setSetupPartyId(null);
     setPending(null);
     setClaimed(false);
   }
@@ -78,6 +97,14 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
             under friendly stakes — your champions cannot fall for good here — but the spoils are
             real: coin, experience, and the crown's favor.
           </p>
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+            Your element leaves its mark: <span className="text-[#ff9d5c]">🔥 fire burns</span>,{" "}
+            <span className="text-[#8fd0e0]">❄ frost chills</span> (foes hit softer),{" "}
+            <span className="text-[#c9a8e6]">🕸 shadow dooms</span> and leeches life back,{" "}
+            <span className="text-[#e0c060]">🩸 physical sunders</span> armour, and holy sears and
+            mends. Hold the front line, protect the back, and press the attack — a full{" "}
+            <span className="text-forge-ember">Press</span> unleashes an empowered Onslaught.
+          </p>
         </section>
 
         <section className="panel rounded-sm p-4">
@@ -105,44 +132,107 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
           </div>
         </section>
 
-        <section className="panel rounded-sm p-4">
-          <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">
-            Choose a banner
-          </h3>
-          <div className="mt-3 space-y-2">
-            {restedBanners.map((p) => {
-              const members = p.memberIds
-                .map((id) => state.members.find((m) => m.id === id))
-                .filter(Boolean);
-              const power = members.reduce((n, m) => n + (m ? memberPower(m) : 0), 0);
-              return (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-black/20 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-display text-sm text-gold">{p.name}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {members.length}/{MAX_PARTY_SIZE} champions · {Math.round(power)} power
+        {!setupPartyId ? (
+          <section className="panel rounded-sm p-4">
+            <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">
+              Choose a banner
+            </h3>
+            <div className="mt-3 space-y-2">
+              {restedBanners.map((p) => {
+                const members = membersOf(p.id);
+                const power = members.reduce((n, m) => n + memberPower(m), 0);
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-black/20 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-display text-sm text-gold">{p.name}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {members.length}/{MAX_PARTY_SIZE} champions · {Math.round(power)} power
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => chooseBanner(p.id)}
+                      className="shrink-0 rounded-sm border border-gold bg-gradient-to-b from-gold to-[#c69a3e] px-3 py-1.5 font-display text-xs uppercase tracking-[0.12em] text-[#120d05] transition hover:brightness-110"
+                    >
+                      Muster ▸
+                    </button>
+                  </div>
+                );
+              })}
+              {restedBanners.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No rested banner stands ready. Recall one from the field, or muster a new one.
+                </p>
+              )}
+            </div>
+          </section>
+        ) : (
+          <section className="panel rounded-sm p-4">
+            <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">
+              Set your formation
+            </h3>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              The <span className="text-gold">front line</span> takes the enemy's blows and shields
+              the <span className="text-gold">back rank</span> behind it — until it falls. Place
+              your shields forward and your fragile behind.
+            </p>
+            <div className="mt-3 space-y-1.5">
+              {membersOf(setupPartyId).map((m) => {
+                const role = CLASS_BY_ID[m.classId]?.role ?? "blade";
+                const rank = formation[m.id] ?? defaultRank(role);
+                return (
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-black/20 px-2.5 py-1.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-xs text-gold">{m.name}</div>
+                      <div className="text-[10px] capitalize text-muted-foreground">
+                        {role} · Lv {m.level}
+                      </div>
+                    </div>
+                    <div className="inline-flex overflow-hidden rounded-sm border border-white/10">
+                      {(["front", "back"] as const).map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setFormation((f) => ({ ...f, [m.id]: r }))}
+                          className={cn(
+                            "px-2.5 py-1 font-display text-[10px] uppercase tracking-wider transition",
+                            rank === r
+                              ? "bg-gold/15 text-gold"
+                              : "text-muted-foreground hover:text-gold/80",
+                          )}
+                        >
+                          {r}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => begin(p.id)}
-                    className="shrink-0 rounded-sm border border-gold bg-gradient-to-b from-gold to-[#c69a3e] px-3 py-1.5 font-display text-xs uppercase tracking-[0.12em] text-[#120d05] transition hover:brightness-110"
-                  >
-                    Enter ▸
-                  </button>
-                </div>
-              );
-            })}
-            {restedBanners.length === 0 && (
-              <p className="text-xs text-muted-foreground">
-                No rested banner stands ready. Recall one from the field, or muster a new one.
-              </p>
-            )}
-          </div>
-        </section>
+                );
+              })}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSetupPartyId(null)}
+                className="rounded-sm border border-border px-3 py-1.5 font-display text-xs uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold hover:text-gold"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={begin}
+                className="flex-1 rounded-sm border border-forge-ember bg-forge-ember/80 py-1.5 font-display text-xs uppercase tracking-[0.12em] text-[#160d06] transition hover:brightness-110"
+              >
+                Enter the proving ▸
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     );
   }
@@ -242,40 +332,84 @@ export function TacticsPanel({ state, api }: { state: GameState; api: ClanApi })
         </button>
       </div>
 
-      {/* foes */}
+      {/* momentum — the press of battle; at full, an Onslaught waits */}
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">Press</span>
+        <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-black/50">
+          <span
+            className={cn(
+              "block h-full motion-safe:transition-[width]",
+              tac.momentum >= MOMENTUM_MAX
+                ? "bg-forge-ember motion-safe:animate-pulse"
+                : "bg-gradient-to-r from-[#c69a3e] to-gold",
+            )}
+            style={{ width: `${Math.round((tac.momentum / MOMENTUM_MAX) * 100)}%` }}
+          />
+        </div>
+        {tac.momentum >= MOMENTUM_MAX && (
+          <span className="text-[9px] uppercase tracking-[0.12em] text-forge-ember">
+            Onslaught ready
+          </span>
+        )}
+      </div>
+
+      {/* foes — drawn up in their lines */}
       <div>
         <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
           The foe
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {foes.map((f) => (
-            <UnitCard
-              key={f.id}
-              unit={f}
-              selectable={foeSelectable && !f.down}
-              effVs={active?.dmgType}
-              onClick={() => foeSelectable && pending && act(pending, f.id)}
-            />
-          ))}
-        </div>
+        {(["front", "back"] as const).map((r) => {
+          const row = foes.filter((f) => f.rank === r);
+          if (!row.length) return null;
+          return (
+            <div key={r} className="mb-1.5">
+              <div className="mb-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground/70">
+                {r} line
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {row.map((f) => (
+                  <UnitCard
+                    key={f.id}
+                    unit={f}
+                    selectable={foeSelectable && !f.down}
+                    effVs={active?.dmgType}
+                    covered={isCovered(tac, f)}
+                    onClick={() => foeSelectable && pending && act(pending, f.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* allies */}
+      {/* your banner — your lines */}
       <div>
         <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
           Your banner
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {allies.map((a) => (
-            <UnitCard
-              key={a.id}
-              unit={a}
-              active={active?.id === a.id}
-              selectable={allySelectable && !a.down}
-              onClick={() => allySelectable && pending && act(pending, a.id)}
-            />
-          ))}
-        </div>
+        {(["front", "back"] as const).map((r) => {
+          const row = allies.filter((a) => a.rank === r);
+          if (!row.length) return null;
+          return (
+            <div key={r} className="mb-1.5">
+              <div className="mb-0.5 text-[8px] uppercase tracking-[0.14em] text-muted-foreground/70">
+                {r} line
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {row.map((a) => (
+                  <UnitCard
+                    key={a.id}
+                    unit={a}
+                    active={active?.id === a.id}
+                    selectable={allySelectable && !a.down}
+                    onClick={() => allySelectable && pending && act(pending, a.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* action bar for the active champion */}
@@ -360,6 +494,7 @@ function UnitCard({
   active,
   selectable,
   effVs,
+  covered,
   onClick,
 }: {
   unit: TacUnit;
@@ -367,6 +502,8 @@ function UnitCard({
   selectable?: boolean;
   /** the active champion's damage type, to hint effectiveness on foe cards */
   effVs?: string | undefined;
+  /** a back-rank foe shielded by its front line — harder to reach with one blow */
+  covered?: boolean;
   onClick?: () => void;
 }) {
   const foe = unit.side === "foe";
@@ -402,7 +539,28 @@ function UnitCard({
         {unit.sub}
         {!foe && <> · {DAMAGE_LABEL[unit.dmgType]}</>}
         {unit.guarding && <span className="text-[#5fd0c6]"> · guarding</span>}
+        {covered && !unit.down && (
+          <span className="text-[#9db4d8]" title="Shielded by its front line — harder to reach">
+            {" "}
+            · covered
+          </span>
+        )}
       </div>
+      {/* the marks a unit is carrying — burn, chill, doom, sunder */}
+      {unit.conds.length > 0 && !unit.down && (
+        <div className="mt-0.5 flex flex-wrap gap-1">
+          {unit.conds.map((c) => (
+            <span
+              key={c.kind}
+              className="rounded-[2px] bg-black/40 px-1 text-[8px] leading-tight text-[#e7d7ac]"
+              title={`${COND_META[c.kind].label} — ${COND_META[c.kind].blurb} (${c.rounds}r)`}
+            >
+              {COND_META[c.kind].glyph}
+              {c.kind === "sunder" && c.pot > 0.1 ? Math.round(c.pot * 10) : ""}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="mt-1 space-y-1">
         <Bar value={unit.hp} max={unit.maxHp} tone={foe ? "#c0503a" : "#7ea86a"} />
         <div className="flex items-center justify-between gap-1 text-[9px] tabular-nums text-muted-foreground">
