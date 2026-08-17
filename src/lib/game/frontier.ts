@@ -722,6 +722,65 @@ export function isContested(state: FrontierState, id: TerritoryId): boolean {
   return TERRITORIES[id].adj.some((nb) => state.control[nb].owner !== holder);
 }
 
+/* ---------------------------------- Clash ---------------------------------- */
+
+export interface Clash {
+  /** the fiercest rival pressing this border, if any */
+  attacker: FactionId | null;
+  attackerName: string;
+  /** the attacker's marshalled force at this front, and the holder's defence */
+  attackerForce: number;
+  defence: number;
+  /** how hard the front is pressed, 0..1 */
+  pressure: number;
+  trend: "secure" | "holding" | "slipping" | "falling";
+}
+
+/**
+ * A read-out of the fight over one territory: who is pushing, how hard, and
+ * whether the holder is winning it — mirroring advanceFrontier's own maths so the
+ * player can see the battle they're committing to.
+ */
+export function territoryClash(state: FrontierState, id: TerritoryId): Clash {
+  const cell = state.control[id];
+  const holder = cell.owner;
+  const held = (f: FactionId) => Math.max(1, territoriesOf(state, f).length);
+  const perT = (f: FactionId) => (state.power[f] ?? 0) / held(f);
+  const atHome = holder === TERRITORIES[id].base;
+  const warWorks =
+    holder === "clan" ? (cell.builds?.bulwark ?? 0) * 9 + (cell.builds?.muster_camp ?? 0) * 5 : 0;
+  const defence = 22 + perT(holder) * 0.5 + (atHome ? 18 : 0) + warWorks;
+
+  let best: { f: FactionId; force: number } | null = null;
+  for (const nb of TERRITORIES[id].adj) {
+    const o = state.control[nb].owner;
+    if (o === holder) continue;
+    const force = perT(o) * FACTIONS[o].ambition;
+    if (!best || force > best.force) best = { f: o, force };
+  }
+  if (!best) {
+    return {
+      attacker: null,
+      attackerName: "",
+      attackerForce: 0,
+      defence,
+      pressure: 0,
+      trend: "secure",
+    };
+  }
+  const ratio = best.force / Math.max(1, defence);
+  const pressure = Math.max(0, Math.min(1, (ratio - 0.5) / 1.6));
+  const trend = ratio < 0.85 ? "holding" : ratio < 1.15 ? "slipping" : "falling";
+  return {
+    attacker: best.f,
+    attackerName: FACTIONS[best.f].name,
+    attackerForce: best.force,
+    defence,
+    pressure,
+    trend,
+  };
+}
+
 /* -------------------------------- Objectives ------------------------------- */
 
 export interface WarObjective {

@@ -475,6 +475,8 @@ export interface GameState {
   /** the domain's war-logistics chain — resource nodes, caravans, the city
    * stockpile and workshops that craft raw into food/arms/mounts (§ logistics) */
   domain?: DomainState;
+  /** atlas locations the clan has scouted — undiscovered places show shrouded */
+  discovered?: string[];
 }
 
 /** One System Forge attempt, kept for the forging ledger. */

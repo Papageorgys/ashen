@@ -59,8 +59,122 @@ export function LogisticsPanel({
           ? "#d8a24a"
           : "#d1603a";
 
+  // the holdfast, drawn: the city at the heart, resource nodes ringed around it,
+  // roads running in, and caravans riding those roads with their raw
+  const holdfast = (() => {
+    const cx = 50;
+    const cy = 33;
+    const R = 26;
+    const count = d.nodes.length || 1;
+    const pos = d.nodes.map((node, i) => {
+      const ang = -Math.PI / 2 + (i * 2 * Math.PI) / count;
+      return {
+        node,
+        x: cx + Math.cos(ang) * R,
+        y: cy + Math.sin(ang) * R * 0.78,
+      };
+    });
+    const cars = d.caravans
+      .map((c) => {
+        const anchor = pos.find((p) => NODE_DEF[p.node.type].raw === c.raw) ?? pos[0];
+        if (!anchor) return null;
+        const p = Math.max(0, Math.min(1, 1 - (c.arrivesAt - now) / CARAVAN_MS));
+        return {
+          x: anchor.x + (cx - anchor.x) * p,
+          y: anchor.y + (cy - anchor.y) * p,
+          key: c.id,
+        };
+      })
+      .filter((c): c is { x: number; y: number; key: string } => c !== null);
+    return { cx, cy, pos, cars };
+  })();
+
   return (
     <div className="space-y-4">
+      {/* the holdfast at a glance — city, nodes, roads and caravans in motion */}
+      <section className="panel rounded-sm p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="font-display text-[11px] uppercase tracking-[0.2em] text-gold">
+            The Holdfast
+          </h3>
+          <span className="text-[9px] text-muted-foreground">
+            {d.nodes.length} nodes · {d.caravans.length} on the road
+          </span>
+        </div>
+        <svg
+          viewBox="0 0 100 66"
+          className="w-full"
+          role="img"
+          aria-label="A map of the holdfast: the city, its resource nodes, and caravans on the roads."
+        >
+          {/* roads from each node into the city */}
+          {holdfast.pos.map((p) => (
+            <line
+              key={`road-${p.node.id}`}
+              x1={p.x}
+              y1={p.y}
+              x2={holdfast.cx}
+              y2={holdfast.cy}
+              stroke="#6b5832"
+              strokeOpacity="0.55"
+              strokeWidth="1"
+              strokeDasharray="1.5 1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {/* the city at the heart */}
+          <circle
+            cx={holdfast.cx}
+            cy={holdfast.cy}
+            r="6.5"
+            fill="#221a0f"
+            stroke="#e7d7ac"
+            strokeWidth="0.8"
+            vectorEffect="non-scaling-stroke"
+          />
+          <text
+            x={holdfast.cx}
+            y={holdfast.cy}
+            fontSize="6"
+            textAnchor="middle"
+            dominantBaseline="central"
+          >
+            ⌂
+          </text>
+          {/* resource nodes ringed around */}
+          {holdfast.pos.map((p) => (
+            <g key={`node-${p.node.id}`}>
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="4.6"
+                fill="#12100a"
+                stroke="#3fb0a6"
+                strokeOpacity="0.5"
+                strokeWidth="0.7"
+                vectorEffect="non-scaling-stroke"
+              />
+              <text x={p.x} y={p.y} fontSize="4.4" textAnchor="middle" dominantBaseline="central">
+                {NODE_DEF[p.node.type].glyph}
+              </text>
+            </g>
+          ))}
+          {/* caravans riding the roads */}
+          {holdfast.cars.map((c) => (
+            <circle
+              key={`car-${c.key}`}
+              cx={c.x}
+              cy={c.y}
+              r="1.7"
+              fill="#5fd0c6"
+              stroke="#0e1a18"
+              strokeWidth="0.5"
+              vectorEffect="non-scaling-stroke"
+              className="motion-safe:animate-pulse"
+            />
+          ))}
+        </svg>
+      </section>
       {/* the workforce and its morale — the engine of the whole chain */}
       <section className="panel-ornate rounded-sm p-4">
         <div className="flex items-center justify-between gap-2">
