@@ -1,11 +1,12 @@
 import { realmSummary, foodBalance } from "@/lib/realm/economy";
 import { RESOURCE_COLOR, RESOURCE_LABEL, RESOURCE_ORDER } from "@/lib/realm/terrain";
+import type { Ledger } from "@/lib/realm/kingdom";
 import type { World } from "@/lib/realm/types";
-import { GameIcon } from "@/components/game/GameIcon";
+import { GameIcon, type IconName } from "@/components/game/GameIcon";
 
-/** The player's realm at a glance — holdings, people, and the treasury of
+/** The player's realm at a glance — holdings, people, treasury, and the
  * resources their provinces yield each turn. */
-export function RealmHud({ world }: { world: World }) {
+export function RealmHud({ world, ledger }: { world: World; ledger?: Ledger }) {
   const player = world.kingdoms.find((k) => k.id === world.playerKingdomId)!;
   const sum = realmSummary(world, player.id);
   const food = foodBalance(world, player.id);
@@ -19,11 +20,19 @@ export function RealmHud({ world }: { world: World }) {
       />
       <div className="mr-2 min-w-0">
         <div className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
-          Your realm
+          {ledger ? `Your realm · Season ${ledger.season}` : "Your realm"}
         </div>
         <div className="gilded font-display text-lg leading-tight">{player.name}</div>
       </div>
 
+      {ledger && (
+        <Gauge
+          icon="coin"
+          label="Treasury"
+          value={ledger.treasury.toLocaleString()}
+          tone="#e7c65a"
+        />
+      )}
       <Gauge icon="home" label="Provinces" value={String(sum.provinceCount)} tone="#e7d7ac" />
       <Gauge icon="worker" label="People" value={sum.population.toLocaleString()} tone="#c9b06a" />
       <Gauge
@@ -32,6 +41,14 @@ export function RealmHud({ world }: { world: World }) {
         value={food.net >= 0 ? `+${food.net}` : String(food.net)}
         tone={food.net >= 0 ? "#5fd0c6" : "#d1603a"}
       />
+      {ledger && (
+        <Gauge
+          icon="crown"
+          label="Unrest"
+          value={`${ledger.unrest}`}
+          tone={ledger.unrest > 45 ? "#d1603a" : ledger.unrest > 25 ? "#d8a24a" : "#7ea86a"}
+        />
+      )}
 
       <div className="ml-1 flex flex-wrap items-center gap-1.5">
         {RESOURCE_ORDER.filter((r) => (sum.production[r] ?? 0) > 0).map((rid) => (
@@ -58,7 +75,7 @@ function Gauge({
   value,
   tone,
 }: {
-  icon: "home" | "worker" | "supply";
+  icon: IconName;
   label: string;
   value: string;
   tone: string;
