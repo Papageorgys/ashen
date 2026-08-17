@@ -29,6 +29,7 @@ import { LegacyPanel } from "@/components/game/LegacyPanel";
 import { BestiaryPanel } from "@/components/game/BestiaryPanel";
 import { RealmPanel } from "@/components/game/RealmPanel";
 import { FrontierPanel } from "@/components/game/FrontierPanel";
+import { CourtPanel } from "@/components/game/CourtPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
@@ -66,6 +67,7 @@ import {
   Skull,
   Menu,
   Crosshair,
+  Crown,
   Handshake,
   PenLine,
   ScrollText,
@@ -330,6 +332,12 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         hint: "The living frontier — factions warring across Aethyr",
       },
       {
+        value: "court",
+        label: "The Court",
+        icon: Crown,
+        hint: "Rise through the King's court — from outpost to the Ashen Throne",
+      },
+      {
         value: "bestiary",
         label: "Bestiary",
         icon: PawPrint,
@@ -475,6 +483,8 @@ function Index() {
       <RealmPanel state={state} api={api} />
     ) : tool === "frontier" ? (
       <FrontierPanel state={state} frontier={worldFrontier} />
+    ) : tool === "court" ? (
+      <CourtPanel state={state} api={api} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "world" ? (
