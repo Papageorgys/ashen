@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ClanCrest } from "@/components/game/ClanCrest";
+import { SoundToggle } from "@/components/game/SoundToggle";
 import { Counter } from "@/components/game/Counter";
 import { DEFAULT_CREST } from "@/lib/game/identity";
 import { MAX_PARTY_SIZE } from "@/lib/game/data";
@@ -93,6 +94,7 @@ export function TitleBar({
         </div>
 
         <div className="flex items-center gap-2">
+          <SoundToggle className="shrink-0" />
           <div className="hidden items-center gap-1.5 md:flex">
             <Readout label="Gold" value={state.gold} />
             {(state.rawAsh ?? 0) >= 1 && (
