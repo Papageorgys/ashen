@@ -162,6 +162,8 @@ export interface DomainState {
   smithyFocus: SmithyFocus;
   /** recent road raids (newest first), for the map's raid flash */
   raids?: RaidRecord[];
+  /** wall-clock of the last time levies were called up from the held realms */
+  leviedAt?: number;
 }
 
 /* -------------------------------- Helpers ---------------------------------- */

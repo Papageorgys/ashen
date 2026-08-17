@@ -436,11 +436,12 @@ function Index() {
     const held = territoriesOf(worldFrontier, "clan").map((id) => ({
       id,
       dev: Math.round(worldFrontier.control[id]?.dev ?? 20),
+      pop: Math.round(worldFrontier.control[id]?.pop ?? 12),
     }));
     const cur = state.warSpoils?.held ?? [];
     const same =
       cur.length === held.length &&
-      cur.every((h, i) => h.id === held[i]!.id && h.dev === held[i]!.dev);
+      cur.every((h, i) => h.id === held[i]!.id && h.dev === held[i]!.dev && h.pop === held[i]!.pop);
     if (!same) api.setWarSpoils(held);
   }, [worldFrontier, state, api]);
 

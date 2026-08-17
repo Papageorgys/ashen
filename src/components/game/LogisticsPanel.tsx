@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
-import { supplyCap } from "@/lib/game/engine";
+import { supplyCap, realmLevy } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import {
   NODE_DEF,
@@ -49,6 +49,7 @@ export function LogisticsPanel({
   const shipVal = shipmentValue(d);
   const supply = Math.floor(state.supply ?? 0);
   const cap = supplyCap(state);
+  const levy = realmLevy(state, now);
 
   const trendTone =
     trend === "well-fed"
@@ -220,6 +221,26 @@ export function LogisticsPanel({
                 </button>
               ))}
             </div>
+            {/* the realm's own people — free levies from the frontier you hold */}
+            <button
+              type="button"
+              disabled={!levy.ready}
+              onClick={() => api.callLevies()}
+              title={
+                levy.count <= 0
+                  ? "Hold a realm on the frontier to call up its people"
+                  : levy.ready
+                    ? `Call up ${levy.count} free laborer${levy.count === 1 ? "" : "s"}`
+                    : `Musters again in ${Math.ceil(levy.readyIn / 60000)}m`
+              }
+              className="mt-1 w-full rounded-sm border border-[#6f8f6a]/50 bg-[#6f8f6a]/10 py-1 text-[10px] text-[#9fca92] transition enabled:hover:border-[#9fca92] disabled:opacity-40"
+            >
+              {levy.count <= 0
+                ? "No realms to levy"
+                : levy.ready
+                  ? `Call up levies · +${levy.count}`
+                  : `Levies muster ${Math.ceil(levy.readyIn / 60000)}m`}
+            </button>
             <p className="mt-1 text-[9px] leading-snug text-muted-foreground">
               Assign idle hands to nodes below to raise their output.
             </p>
