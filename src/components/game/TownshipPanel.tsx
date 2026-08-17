@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
 import { townshipEffects } from "@/lib/game/township";
 import {
@@ -8,7 +7,6 @@ import {
   buildCost,
   buildMs,
   canBuildType,
-  plotDistrict,
   townWorkers,
   maxStaff,
   PREREQ,
@@ -17,6 +15,7 @@ import {
   type Plot,
 } from "@/lib/game/township";
 import { freeWorkers } from "@/lib/game/logistics";
+import { HoldfastMap } from "@/components/game/HoldfastMap";
 import type { ClanApi } from "@/hooks/useClanGame";
 
 function mins(ms: number) {
@@ -115,24 +114,20 @@ export function TownshipPanel({
         </div>
       </section>
 
-      {/* the plot grid */}
+      {/* the holdfast — the town drawn as a walled map */}
       <section className="panel rounded-sm p-4">
-        <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">The Plots</h3>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {town.plots.map((p, i) => (
-            <PlotTile
-              key={p.id}
-              plot={p}
-              district={plotDistrict(town, i)}
-              now={now}
-              selected={sel === p.id}
-              onSelect={() => setSel(sel === p.id ? null : p.id)}
-            />
-          ))}
+        <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">The Holdfast</h3>
+        <div className="mt-3">
+          <HoldfastMap
+            town={town}
+            now={now}
+            selected={sel}
+            onSelect={(id) => setSel(sel === id ? null : id)}
+          />
         </div>
         <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
-          District bonus: a building works {Math.round(ADJ_BONUS * 100)}% harder for each finished
-          neighbour — pack them together.
+          Roads bind finished neighbours into a district: a building works{" "}
+          {Math.round(ADJ_BONUS * 100)}% harder for each one it borders — pack them together.
         </p>
       </section>
 
@@ -143,68 +138,6 @@ export function TownshipPanel({
         </section>
       )}
     </div>
-  );
-}
-
-function PlotTile({
-  plot,
-  district,
-  now,
-  selected,
-  onSelect,
-}: {
-  plot: Plot;
-  district: number;
-  now: number;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const def = plot.type ? BUILDINGS[plot.type] : null;
-  const con = plot.constructing;
-  const total = con ? Math.max(1, con.until - con.startedAt) : 1;
-  const pct = con ? Math.max(0, Math.min(1, (now - con.startedAt) / total)) : 0;
-  const left = con ? Math.max(0, con.until - now) : 0;
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "relative flex aspect-square flex-col items-center justify-center gap-0.5 rounded-sm border p-1 text-center transition",
-        selected ? "border-gold ring-1 ring-gold/50" : "border-white/10 hover:border-gold/40",
-        def ? "bg-[radial-gradient(circle_at_50%_30%,#241a10,#0f0b06)]" : "bg-black/25",
-      )}
-    >
-      {def ? (
-        <>
-          <span className="text-xl leading-none" aria-hidden="true">
-            {def.glyph}
-          </span>
-          <span className="truncate text-[9px] text-[#e7d7ac]">{def.name}</span>
-          <span className="text-[8px] tabular-nums text-gold">
-            Lv {plot.level}
-            {district > 0 && <span className="ml-0.5 text-[#7ea86a]">+{district * 8}%</span>}
-          </span>
-          {(plot.workers ?? 0) > 0 && (
-            <span className="text-[8px] tabular-nums text-[#9cc487]">
-              👷 {plot.workers}/{maxStaff(plot)}
-            </span>
-          )}
-        </>
-      ) : (
-        <span className="text-[10px] text-muted-foreground">empty</span>
-      )}
-      {con && (
-        <div className="absolute inset-x-1 bottom-1">
-          <div className="h-1 overflow-hidden rounded-full bg-black/50">
-            <div
-              className="h-full bg-forge-ember motion-safe:transition-[width]"
-              style={{ width: `${Math.round(pct * 100)}%` }}
-            />
-          </div>
-          <div className="mt-0.5 text-[7px] tabular-nums text-forge-ember">{mins(left)}</div>
-        </div>
-      )}
-    </button>
   );
 }
 
