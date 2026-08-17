@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ClanHeader } from "@/components/game/ClanHeader";
 import { PartyBoard } from "@/components/game/PartyBoard";
+import { RealmAtlas } from "@/components/game/RealmAtlas";
+import { BannerDock, FeedDock } from "@/components/game/MapDocks";
 import { RecruitPanel } from "@/components/game/RecruitPanel";
 import { CraftPanel } from "@/components/game/CraftPanel";
 import { SystemForgePanel } from "@/components/game/SystemForgePanel";
@@ -403,6 +405,14 @@ const NAV_BY_VALUE: Record<string, NavItem> = Object.fromEntries(
   ALL_ITEMS.map((i) => [i.value, i]),
 );
 
+/** Screens opened from the map's HUD (not on the nav rail) — for the panel header. */
+const EXTRA_META: Record<string, { label: string; hint: string }> = {
+  banners: { label: "Banners & Roster", hint: "Raise banners, assign champions, level the clan" },
+  feed: { label: "Field Report", hint: "The running chronicle of your banners in the field" },
+  forge: { label: "The Forge", hint: "Sharpen and reforge gear from raid drops" },
+  warehouse: { label: "The Vault", hint: "Everything your clan has stored" },
+};
+
 function Index() {
   const { state, hydrated, api } = useClanGame();
   const { user, ready: authReady } = useSession();
@@ -515,11 +525,18 @@ function Index() {
   }
 
   const founded = state.clanLevel >= 1;
-  const meta = tool ? NAV_BY_VALUE[tool] : null;
+  const meta = tool ? (NAV_BY_VALUE[tool] ?? EXTRA_META[tool] ?? null) : null;
 
   // every screen except the always-visible map renders inside the slide-over
   const toolBody =
-    tool === "forge" ? (
+    tool === "banners" ? (
+      <div className="space-y-4">
+        <ClanHeader state={state} api={api} />
+        <PartyBoard state={state} api={api} now={now} onOpenTool={setTool} mapless />
+      </div>
+    ) : tool === "feed" ? (
+      <ExpeditionFeed state={state} now={now} />
+    ) : tool === "forge" ? (
       <CraftPanel state={state} api={api} />
     ) : tool === "warehouse" ? (
       <WarehousePanel state={state} api={api} />
@@ -572,31 +589,29 @@ function Index() {
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <CommandBar state={state} email={user?.email ?? null} signedIn={!!user} />
 
-        {/* the war table: a standing nav rail, the map (always the base view)
-            with the roster beneath it, and the live field report alongside */}
+        {/* the war table: a standing nav rail and the map as the whole stage,
+            with the banners and the field report floated over it as HUD panels
+            instead of stacked around it. Everything else opens in a panel. */}
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <NavRail groups={NAV_GROUPS} active={tool} founded={founded} onSelect={setTool} />
 
-          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="stage-scroll min-h-0 min-w-0 space-y-4 px-3 py-4 sm:px-5">
-              <ClanHeader state={state} api={api} />
-              <PartyBoard
-                state={state}
-                api={api}
-                now={now}
-                onOpenTool={setTool}
-                frontier={worldFrontier}
-                onContest={contestFrontier}
-                onBuild={buildFrontier}
-              />
-              <div className="lg:hidden">
-                <ExpeditionFeed state={state} now={now} />
-              </div>
-            </div>
-
-            <aside className="stage-scroll hidden min-h-0 border-l border-border/60 px-3 py-4 lg:block">
-              <ExpeditionFeed state={state} now={now} />
-            </aside>
+          <div className="relative min-h-0 flex-1">
+            <RealmAtlas
+              state={state}
+              api={api}
+              now={now}
+              fill
+              onOpenTool={setTool}
+              frontier={worldFrontier}
+              onContest={contestFrontier}
+              onBuild={buildFrontier}
+              overlays={
+                <>
+                  <BannerDock state={state} onManage={() => setTool("banners")} />
+                  <FeedDock state={state} onOpen={() => setTool("feed")} />
+                </>
+              }
+            />
           </div>
         </div>
         <ChatDock
