@@ -1,16 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  Coins,
-  PackageOpen,
-  Crown,
-  ShieldHalf,
-  Trophy,
-  Flag,
-  LogIn,
-  LogOut,
-  UserRound,
-} from "lucide-react";
+import { LogIn, LogOut, UserRound } from "lucide-react";
+import { GameIcon, type IconName } from "@/components/game/GameIcon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +30,8 @@ import { CASTLE } from "@/lib/game/rivals";
 import { timeOfDay } from "@/lib/game/living";
 import { supabase } from "@/integrations/supabase/client";
 
-/** A single vital gauge in the command bar — an icon, a label, a live value. */
+/** A single vital gauge in the command bar — a crafted icon in a tone-tinted
+ * chip, a label, and a live value; framed like a fitting on the war table. */
 function Vital({
   icon,
   label,
@@ -48,7 +40,7 @@ function Vital({
   tone = "#e7d7ac",
   title,
 }: {
-  icon: ReactNode;
+  icon: IconName;
   label: string;
   value: ReactNode;
   sub?: string;
@@ -57,11 +49,15 @@ function Vital({
 }) {
   return (
     <div
-      className="flex items-center gap-1.5 rounded-sm border border-white/10 bg-black/30 px-2 py-1"
+      className="flex items-center gap-1.5 rounded-sm border border-forge-frame/35 bg-gradient-to-b from-black/45 to-black/20 px-1.5 py-1 shadow-[inset_0_1px_0_oklch(1_0_0/0.05)]"
       title={title}
     >
-      <span className="grid h-5 w-5 place-items-center text-muted-foreground" aria-hidden="true">
-        {icon}
+      <span
+        className="grid h-6 w-6 place-items-center rounded-[3px] border"
+        style={{ borderColor: `${tone}44`, background: `${tone}14`, color: tone }}
+        aria-hidden="true"
+      >
+        <GameIcon name={icon} size={14} />
       </span>
       <div className="leading-none">
         <div className="text-[8px] uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
@@ -142,14 +138,9 @@ export function CommandBar({
 
         {/* the vitals — scroll horizontally on narrow screens */}
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-1">
+          <Vital icon="coin" label="Gold" value={<Counter value={state.gold} />} tone="#e7c65a" />
           <Vital
-            icon={<Coins className="h-3.5 w-3.5" />}
-            label="Gold"
-            value={<Counter value={state.gold} />}
-            tone="#e7c65a"
-          />
-          <Vital
-            icon={<PackageOpen className="h-3.5 w-3.5" />}
+            icon="supply"
             label="Supply"
             value={supply}
             sub={`/${cap}`}
@@ -157,38 +148,33 @@ export function CommandBar({
             title="War supply — spent committing banners to the front"
           />
           <Vital
-            icon={<Crown className="h-3.5 w-3.5" />}
+            icon="crown"
             label="Favor"
             value={favor}
             tone="#d8a24a"
             title={`Court favor to spend · ${rank.title}`}
           />
           <Vital
-            icon={<ShieldHalf className="h-3.5 w-3.5" />}
+            icon="shield"
             label="Renown"
             value={<Counter value={state.reputation} />}
             tone="#c9b06a"
           />
           <Vital
-            icon={<Trophy className="h-3.5 w-3.5" />}
+            icon="spark"
             label="Legacy"
             value={renown}
             tone="#b9a8e6"
             title="Renown from deeds — prestige, the only victory"
           />
           <Vital
-            icon={<Flag className="h-3.5 w-3.5" />}
+            icon="banner"
             label="Banners"
             value={`${score.fullParties}/${slots}`}
             tone="#e7d7ac"
           />
           {(state.rawAsh ?? 0) >= 1 && (
-            <Vital
-              icon={<span className="text-[11px]">🜂</span>}
-              label="Ash"
-              value={Math.round(state.rawAsh ?? 0)}
-              tone="#d18a5a"
-            />
+            <Vital icon="flame" label="Ash" value={Math.round(state.rawAsh ?? 0)} tone="#d18a5a" />
           )}
         </div>
 
