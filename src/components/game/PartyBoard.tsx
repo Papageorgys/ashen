@@ -35,7 +35,7 @@ import { MoreHorizontal } from "lucide-react";
 import { MemberCard } from "./MemberCard";
 import { CLASS_BY_ID, MAX_PARTY_SIZE, ZONES, travelMsTo, type Role } from "@/lib/game/data";
 import {
-  maxParties,
+  bannerCap,
   memberPower,
   partyMembers,
   partyPower,
@@ -421,14 +421,14 @@ export function PartyBoard({
         <div>
           <h2 className="text-lg">War Table</h2>
           <p className="text-xs text-muted-foreground">
-            {state.parties.length} / {maxParties(state.clanLevel, !!state.allegiance)} banners
-            fielded · {unassigned.length} champion(s) idle · {openSeats} open seat(s).
+            {state.parties.length} / {bannerCap(state)} banners fielded · {unassigned.length}{" "}
+            champion(s) idle · {openSeats} open seat(s).
           </p>
         </div>
         <div className="flex items-center gap-1.5">
           <Button
             size="sm"
-            disabled={state.parties.length >= maxParties(state.clanLevel, !!state.allegiance)}
+            disabled={state.parties.length >= bannerCap(state)}
             onClick={api.createParty}
           >
             Raise banner

@@ -89,6 +89,7 @@ import {
 import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "./identity";
 import { initialFrontier, REALM_BOON, type FrontierState, type TerritoryId } from "./frontier";
 import { initialCourt, fillCharges, courtRankIndex, courtStanding, type CourtState } from "./court";
+import { legacyEffects, initialLegacy, type LegacyState } from "./legacy";
 import type { TraitId } from "./traits";
 import { initialDomain, type DomainState } from "./logistics";
 import {
@@ -469,6 +470,8 @@ export interface GameState {
   domain?: DomainState;
   /** atlas locations the clan has scouted — undiscovered places show shrouded */
   discovered?: string[];
+  /** the Ashen Legacy — permanent, carried across ascensions (§ ascension) */
+  legacy?: LegacyState;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -978,7 +981,7 @@ export function partyPower(state: GameState, party: Party) {
   if (ms.length === MAX_PARTY_SIZE) mult += 0.15;
   mult += synergyBonus(ms).power / 100;
   mult += bondBonus(state, party);
-  return Math.round(base * Math.max(0.4, mult));
+  return Math.round(base * Math.max(0.4, mult) * legacyEffects(state).powerMult);
 }
 
 /* ----------------------------- Warband at war ------------------------------ */
@@ -1051,7 +1054,8 @@ export function warbandPower(state: GameState): Warband {
     }
   }
   const bondEdge = Math.min(12, bondPairs * 1.5) - Math.min(8, rivalPairs);
-  const power = Math.max(1, Math.min(40, Math.round((weight + bondEdge) / WAR_WEIGHT_DIV)));
+  const powered = ((weight + bondEdge) / WAR_WEIGHT_DIV) * legacyEffects(state).powerMult;
+  const power = Math.max(1, Math.min(40, Math.round(powered)));
   return { power, fielded: fielded.length, wounded, away, bondPairs, rivalPairs };
 }
 
@@ -1059,6 +1063,33 @@ export function maxParties(clanLevel: number, sworn = false) {
   /** Level 0 = no clan of your own: one free company, two if you serve another clan. */
   if (clanLevel < 1) return sworn ? 2 : 1;
   return Math.min(8, clanLevel);
+}
+
+/* -------------------------------- Ascension -------------------------------- */
+
+/** Banner slots the clan can field — the clan-level cap plus any Legacy grant. */
+export function bannerCap(state: GameState): number {
+  return maxParties(state.clanLevel, !!state.allegiance) + legacyEffects(state).bannerBonus;
+}
+
+/** May the house pass into Legacy right now? Only at the pinnacle of the climb. */
+export function canAscend(state: GameState): { ok: boolean; why: string } {
+  const top = CLAN_LEVELS[CLAN_LEVELS.length - 1]!.level;
+  if ((state.clanLevel ?? 0) < top)
+    return { ok: false, why: `Reach clan level ${top} — the pinnacle — to pass into Legacy` };
+  return { ok: true, why: "" };
+}
+
+/** The Legacy points ascending NOW would grant — the higher the house rose, the more. */
+export function ascensionYield(state: GameState): number {
+  const renown = renownScore(deedsFromState(state));
+  const held = state.warSpoils?.held?.length ?? 0;
+  const rank = courtRankIndex(courtStanding(state));
+  const castle = state.castle?.holder === "player" ? 12 : 0;
+  const base = (state.clanLevel ?? 0) * 3 + Math.floor(renown / 400) + held * 4 + rank * 2 + castle;
+  // each ascension raises the stakes — later runs are worth more
+  const scale = 1 + (state.legacy?.ascensions ?? 0) * 0.15;
+  return Math.max(1, Math.round(base * scale));
 }
 
 /** Can the company be taken in by an established clan yet? */
@@ -1593,22 +1624,26 @@ export function makeLord(f: Founding): Member {
   return lord;
 }
 
-export function initialState(founding: Founding): GameState {
+export function initialState(founding: Founding, carry?: { legacy?: LegacyState }): GameState {
   const lord = makeLord(founding);
+  // the Ashen Legacy carried from a past run seeds a head start for this one
+  const legacy = carry?.legacy;
+  const eff = legacyEffects({ legacy } as GameState);
+  const startClan = eff.startClanLevel;
   const state: GameState = {
     clanName: founding.clanName,
     leaderName: founding.lordName,
     motto: founding.motto,
     crest: founding.crest,
-    clanLevel: 0,
+    clanLevel: startClan,
     reputation: 0,
-    gold: 1200,
+    gold: 1200 + eff.startGold,
     members: [lord],
     parties: [
       { id: "p1", name: `${founding.lordName}'s Company`, memberIds: [lord.id], run: null },
     ],
     inventory: {},
-    recruits: rollRecruits(1),
+    recruits: rollRecruits(Math.max(1, startClan), 5 + eff.startMembers),
     daily: rollDailies(),
     weekly: rollWeeklies(),
     monthly: rollMonthlies(),
@@ -1632,6 +1667,7 @@ export function initialState(founding: Founding): GameState {
       },
     ],
     createdAt: Date.now(),
+    legacy: legacy ?? initialLegacy(),
   };
   fillCharges(state.court!, state);
   chronicle(
@@ -3137,7 +3173,9 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
   }
 
   const spoils = warSpoilsChannels(state); // realms held in the shared war pay out
-  const find = ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find + spoils.find;
+  const leg = legacyEffects(state); // permanent boons carried across ascensions
+  const find =
+    (ms.reduce((s, m) => s + memberFind(m), 0) + findBonus + syn.find + spoils.find) * leg.findMult;
   const fallenNote = fallen.length
     ? ` ${fallenNames.join(", ")} fell and will be carried home.`
     : "";
@@ -3231,6 +3269,7 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
       (1 + syn.gold / 100) *
       cond.gold *
       spoils.gold *
+      leg.goldMult *
       (eliteMet ? ELITE.goldMult : 1),
   );
   const loot: { item: ItemId; qty: number }[] = [];
@@ -3297,13 +3336,14 @@ export function resolveRun(state: GameState, party: Party, zoneId: string): RunR
     }),
     success: true,
     gold,
-    rep: Math.round(zone.rep * (1 + (surging ? SURGE_REP_PCT / 100 : 0))),
+    rep: Math.round(zone.rep * (1 + (surging ? SURGE_REP_PCT / 100 : 0)) * leg.renownMult),
     xp: Math.round(
       zone.xp *
         (1 + syn.xp / 100) *
         (1 + (surging ? SURGE_XP_PCT / 100 : 0)) *
         cond.xp *
         spoils.xp *
+        leg.xpMult *
         (eliteMet ? ELITE.xpMult : 1),
     ),
     kills,

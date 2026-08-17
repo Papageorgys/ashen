@@ -7,10 +7,14 @@ import {
   CLAN_TITLES,
   earnedTitles,
   DEED_LABEL,
+  canAscend,
+  ascensionYield,
   type DeedClass,
   type GameState,
 } from "@/lib/game/engine";
+import { LEGACY_BOONS, LEGACY_BOON_IDS, type LegacyBoonId } from "@/lib/game/legacy";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * Legacy — the only victory (Systems Bible §7). The clan's Deeds, read from the
@@ -46,8 +50,13 @@ export function LegacyPanel({
     inscribeDeed: (id: string) => void;
     declareReckoning: () => void;
     wearTitle: (titleId: string | null) => void;
+    ascend: () => void;
+    purchaseBoon: (id: LegacyBoonId) => void;
   };
 }) {
+  const legacy = state.legacy;
+  const ascendGate = canAscend(state);
+  const willEarn = ascensionYield(state);
   const deeds = useMemo(() => deedsFromState(state), [state]);
   const score = renownScore(deeds);
   const rank = renownRank(score);
@@ -59,6 +68,93 @@ export function LegacyPanel({
 
   return (
     <div className="space-y-4">
+      {/* ------------------------------- ascension ----------------------------- */}
+      <section className="panel-ornate rounded-sm p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              The Ashen Legacy · {legacy?.ascensions ?? 0} ascension
+              {(legacy?.ascensions ?? 0) === 1 ? "" : "s"}
+            </div>
+            <h2 className="gilded font-display text-2xl">Pass into Legacy</h2>
+            <p className="mt-0.5 max-w-md text-xs text-muted-foreground">
+              At the pinnacle, let the house ascend: the run resets, but its deeds endure as
+              permanent boons — and each climb begins from higher ground.
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="font-display text-2xl tabular-nums text-[#b9a8e6]">
+              {legacy?.points ?? 0}
+            </div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              legacy to spend
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          data-sfx="levelup"
+          disabled={!ascendGate.ok}
+          onClick={() => {
+            if (window.confirm(`Ascend now? This resets the run and earns ${willEarn} Legacy.`))
+              api.ascend();
+          }}
+          title={ascendGate.ok ? `Earn ${willEarn} Legacy` : ascendGate.why}
+          className="mt-3 w-full rounded-sm border border-[#7c5cff]/60 bg-[#7c5cff]/15 py-2 font-display text-xs uppercase tracking-[0.14em] text-[#c9bbe8] transition enabled:hover:bg-[#7c5cff]/25 disabled:opacity-40"
+        >
+          {ascendGate.ok ? `Ascend — earn ${willEarn} Legacy` : ascendGate.why}
+        </button>
+
+        {/* the boon tree — permanent, carried across every ascension */}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {LEGACY_BOON_IDS.map((id) => {
+            const def = LEGACY_BOONS[id];
+            const have = legacy?.boons?.[id] ?? 0;
+            const maxed = have >= def.maxLevel;
+            const cost = def.cost(have);
+            const afford = (legacy?.points ?? 0) >= cost;
+            return (
+              <div
+                key={id}
+                className={cn(
+                  "rounded-sm border p-2.5",
+                  maxed ? "border-gold/40 bg-gold/[0.05]" : "border-border/60 bg-black/20",
+                )}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-[3px] border border-white/10 bg-black/40 text-sm"
+                  >
+                    {def.glyph}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-display text-sm text-gold">{def.name}</span>
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {have}/{def.maxLevel}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                      {def.blurb}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={maxed || !afford}
+                  onClick={() => api.purchaseBoon(id)}
+                  className="mt-2 w-full rounded-sm border border-[#7c5cff]/50 bg-[#7c5cff]/10 py-1 text-[11px] uppercase tracking-[0.1em] text-[#c9bbe8] transition enabled:hover:bg-[#7c5cff]/20 disabled:opacity-40"
+                >
+                  {maxed ? "Fully attuned" : `Attune · ${cost} legacy`}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       {/* --------------------------------- renown ------------------------------ */}
       <section className="panel rounded-sm p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -68,8 +164,8 @@ export function LegacyPanel({
             </div>
             <h2 className="font-display text-2xl text-gold">{rank.title}</h2>
             <p className="text-xs text-muted-foreground">
-              {deeds.length} deed{deeds.length === 1 ? "" : "s"} in the Chronicle ·{" "}
-              {inscribed.size} carved in stone
+              {deeds.length} deed{deeds.length === 1 ? "" : "s"} in the Chronicle · {inscribed.size}{" "}
+              carved in stone
             </p>
           </div>
           <div className="text-right">
@@ -122,15 +218,21 @@ export function LegacyPanel({
                 title={has ? (worn ? "Worn — click to remove" : "Click to wear") : t.desc}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`font-display text-sm ${worn ? "text-gold" : "text-foreground"}`}>
+                  <span
+                    className={`font-display text-sm ${worn ? "text-gold" : "text-foreground"}`}
+                  >
                     “{t.title}”
                   </span>
                   {worn ? (
                     <span className="text-[9px] uppercase tracking-widest text-gold">worn</span>
                   ) : has ? (
-                    <span className="text-[9px] uppercase tracking-widest text-emerald-400">earned</span>
+                    <span className="text-[9px] uppercase tracking-widest text-emerald-400">
+                      earned
+                    </span>
                   ) : (
-                    <span className="text-[9px] uppercase tracking-widest text-muted-foreground">locked</span>
+                    <span className="text-[9px] uppercase tracking-widest text-muted-foreground">
+                      locked
+                    </span>
                   )}
                 </div>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">{t.desc}</p>
@@ -179,7 +281,9 @@ export function LegacyPanel({
                       {when(d.at)}
                     </span>
                     {done ? (
-                      <span className="text-[11px] font-display text-gold">✦ Inscribed in stone</span>
+                      <span className="text-[11px] font-display text-gold">
+                        ✦ Inscribed in stone
+                      </span>
                     ) : (
                       <Button
                         size="sm"
