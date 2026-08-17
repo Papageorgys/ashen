@@ -90,6 +90,47 @@ export function holdName(r: Rng): string {
   return `${rpick(r, PREFIX)}${rpick(r, SUFFIX_HOLD)}`;
 }
 
+const GIVEN = [
+  "Theron",
+  "Aldric",
+  "Corvus",
+  "Vael",
+  "Roderic",
+  "Edran",
+  "Maric",
+  "Gareth",
+  "Alaric",
+  "Bran",
+  "Cael",
+  "Doran",
+  "Emeric",
+  "Kael",
+  "Lucan",
+  "Perrin",
+  "Roan",
+  "Torgen",
+];
+const EPITHET = [
+  "Blackhand",
+  "the Bold",
+  "Ironsmith",
+  "Stormborn",
+  "the Grim",
+  "Redmane",
+  "Oathkeeper",
+  "the Younger",
+  "Wolfsbane",
+  "Ashford",
+  "the Cruel",
+  "Longspear",
+  "Truename",
+  "the Grey",
+];
+
+export function generalName(r: Rng): string {
+  return `${rpick(r, GIVEN)} ${rpick(r, EPITHET)}`;
+}
+
 export function kingdomName(r: Rng): string {
   const style = r();
   if (style < 0.5)
