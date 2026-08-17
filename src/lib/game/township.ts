@@ -94,6 +94,53 @@ export const BUILDINGS: Record<BuildingType, BuildingDef> = {
 
 export const BUILDING_TYPES = Object.keys(BUILDINGS) as BuildingType[];
 
+/* ------------------------------ Prerequisites ------------------------------ */
+/** A building's tech gate — the structure that must already stand to raise it. */
+export const PREREQ: Partial<Record<BuildingType, BuildingType>> = {
+  guildhall: "market",
+  library: "market",
+  counting_house: "guildhall",
+  war_shrine: "library",
+};
+
+/** Can this type be raised on a fresh plot yet (are its prerequisites met)? */
+export function canBuildType(
+  town: TownshipState | undefined,
+  type: BuildingType,
+): { ok: boolean; why: string } {
+  const req = PREREQ[type];
+  if (!req) return { ok: true, why: "" };
+  const has = (town?.plots ?? []).some((p) => p.type === req && p.level >= 1);
+  if (!has) return { ok: false, why: `Requires a ${BUILDINGS[req].name}` };
+  return { ok: true, why: "" };
+}
+
+/* -------------------------------- Adjacency -------------------------------- */
+export const GRID_COLS = 3;
+export const ADJ_BONUS = 0.08; // +8% output per orthogonally-adjacent built plot
+
+/** Orthogonal neighbours of a plot index on the square grid. */
+export function neighborIdx(i: number, count = PLOT_COUNT): number[] {
+  const rows = Math.ceil(count / GRID_COLS);
+  const r = Math.floor(i / GRID_COLS);
+  const c = i % GRID_COLS;
+  const out: number[] = [];
+  if (r > 0) out.push(i - GRID_COLS);
+  if (r < rows - 1 && i + GRID_COLS < count) out.push(i + GRID_COLS);
+  if (c > 0) out.push(i - 1);
+  if (c < GRID_COLS - 1 && i + 1 < count) out.push(i + 1);
+  return out;
+}
+
+/** How many of a plot's neighbours hold a finished building — the district it sits in. */
+export function plotDistrict(town: TownshipState | undefined, i: number): number {
+  const plots = town?.plots ?? [];
+  return neighborIdx(i, plots.length).filter((n) => {
+    const p = plots[n];
+    return !!p && !!p.type && p.level >= 1;
+  }).length;
+}
+
 export interface Plot {
   id: string;
   type?: BuildingType;
@@ -151,31 +198,33 @@ export function townshipEffectsOf(town: TownshipState | undefined): TownshipEffe
   };
   if (!town) return eff;
   let guild = 0;
-  for (const p of town.plots) {
-    if (!p.type || p.level < 1) continue;
+  town.plots.forEach((p, i) => {
+    if (!p.type || p.level < 1) return;
     const L = p.level;
+    // a building packed among neighbours works its district harder
+    const m = 1 + ADJ_BONUS * plotDistrict(town, i);
     switch (p.type) {
       case "market":
-        eff.goldPerHour += 40 * L;
+        eff.goldPerHour += 40 * L * m;
         break;
       case "granary":
-        eff.supplyBonus += 18 * L;
-        eff.supplyPerHour += 0.6 * L;
+        eff.supplyBonus += 18 * L * m;
+        eff.supplyPerHour += 0.6 * L * m;
         break;
       case "guildhall":
-        guild += L;
+        guild += L; // build-speed is global, not district-boosted
         break;
       case "counting_house":
-        eff.huntGoldMult += 0.04 * L;
+        eff.huntGoldMult += 0.04 * L * m;
         break;
       case "war_shrine":
-        eff.huntXpMult += 0.04 * L;
+        eff.huntXpMult += 0.04 * L * m;
         break;
       case "library":
-        eff.inspirationPerHour += 0.5 * L;
+        eff.inspirationPerHour += 0.5 * L * m;
         break;
     }
-  }
+  });
   eff.buildSpeed = Math.max(0.4, 1 - guild * 0.08); // each guild-hall level: -8% build time
   return eff;
 }
