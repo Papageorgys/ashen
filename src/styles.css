@@ -183,7 +183,10 @@
     background-attachment: fixed;
   }
 
-  h1, h2, h3, .font-display {
+  h1,
+  h2,
+  h3,
+  .font-display {
     font-family: var(--font-display);
     letter-spacing: 0.02em;
   }
@@ -191,9 +194,10 @@
 
 @utility panel {
   border: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, oklch(0.24 0.022 62) 0%, oklch(0.2 0.02 62) 100%);
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05), 0 10px 24px -18px oklch(0 0 0 / 0.9);
+  background: linear-gradient(180deg, oklch(0.24 0.022 62) 0%, oklch(0.2 0.02 62) 100%);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.05),
+    0 10px 24px -18px oklch(0 0 0 / 0.9);
 }
 
 @utility gilded {
@@ -208,8 +212,11 @@
 @utility l2-window {
   position: relative;
   border: 1px solid var(--forge-frame);
-  background:
-    linear-gradient(180deg, oklch(0.17 0.016 62 / 0.96) 0%, oklch(0.13 0.014 60 / 0.98) 100%);
+  background: linear-gradient(
+    180deg,
+    oklch(0.17 0.016 62 / 0.96) 0%,
+    oklch(0.13 0.014 60 / 0.98) 100%
+  );
   box-shadow:
     inset 0 0 0 1px oklch(0 0 0 / 0.55),
     inset 0 1px 0 oklch(1 0 0 / 0.06),
@@ -218,16 +225,25 @@
 
 @utility l2-titlebar {
   border-bottom: 1px solid var(--forge-frame);
-  background:
-    linear-gradient(180deg, oklch(0.3 0.045 66) 0%, oklch(0.2 0.03 62) 55%, oklch(0.16 0.02 60) 100%);
+  background: linear-gradient(
+    180deg,
+    oklch(0.3 0.045 66) 0%,
+    oklch(0.2 0.03 62) 55%,
+    oklch(0.16 0.02 60) 100%
+  );
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.09);
 }
 
 @utility l2-slot {
   border: 1px solid var(--forge-slot-edge);
-  background:
-    radial-gradient(120% 120% at 50% 0%, oklch(0.26 0.02 62) 0%, oklch(0.13 0.012 60) 100%);
-  box-shadow: inset 0 0 8px oklch(0 0 0 / 0.75), inset 0 1px 0 oklch(1 0 0 / 0.05);
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    oklch(0.26 0.02 62) 0%,
+    oklch(0.13 0.012 60) 100%
+  );
+  box-shadow:
+    inset 0 0 8px oklch(0 0 0 / 0.75),
+    inset 0 1px 0 oklch(1 0 0 / 0.05);
 }
 
 @utility l2-slot-lit {
@@ -267,11 +283,8 @@
   position: absolute;
   inset: 0;
   opacity: 0.05;
-  background-image: repeating-linear-gradient(
-      45deg,
-      oklch(1 0 0 / 0.5) 0 1px,
-      transparent 1px 5px
-    ),
+  background-image:
+    repeating-linear-gradient(45deg, oklch(1 0 0 / 0.5) 0 1px, transparent 1px 5px),
     repeating-linear-gradient(-45deg, oklch(1 0 0 / 0.35) 0 1px, transparent 1px 7px);
 }
 
@@ -306,7 +319,11 @@
 @utility panel-ornate {
   position: relative;
   border: 1px solid var(--forge-frame);
-  background: linear-gradient(180deg, oklch(0.22 0.022 62 / 0.92) 0%, oklch(0.16 0.018 60 / 0.94) 100%);
+  background: linear-gradient(
+    180deg,
+    oklch(0.22 0.022 62 / 0.92) 0%,
+    oklch(0.16 0.018 60 / 0.94) 100%
+  );
   box-shadow:
     inset 0 1px 0 oklch(1 0 0 / 0.06),
     inset 0 0 40px oklch(0 0 0 / 0.45),
@@ -316,7 +333,11 @@
 
 @utility plaque {
   border-bottom: 1px solid var(--forge-frame);
-  background: linear-gradient(180deg, oklch(0.29 0.045 66 / 0.9) 0%, oklch(0.18 0.024 60 / 0.9) 100%);
+  background: linear-gradient(
+    180deg,
+    oklch(0.29 0.045 66 / 0.9) 0%,
+    oklch(0.18 0.024 60 / 0.9) 100%
+  );
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.08);
 }
 
@@ -349,6 +370,24 @@
 
 @utility stage-enter {
   animation: stage-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* the ashen curtain — sweeps up to cover, then lifts away to reveal */
+@keyframes curtain-draw {
+  from {
+    transform: translateY(102%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes curtain-lift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-102%);
+  }
 }
 
 @keyframes flourish-bloom {
