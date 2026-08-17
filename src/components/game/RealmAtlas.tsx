@@ -13,6 +13,7 @@ import {
   PenLine,
   Flame,
   Users,
+  Crown,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -51,6 +52,7 @@ import {
   type FrontierState,
   type TerritoryId,
 } from "@/lib/game/frontier";
+import { courtRank, nextCourtRank, courtRankProgress, chargeProgress } from "@/lib/game/court";
 import type { GameState, Party } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 
@@ -1059,6 +1061,29 @@ export function RealmAtlas({
                       ⌂
                     </span>
                   )}
+                  {/* the King's court at your seat — rank, and a call when charges wait */}
+                  {isHome &&
+                    state?.court &&
+                    (() => {
+                      const favor = state.court.favor;
+                      const ready = state.court.charges.filter(
+                        (c) => chargeProgress(state, c).ready,
+                      ).length;
+                      return (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "pointer-events-none absolute -right-1 -top-1 flex items-center gap-0.5 rounded-[2px] border bg-black/80 px-1 py-px font-display text-[8px] leading-none text-gold",
+                            ready > 0
+                              ? "border-forge-ember motion-safe:animate-pulse"
+                              : "border-gold/70",
+                          )}
+                          title={`Court: ${courtRank(favor).title} · ${favor} favor${ready ? ` · ${ready} charge${ready === 1 ? "" : "s"} ready` : ""}`}
+                        >
+                          ♔{ready > 0 && <span className="text-forge-ember">{ready}</span>}
+                        </span>
+                      );
+                    })()}
                   {/* hold / march dot in play mode */}
                   {showDot && (
                     <span
@@ -1373,8 +1398,52 @@ export function RealmAtlas({
                 const bill = state ? flameRestBill(state) : { wounded: [], gold: 0 };
                 const canPayRest =
                   !!state && atHome && bill.wounded.length > 0 && state.gold >= bill.gold;
+                // your feudal standing at the King's court, shown at your own seat
+                const court = state?.court;
+                const favor = court?.favor ?? 0;
+                const cRank = courtRank(favor);
+                const cNext = nextCourtRank(favor);
+                const cToNext = courtRankProgress(favor);
+                const cReady =
+                  state && court
+                    ? court.charges.filter((c) => chargeProgress(state, c).ready).length
+                    : 0;
                 return (
                   <div className="flex flex-col gap-2">
+                    {/* the feudal court — your standing and the crown's charges, in-world */}
+                    <button
+                      type="button"
+                      onClick={() => onOpenTool("court")}
+                      className="flex flex-col gap-1.5 rounded-sm border border-gold/25 bg-gold/[0.05] p-2.5 text-left transition hover:border-gold/60 hover:bg-gold/10"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5">
+                          <Crown className="h-3.5 w-3.5 text-gold" aria-hidden />
+                          <span className="font-display text-xs text-gold">{cRank.title}</span>
+                        </span>
+                        {cReady > 0 ? (
+                          <span className="rounded-[2px] bg-forge-ember px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.1em] text-[#160d06]">
+                            {cReady} charge{cReady === 1 ? "" : "s"} ready
+                          </span>
+                        ) : (
+                          <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                            {favor} favor
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-black/40">
+                          <span
+                            className="block h-full bg-gradient-to-r from-[#c69a3e] to-gold"
+                            style={{ width: `${Math.round(cToNext * 100)}%` }}
+                          />
+                        </div>
+                        <span className="shrink-0 text-[9px] text-muted-foreground">
+                          {cNext ? `▸ ${cNext.title}` : "Sovereign"}
+                        </span>
+                      </div>
+                    </button>
+
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                         Your home haven
