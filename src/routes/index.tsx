@@ -32,6 +32,7 @@ import { FrontierPanel } from "@/components/game/FrontierPanel";
 import { CourtPanel } from "@/components/game/CourtPanel";
 import { TacticsPanel } from "@/components/game/TacticsPanel";
 import { WarbandPanel } from "@/components/game/WarbandPanel";
+import { LogisticsPanel } from "@/components/game/LogisticsPanel";
 import { WorldPanel } from "@/components/game/WorldPanel";
 import { ChatDock } from "@/components/game/ChatDock";
 import { BossPanel } from "@/components/game/BossPanel";
@@ -71,6 +72,7 @@ import {
   Crosshair,
   Crown,
   ShieldHalf,
+  Boxes,
   Handshake,
   PenLine,
   ScrollText,
@@ -330,6 +332,13 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       },
       { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
       {
+        value: "domain",
+        label: "The Domain",
+        icon: Boxes,
+        hint: "War logistics — nodes, caravans, workshops and supply",
+        requiresClan: true,
+      },
+      {
         value: "sysforge",
         label: "Town Smithy",
         icon: Anvil,
@@ -504,6 +513,8 @@ function Index() {
       <TacticsPanel state={state} api={api} />
     ) : tool === "warband" ? (
       <WarbandPanel state={state} api={api} />
+    ) : tool === "domain" ? (
+      <LogisticsPanel state={state} api={api} now={now} />
     ) : tool === "boss" ? (
       <BossPanel boss={boss} state={state} api={api} now={now} myId={user?.id ?? null} />
     ) : tool === "world" ? (
