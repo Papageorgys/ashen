@@ -34,6 +34,10 @@ Server-authoritative tick for Aethyr's shared war (the HOI4 layer).
   on its own clock even with zero players online. The anon JWT carries no `sub`, so
   the heartbeat only ticks the sim — it can never contest or build for anyone.
 
+On the live tick, a contested front also emits an ambient "skirmish" dispatch
+(named warlords probing the line) even when no border moves, so the shared war
+chronicle is never silent — kept in sync with `src/lib/game/frontier.ts`.
+
 The live function body is the source of truth (redeploy with `deploy_edge_function`
 to change it). This directory documents it; the migration lives in
 `supabase/migrations/20260816_world_state_frontier.sql`.

@@ -16,6 +16,7 @@ import {
 } from "@/lib/game/data";
 import { canRefine, shotBatchCost, type GameState } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
+import { marketIndex, travelingMerchant } from "@/lib/game/living";
 import { ItemIcon } from "./ItemIcon";
 import { ItemTooltip } from "./ItemTooltip";
 
@@ -90,16 +91,46 @@ function Row({
 
 export function MarketPanel({ state, api }: { state: GameState; api: ClanApi }) {
   const shotsOn = state.shotsEnabled !== false;
+  const dayIdx = Math.floor(Date.now() / 86400000);
+  const idx = marketIndex(dayIdx);
+  const trend = Math.round((idx - 1) * 100);
+  const merchant = travelingMerchant(dayIdx);
 
   return (
     <section className="space-y-4">
+      {/* the living market — today's index and any merchant passing through */}
+      <div className="rounded-sm border border-gold/20 bg-black/30 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            Market Prices
+          </span>
+          <span
+            className="text-xs tabular-nums"
+            style={{ color: trend >= 0 ? "#7ea86a" : "#d1603a" }}
+            title="How much the market moves what your spoils fetch when sold today"
+          >
+            {trend >= 0 ? "▲" : "▼"} {Math.abs(trend)}%
+          </span>
+        </div>
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+          {trend >= 6
+            ? "Coin flows freely — a good day to sell your spoils."
+            : trend <= -6
+              ? "Buyers are tight-fisted today; hold your spoils if you can."
+              : "Steady trade in the market square."}
+        </p>
+        {merchant && (
+          <p className="mt-1 text-[11px] italic leading-snug text-[#e7d7ac]">🛒 {merchant.blurb}</p>
+        )}
+      </div>
+
       <header className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg">Town Market — Shot Press</h2>
           <p className="text-xs text-muted-foreground">
             No artisan can press shots; only the town presses take Souls and Spirits. A loaded shot
-            adds +{Math.round(SHOT_BOOST * 100)}% damage ({Math.round(BLESSED_BOOST * 100)}% blessed)
-            and is spent on every attack — a luxury, never a requirement.
+            adds +{Math.round(SHOT_BOOST * 100)}% damage ({Math.round(BLESSED_BOOST * 100)}%
+            blessed) and is spent on every attack — a luxury, never a requirement.
           </p>
         </div>
         <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
@@ -137,8 +168,7 @@ export function MarketPanel({ state, api }: { state: GameState; api: ClanApi }) 
             ))}
           </div>
           <h4 className="mt-3 font-display text-xs uppercase tracking-widest text-muted-foreground">
-            Blessed variants — {BLESSED_MULT}× the price, +
-            {Math.round(BLESSED_BOOST * 100)}% damage
+            Blessed variants — {BLESSED_MULT}× the price, +{Math.round(BLESSED_BOOST * 100)}% damage
           </h4>
           <div className="mt-2 grid gap-2">
             {SHOT_GRADES.map((g) => (
@@ -149,7 +179,8 @@ export function MarketPanel({ state, api }: { state: GameState; api: ClanApi }) 
       ))}
 
       <p className="text-[10px] text-muted-foreground">
-        Press prices scale with each grade's gold faucet ({SHOT_GRADES.map((g) => `${g} ${SHOT_SPECS[g].costPerShot}g`).join(" · ")} per shot),
+        Press prices scale with each grade's gold faucet (
+        {SHOT_GRADES.map((g) => `${g} ${SHOT_SPECS[g].costPerShot}g`).join(" · ")} per shot),
         holding the shot drain at roughly a third of your income at every tier.
       </p>
     </section>
