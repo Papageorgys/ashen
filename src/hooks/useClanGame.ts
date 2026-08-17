@@ -137,6 +137,8 @@ import {
   canAscend,
   ascensionYield,
   bannerCap,
+  abyssReward,
+  abyssChance,
   learnSkill as learnSkillFn,
   learnableSkills as learnableSkillsFn,
   skillCost as skillCostFn,
@@ -1162,6 +1164,56 @@ export function useClanGame() {
         s.legacy.boons[id] = have + 1;
         pushLog(s, `The Legacy deepens — ${def.name} attuned to rank ${have + 1}.`, "good");
         toast.success(`${def.name} — rank ${have + 1}.`);
+      }),
+
+    /** Send a banner into the endless Abyss, one depth deeper than the last cleared. */
+    descendAbyss: (partyId: string) =>
+      update((s) => {
+        const p = s.parties.find((x) => x.id === partyId);
+        if (!p) return;
+        if (p.memberIds.length === 0)
+          return void toast.error("Send a manned banner into the Abyss.");
+        if (p.run || p.travel) return void toast.error("That banner is already in the field.");
+        const depth = (s.abyss?.depth ?? 0) + 1;
+        const power = partyPower(s, p);
+        const win = Math.random() < abyssChance(power, depth);
+        if (win) {
+          s.abyss = { depth };
+          const r = abyssReward(depth);
+          s.gold += r.gold;
+          s.inspiration = (s.inspiration ?? 0) + r.inspiration;
+          for (const id of p.memberIds) {
+            const m = s.members.find((x) => x.id === id);
+            if (!m) continue;
+            m.xp += r.xp;
+            while (m.level < MAX_LEVEL && m.xp >= xpForLevel(m.level)) {
+              m.xp -= xpForLevel(m.level);
+              m.level += 1;
+            }
+            if (m.level >= MAX_LEVEL)
+              while (m.xp >= xpForParagon(m.paragon ?? 0)) {
+                m.xp -= xpForParagon(m.paragon ?? 0);
+                m.paragon = (m.paragon ?? 0) + 1;
+              }
+          }
+          pushLog(
+            s,
+            `${p.name} descends to Abyss depth ${depth} — +${r.gold} gold; the clan attunes deeper to the dark.`,
+            "good",
+          );
+          toast.success(`Abyss depth ${depth} cleared.`, {
+            description: `+${r.gold} gold · +${r.xp} xp each · deeper attunement.`,
+          });
+          playCue("levelup");
+        } else {
+          for (const id of p.memberIds) {
+            const m = s.members.find((x) => x.id === id);
+            if (m) m.wound = (m.wound ?? 0) + 2;
+          }
+          pushLog(s, `The Abyss at depth ${depth} throws ${p.name} back, bloodied.`, "bad");
+          toast.error(`Depth ${depth} holds — the banner is wounded.`);
+          playCue("error");
+        }
       }),
 
     refreshRecruits: () =>

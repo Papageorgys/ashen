@@ -476,6 +476,8 @@ export interface GameState {
   legacy?: LegacyState;
   /** clan Ascendancy — levels climbed past the clan-level cap (§ paragon) */
   ascendancy?: number;
+  /** The Abyss — deepest depth cleared in the endless descent (§ endgame) */
+  abyss?: { depth: number };
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -1007,7 +1009,8 @@ export function partyPower(state: GameState, party: Party) {
     base *
       Math.max(0.4, mult) *
       legacyEffects(state).powerMult *
-      ascendancyEffects(state).powerMult,
+      ascendancyEffects(state).powerMult *
+      abyssalPowerMult(state),
   );
 }
 
@@ -1084,7 +1087,8 @@ export function warbandPower(state: GameState): Warband {
   const powered =
     ((weight + bondEdge) / WAR_WEIGHT_DIV) *
     legacyEffects(state).powerMult *
-    ascendancyEffects(state).powerMult;
+    ascendancyEffects(state).powerMult *
+    abyssalPowerMult(state);
   const power = Math.max(1, Math.min(40, Math.round(powered)));
   return { power, fielded: fielded.length, wounded, away, bondPairs, rivalPairs };
 }
@@ -1122,6 +1126,34 @@ export function ascendancyEffects(state: GameState): AscendancyEffects {
     powerMult: 1 + a * 0.02,
     bannerBonus: Math.floor(a / 4),
   };
+}
+
+/* ---------------------------------- Abyss ---------------------------------- */
+/**
+ * The Abyss — an endless descent beneath Aethyr. Each depth is harder than the
+ * last with no ceiling, so there is always a floor you cannot yet clear; and
+ * every depth cleared attunes the whole clan to the dark, a small PERMANENT lift
+ * to fighting power that stacks forever (the endgame power-chase). It is the
+ * proving ground for everything the Legacy, Ascendancy and Paragon have built.
+ */
+export function abyssDifficulty(depth: number): number {
+  return Math.round(360 * Math.pow(1.17, depth)); // banner power a depth demands
+}
+export function abyssReward(depth: number): { gold: number; xp: number; inspiration: number } {
+  return {
+    gold: Math.round(2200 * Math.pow(1.16, depth)),
+    xp: Math.round(5200 * Math.pow(1.14, depth)),
+    inspiration: 1 + Math.floor(depth / 4),
+  };
+}
+/** The permanent power the clan's deepest descent has attuned — +2.5%/depth. */
+export function abyssalPowerMult(state: GameState): number {
+  return 1 + (state.abyss?.depth ?? 0) * 0.025;
+}
+/** The odds a banner of this power clears the given depth (0.05..0.95). */
+export function abyssChance(power: number, depth: number): number {
+  const ratio = power / abyssDifficulty(depth);
+  return Math.max(0.05, Math.min(0.95, ratio - 0.2));
 }
 
 /** Banner slots the clan can field — the clan-level cap, Legacy and Ascendancy. */
