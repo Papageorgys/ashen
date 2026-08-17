@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { TERRAIN } from "@/lib/realm/terrain";
 import { makeRng } from "@/lib/realm/rng";
+import { armyPos, troopCount, type Army } from "@/lib/realm/army";
 import type { Point, Province, Settlement, World } from "@/lib/realm/types";
 import { AtlasAtmosphere } from "@/components/game/AtlasAtmosphere";
 
@@ -114,11 +115,17 @@ export function RealmMap({
   world,
   selectedId,
   onSelect,
+  armies = [],
+  selectedArmyId = null,
+  onSelectArmy,
   className,
 }: {
   world: World;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  armies?: Army[];
+  selectedArmyId?: string | null;
+  onSelectArmy?: (id: string) => void;
   className?: string;
 }) {
   const { width, height } = world;
@@ -321,6 +328,70 @@ export function RealmMap({
           )}
           {/* settlements on top */}
           <g dangerouslySetInnerHTML={{ __html: settleMarks }} />
+
+          {/* march path of the selected army */}
+          {selectedArmyId &&
+            (() => {
+              const a = armies.find((x) => x.id === selectedArmyId);
+              if (!a || a.path.length === 0) return null;
+              const pts = [armyPos(world, a), ...a.path.map((id) => provById.get(id)!.center)];
+              return (
+                <path
+                  d={smooth(pts)}
+                  fill="none"
+                  stroke="#f2d488"
+                  strokeWidth={2.4}
+                  strokeOpacity={0.85}
+                  strokeDasharray="7 5"
+                  strokeLinecap="round"
+                />
+              );
+            })()}
+
+          {/* armies — formations physically on the map */}
+          {armies.map((a) => {
+            const pos = armyPos(world, a);
+            const color = kingdomColor.get(a.ownerId) ?? "#b8a06a";
+            const sel = a.id === selectedArmyId;
+            const n = troopCount(a);
+            const label = n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+            return (
+              <g
+                key={a.id}
+                transform={`translate(${pos.x} ${pos.y})`}
+                className={onSelectArmy ? "cursor-pointer" : undefined}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!moved.current) onSelectArmy?.(a.id);
+                }}
+              >
+                <ellipse cx={0} cy={7} rx={13} ry={4} fill="#000" opacity={0.32} />
+                {sel && <circle r={17} fill="none" stroke="#f2d488" strokeWidth={2} />}
+                <path d="M -8 -13 L 4 -13 L 1 -9 L 4 -5 L -8 -5 Z" fill={color} />
+                <rect x={-9} y={-13} width={2} height={20} fill="#2a2015" />
+                <rect
+                  x={-11}
+                  y={-4}
+                  width={22}
+                  height={13}
+                  rx={2.5}
+                  fill="#211b12"
+                  stroke={color}
+                  strokeWidth={1.5}
+                />
+                <text
+                  x={0}
+                  y={5.5}
+                  textAnchor="middle"
+                  fontFamily="Cinzel, Georgia, serif"
+                  fontSize={9}
+                  fill="#f0e4c4"
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
         </g>
       </svg>
       <AtlasAtmosphere />
