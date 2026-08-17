@@ -929,6 +929,22 @@ export function realmLevy(
 /** What it costs to commit a banner to a front (spent on the push). */
 export const CONTEST_SUPPLY = 15;
 
+/* Provisioning the war — champions in the field must be fed. The domain's
+ * surplus rations feed them first (the link that ties domain food to the
+ * roster); any shortfall is foraged for gold — a gentle upkeep that only bites
+ * while you actively campaign, and that a working granary erases entirely. */
+export const PROVISION_PER_HR = 1; // provisions a campaigning champion eats per hour
+export const PROVISION_GOLD = 4; // gold to forage one provision when the stores run short
+const PROVISION_RESERVE_HOURS = 4; // hours of workforce food kept back before the war is fed
+
+/** How many provisions the warband in the field eats each hour, right now. */
+export function provisionNeedPerHour(state: GameState): number {
+  const campaigners = new Set(
+    (state.parties ?? []).filter((p) => p.run).flatMap((p) => p.memberIds),
+  ).size;
+  return campaigners * PROVISION_PER_HR;
+}
+
 /** Shield-bonded pairs (affinity ≥ BOND_AT) both riding in this banner. */
 export function bondedPairsInParty(state: GameState, party: Party): number {
   const ids = party.memberIds;
@@ -1973,6 +1989,36 @@ export function realmPulse(state: GameState) {
   const marching = new Set(state.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
   for (const m of state.members)
     if ((m.wound ?? 0) > 0 && !marching.has(m.id)) m.wound = Math.max(0, (m.wound ?? 0) - 1);
+
+  // provisioning the war: the champions in the field must be fed. The domain's
+  // surplus rations feed them first; the shortfall is foraged for gold; if
+  // neither covers it, the banners go hungry (a surfaced setback).
+  const campaigners = marching.size;
+  if (campaigners > 0) {
+    const provHours = Math.min(hours, 6); // forgive long offline gaps — never a punishing bill
+    let need = campaigners * PROVISION_PER_HR * provHours;
+    const dom = state.domain;
+    if (dom) {
+      const reserve = dom.workers * 0.5 * PROVISION_RESERVE_HOURS; // protect the workforce's own food
+      const surplus = Math.max(0, (dom.goods.rations ?? 0) - reserve);
+      const fromFood = Math.min(need, surplus); // 1 ration ≈ 1 provision
+      if (fromFood > 0) {
+        dom.goods.rations = (dom.goods.rations ?? 0) - fromFood;
+        need -= fromFood;
+      }
+    }
+    if (need > 0) {
+      const goldNeed = need * PROVISION_GOLD;
+      const pay = Math.min(state.gold, goldNeed);
+      state.gold -= pay;
+      const unpaid = need - pay / PROVISION_GOLD;
+      if (unpaid > 0.5) {
+        // couldn't feed them — the warband goes hungry, and it costs standing
+        state.reputation = Math.max(0, state.reputation - Math.min(3, unpaid * 0.2));
+        pushLog(state, "Your banners go hungry in the field — provisions ran short.", "bad");
+      }
+    }
+  }
 
   // bonds are living — those kept apart slowly drift toward indifference
   driftBonds(state, hours);
