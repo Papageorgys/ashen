@@ -18,8 +18,14 @@ import {
   fillCharges,
   chargeProgress,
   courtRankIndex,
+  courtStanding,
   COURT_RANKS,
   CROWN_RANK,
+  BOONS,
+  canPetition,
+  charterSupply,
+  musterLaborers,
+  type BoonId,
 } from "@/lib/game/court";
 import type { TacReward } from "@/lib/game/tactics";
 import { traitField, TRAITS, traitsFor, type TraitId } from "@/lib/game/traits";
@@ -248,6 +254,9 @@ function patch(loaded: GameState): GameState {
   loaded.court = loaded.court ?? initialCourt();
   loaded.court.stats = loaded.court.stats ?? { kills: 0, runs: 0, bossKills: 0 };
   loaded.court.charges = loaded.court.charges ?? [];
+  // pre-split saves kept rank in the favor purse; seed standing from it so no one
+  // is demoted, then favor becomes freely spendable from here on
+  loaded.court.standing = loaded.court.standing ?? loaded.court.favor;
   fillCharges(loaded.court, loaded);
   // the war-logistics domain post-dates older saves
   loaded.domain = loaded.domain ?? initialDomain(Date.now());
@@ -356,9 +365,12 @@ export function useClanGame() {
     if (!s.court || amount <= 0) return;
     const weekIdx = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000));
     const scaled = Math.round(amount * courtSeason(weekIdx).favorMult);
-    const before = courtRankIndex(s.court.favor);
+    // standing (cumulative) drives rank; favor (the purse) is what gets spent —
+    // earning grows both, so a royal boon never costs you your title
+    s.court.standing = (s.court.standing ?? s.court.favor) + scaled;
+    const before = courtRankIndex(s.court.standing - scaled);
     s.court.favor += scaled;
-    const after = courtRankIndex(s.court.favor);
+    const after = courtRankIndex(s.court.standing);
     for (let r = before + 1; r <= after; r++) {
       const rank = COURT_RANKS[r]!;
       if (r >= CROWN_RANK) {
@@ -1303,6 +1315,43 @@ export function useClanGame() {
 
         // grant favor (and handle any rank-up / coronation it triggers)
         awardFavor(s, charge.favor);
+      }),
+
+    /** Spend royal favor on a boon — the sink that ties the court back into the
+     * war (supply), the roster (healing) and the domain (laborers). */
+    petitionBoon: (id: BoonId) =>
+      update((s) => {
+        if (!s.court) return;
+        const def = BOONS[id];
+        const gate = canPetition(s, id);
+        if (!gate.ok) return void toast.error(gate.why);
+        const rank = courtRankIndex(courtStanding(s));
+        s.court.favor = Math.max(0, s.court.favor - def.cost);
+        if (id === "charter") {
+          const ship = charterSupply(rank);
+          const cap = supplyCap(s);
+          s.supply = Math.min(cap, (s.supply ?? 0) + ship);
+          pushLog(
+            s,
+            `The crown grants a War Charter — ${ship} supply shipped to the front.`,
+            "good",
+          );
+          toast.success("War Charter granted.", { description: `+${ship} war supply.` });
+        } else if (id === "healers") {
+          const wounded = s.members.filter((m) => (m.wound ?? 0) > 0).length;
+          for (const m of s.members) m.wound = undefined;
+          pushLog(s, `The King's healers ride out — the warband's wounds are mended.`, "good");
+          toast.success("Royal Healers dispatched.", {
+            description: wounded
+              ? `${wounded} champion${wounded === 1 ? "" : "s"} made whole.`
+              : "The ranks are already hale.",
+          });
+        } else {
+          const n = musterLaborers(rank);
+          if (s.domain) s.domain.workers += n;
+          pushLog(s, `A royal Muster Writ levies ${n} laborers to your domain.`, "good");
+          toast.success("Muster Writ granted.", { description: `+${n} domain laborers.` });
+        }
       }),
 
     /** Apply the spoils of a tactical proving — xp to the champions who fought,

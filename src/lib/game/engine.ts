@@ -94,7 +94,7 @@ import {
   type FrontierState,
   type TerritoryId,
 } from "./frontier";
-import { initialCourt, fillCharges, type CourtState } from "./court";
+import { initialCourt, fillCharges, courtRankIndex, courtStanding, type CourtState } from "./court";
 import type { TraitId } from "./traits";
 import { initialDomain, type DomainState } from "./logistics";
 import {
@@ -903,7 +903,9 @@ export const BOND_POWER_CAP = 0.2;
 /** The most supply your treasury can hold — grows with realms held and the vault. */
 export function supplyCap(state: GameState): number {
   const held = state.warSpoils?.held?.length ?? 0;
-  return 60 + held * 40 + (state.keep?.vault ?? 0) * 20;
+  // a landed lord commands greater logistics — court rank widens the war chest
+  const rank = courtRankIndex(courtStanding(state));
+  return 60 + held * 40 + (state.keep?.vault ?? 0) * 20 + rank * 15;
 }
 /** What it costs to commit a banner to a front (spent on the push). */
 export const CONTEST_SUPPLY = 15;
@@ -1941,6 +1943,13 @@ export function realmPulse(state: GameState) {
   if (held.length) {
     const rate = held.reduce((n, h) => n + 0.6 + (h.dev ?? 20) / 90, 0); // per hour
     state.supply = Math.min(supplyCap(state), (state.supply ?? 0) + rate * hours);
+    // the crown favors a landed lord — holding ground abroad advances your
+    // standing at court (both the ladder and the spendable purse)
+    if (state.court) {
+      const favorGain = held.length * 0.5 * hours; // ~0.5 favor / realm / hour
+      state.court.standing = (state.court.standing ?? state.court.favor) + favorGain;
+      state.court.favor += favorGain;
+    }
   }
   const marching = new Set(state.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
   for (const m of state.members)

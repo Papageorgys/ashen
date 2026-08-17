@@ -59,7 +59,13 @@ import {
   type FrontierState,
   type TerritoryId,
 } from "@/lib/game/frontier";
-import { courtRank, nextCourtRank, courtRankProgress, chargeProgress } from "@/lib/game/court";
+import {
+  courtRank,
+  courtStanding,
+  nextCourtRank,
+  courtRankProgress,
+  chargeProgress,
+} from "@/lib/game/court";
 import { timeOfDay, realmProsperity } from "@/lib/game/living";
 import { NODE_DEF, RAW_GLYPH, CARAVAN_MS, type Raw } from "@/lib/game/logistics";
 import type { GameState, Party } from "@/lib/game/engine";
@@ -1328,7 +1334,8 @@ export function RealmAtlas({
                   {isHome &&
                     state?.court &&
                     (() => {
-                      const favor = state.court.favor;
+                      const favor = Math.floor(state.court.favor);
+                      const rankTitle = courtRank(courtStanding(state)).title;
                       const ready = state.court.charges.filter(
                         (c) => chargeProgress(state, c).ready,
                       ).length;
@@ -1341,7 +1348,7 @@ export function RealmAtlas({
                               ? "border-forge-ember motion-safe:animate-pulse"
                               : "border-gold/70",
                           )}
-                          title={`Court: ${courtRank(favor).title} · ${favor} favor${ready ? ` · ${ready} charge${ready === 1 ? "" : "s"} ready` : ""}`}
+                          title={`Court: ${rankTitle} · ${favor} favor${ready ? ` · ${ready} charge${ready === 1 ? "" : "s"} ready` : ""}`}
                         >
                           ♔{ready > 0 && <span className="text-forge-ember">{ready}</span>}
                         </span>
@@ -1876,10 +1883,10 @@ export function RealmAtlas({
                   !!state && atHome && bill.wounded.length > 0 && state.gold >= bill.gold;
                 // your feudal standing at the King's court, shown at your own seat
                 const court = state?.court;
-                const favor = court?.favor ?? 0;
-                const cRank = courtRank(favor);
-                const cNext = nextCourtRank(favor);
-                const cToNext = courtRankProgress(favor);
+                const standing = state ? courtStanding(state) : 0;
+                const cRank = courtRank(standing);
+                const cNext = nextCourtRank(standing);
+                const cToNext = courtRankProgress(standing);
                 const cReady =
                   state && court
                     ? court.charges.filter((c) => chargeProgress(state, c).ready).length
@@ -1922,7 +1929,7 @@ export function RealmAtlas({
                           </span>
                         ) : (
                           <span className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-                            {favor} favor
+                            {Math.floor(court?.favor ?? 0)} favor
                           </span>
                         )}
                       </div>

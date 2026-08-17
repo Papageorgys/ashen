@@ -104,10 +104,20 @@ export const COURT_RANKS: CourtRank[] = [
 
 export const CROWN_RANK = COURT_RANKS.length - 1;
 
-export function courtRankIndex(favor: number): number {
+export function courtRankIndex(standing: number): number {
   let r = 0;
-  for (const rank of COURT_RANKS) if (favor >= rank.favor) r = rank.index;
+  for (const rank of COURT_RANKS) if (standing >= rank.favor) r = rank.index;
   return r;
+}
+
+/**
+ * A house's cumulative STANDING at court — the total favor it has ever earned.
+ * This drives rank and never falls, so spending favor on a royal boon can never
+ * cost you your title. (Old saves that predate the split read their rank off the
+ * favor purse until the migration seeds standing.)
+ */
+export function courtStanding(state: GameState): number {
+  return state.court?.standing ?? state.court?.favor ?? 0;
 }
 export function courtRank(favor: number): CourtRank {
   return COURT_RANKS[courtRankIndex(favor)]!;
@@ -135,7 +145,7 @@ export function courtEffects(state: GameState): {
   goldMult: number;
   repMult: number;
 } {
-  const rank = courtRankIndex(state.court?.favor ?? 0);
+  const rank = courtRankIndex(courtStanding(state));
   return { rank, goldMult: 1 + rank * 0.02, repMult: 1 + rank * 0.04 };
 }
 
@@ -166,7 +176,10 @@ export interface CourtCharge {
 }
 
 export interface CourtState {
+  /** the spendable purse — earned favor, drawn down on royal boons */
   favor: number;
+  /** cumulative favor ever earned — drives rank, never falls (see courtStanding) */
+  standing?: number;
   /** how many charges have ever been issued — the deterministic roll seed */
   issued: number;
   charges: CourtCharge[];
@@ -233,7 +246,7 @@ const MAX_BANNERS = 8;
  */
 export function rollCharge(state: GameState, seed: number): CourtCharge {
   const rng = chargeRng(seed);
-  const rank = courtRankIndex(state.court?.favor ?? 0);
+  const rank = courtRankIndex(courtStanding(state));
   const clanLevel = state.clanLevel ?? 0;
   const favorReward = Math.round(40 + rank * 22 + rng() * 20);
 
@@ -368,12 +381,80 @@ export function rollCharge(state: GameState, seed: number): CourtCharge {
 export function initialCourt(): CourtState {
   return {
     favor: 0,
+    standing: 0,
     issued: 0,
     charges: [],
     stats: { kills: 0, runs: 0, bossKills: 0 },
     crowned: false,
     seenRank: 0,
   };
+}
+
+/* --------------------------------- Boons ----------------------------------- */
+// What the crown's favor BUYS — the sink that makes standing spendable and ties
+// the court back into the war, the roster and the domain it presides over. Each
+// boon is gated by rank (you must have risen to earn the King's ear) and scales
+// with it, so climbing the ladder widens what the crown will grant.
+
+export type BoonId = "charter" | "healers" | "muster";
+
+export interface BoonDef {
+  id: BoonId;
+  name: string;
+  glyph: string;
+  blurb: string;
+  /** court rank required to petition for it */
+  minRank: number;
+  /** favor drawn from the purse */
+  cost: number;
+}
+
+export const BOONS: Record<BoonId, BoonDef> = {
+  charter: {
+    id: "charter",
+    name: "War Charter",
+    glyph: "📜",
+    blurb: "The crown funds your war — a charter of supply shipped straight to the front.",
+    minRank: 1,
+    cost: 45,
+  },
+  healers: {
+    id: "healers",
+    name: "Royal Healers",
+    glyph: "✚",
+    blurb: "The King's own chirurgeons ride out and mend every wound in your ranks.",
+    minRank: 2,
+    cost: 70,
+  },
+  muster: {
+    id: "muster",
+    name: "Muster Writ",
+    glyph: "🔨",
+    blurb: "A royal writ levies laborers from the crownlands to work your domain.",
+    minRank: 3,
+    cost: 55,
+  },
+};
+
+export const BOON_IDS = Object.keys(BOONS) as BoonId[];
+
+/** How much war supply a War Charter ships, given court rank. */
+export function charterSupply(rank: number): number {
+  return 20 + rank * 8;
+}
+/** How many laborers a Muster Writ levies, given court rank. */
+export function musterLaborers(rank: number): number {
+  return 3 + Math.floor(rank / 2);
+}
+
+/** Can the house petition for this boon right now? */
+export function canPetition(state: GameState, id: BoonId): { ok: boolean; why: string } {
+  const def = BOONS[id];
+  const rank = courtRankIndex(courtStanding(state));
+  if (rank < def.minRank)
+    return { ok: false, why: `Rise to ${COURT_RANKS[def.minRank]!.title} to petition for this` };
+  if ((state.court?.favor ?? 0) < def.cost) return { ok: false, why: `${def.cost} favor needed` };
+  return { ok: true, why: "" };
 }
 
 /**
