@@ -42,6 +42,12 @@ import {
   FACTIONS,
   isContested,
   TERRITORIES,
+  BUILDINGS,
+  BUILDING_IDS,
+  canBuild,
+  birthRate,
+  REALM_FERTILITY,
+  type BuildingId,
   type FrontierState,
   type TerritoryId,
 } from "@/lib/game/frontier";
@@ -260,6 +266,7 @@ export function RealmAtlas({
   navSlot,
   frontier: frontierProp,
   onContest,
+  onBuild,
 }: {
   /** live game state — when supplied with `api`, play mode deploys real banners */
   state?: GameState;
@@ -279,10 +286,18 @@ export function RealmAtlas({
     power: number,
     clanName: string,
   ) => Promise<{ ok: boolean; contested: boolean; cooldownMs: number }>;
+  /** raise a building on a realm the clan holds (status-gated) */
+  onBuild?: (
+    territory: TerritoryId,
+    building: BuildingId,
+    clanName: string,
+  ) => Promise<{ ok: boolean; built: boolean; reason?: string | undefined }>;
 }) {
   const frontier = frontierProp ?? state?.frontier ?? null;
   const [contestMsg, setContestMsg] = useState<string | null>(null);
   const [contesting, setContesting] = useState(false);
+  const [buildMsg, setBuildMsg] = useState<string | null>(null);
+  const [building, setBuilding] = useState<BuildingId | null>(null);
   const [currentId, setCurrentId] = useState<AtlasMapId>(HOME_MAP);
   // the war table (live: state + api wired) opens ready to command; the standalone
   // atlas opens in view mode for browsing lore
@@ -964,6 +979,11 @@ export function RealmAtlas({
               const terrHue = terr ? FACTIONS[terr.owner].hue : null;
               const terrContested =
                 terr && frontier ? isContested(frontier, loc.id as TerritoryId) : false;
+              const terrMine = terr?.owner === "clan";
+              const terrDev = terr ? Math.round(terr.dev ?? 20) : 0;
+              const terrBuilds = terr?.builds
+                ? Object.values(terr.builds).reduce((s, n) => s + (n ?? 0), 0)
+                : 0;
               // live vs demo occupancy for the play-mode marker dot
               const here = live ? partiesAt(zoneOf(loc)?.id) : [];
               const fighting = live ? here.some((p) => p.run) : held[loc.id];
@@ -1058,6 +1078,17 @@ export function RealmAtlas({
                   >
                     {isHome ? `${loc.name} · Home` : loc.name}
                   </div>
+                  {/* clan-held realms wear their development at a glance */}
+                  {terrMine && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -left-1 -top-1 flex items-center gap-0.5 rounded-[2px] border border-[#3fb0a6]/70 bg-black/80 px-1 py-px font-display text-[8px] leading-none text-[#5fd0c6]"
+                      title={`Development ${terrDev}/100 · ${terrBuilds} built`}
+                    >
+                      ⬢{terrDev}
+                      {terrBuilds > 0 && <span className="text-gold">·{terrBuilds}</span>}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -1197,8 +1228,35 @@ export function RealmAtlas({
                     );
                   else setContestMsg("Your banners throw themselves at the line.");
                 };
+                const front = isContested(frontier, selected.id as TerritoryId);
+                const dev = Math.round(cell.dev ?? 20);
+                const pop = Math.round(cell.pop ?? 12);
+                const fertility = REALM_FERTILITY[selected.id as TerritoryId];
+                // the realm's live standing, mirroring the sim's own read
+                const secure = cell.hold > 55 && !front;
+                const peaceful = cell.owner !== "longnight" && secure;
+                const rise = peaceful
+                  ? Math.round(birthRate(cell, fertility, true) * 1000) / 10
+                  : 0;
+                const status = front
+                  ? { label: "Contested front", tone: "#d1603a" }
+                  : mine
+                    ? secure
+                      ? { label: "Held & at peace", tone: "#7ea86a" }
+                      : { label: "Newly taken", tone: "#d8a24a" }
+                    : { label: "Rival ground", tone: holder.hue };
+                const raise = async (b: BuildingId) => {
+                  if (!onBuild || !state || building) return;
+                  setBuilding(b);
+                  setBuildMsg(null);
+                  const r = await onBuild(selected.id as TerritoryId, b, state.clanName);
+                  setBuilding(null);
+                  if (!r.ok) setBuildMsg("The work could not be ordered.");
+                  else if (!r.built) setBuildMsg(r.reason || "That work can't be raised here yet.");
+                  else setBuildMsg(`${BUILDINGS[b].label} raised. The realm answers.`);
+                };
                 return (
-                  <div className="flex flex-col gap-2 rounded-sm border border-white/10 bg-black/30 p-2.5">
+                  <div className="flex flex-col gap-2.5 rounded-sm border border-white/10 bg-black/30 p-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         <span
@@ -1208,23 +1266,42 @@ export function RealmAtlas({
                         />
                         Held by <span style={{ color: holder.hue }}>{holder.name}</span>
                       </span>
-                      <span className="text-[10px] tabular-nums text-muted-foreground">
-                        grip {Math.round(cell.hold)}
+                      <span
+                        className="rounded-[2px] px-1.5 py-px text-[8px] font-semibold uppercase tracking-[0.1em] text-black"
+                        style={{ background: status.tone }}
+                      >
+                        {status.label}
                       </span>
                     </div>
-                    {onContest && live && (
+
+                    {/* the realm's condition: grip, development, people, rise */}
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Stat label="Grip" value={`${Math.round(cell.hold)}`} />
+                      <Stat label="Development" value={`${dev}/100`} bar={dev / 100} />
+                      <Stat label="People" value={`${pop}k`} />
+                      <Stat
+                        label="Rise / tick"
+                        value={peaceful ? `+${rise}%` : mine ? "stalled" : "—"}
+                        tone={peaceful ? "#7ea86a" : "#b8b2a4"}
+                      />
+                    </div>
+                    {mine && !peaceful && (
+                      <p className="text-[10px] leading-snug text-muted-foreground">
+                        {front
+                          ? "A realm on the front cannot grow — secure the border and the people will return."
+                          : "Newly taken — hold it and the region begins to rise."}
+                      </p>
+                    )}
+
+                    {onContest && live && !mine && (
                       <>
                         <button
                           type="button"
-                          disabled={mine || contesting}
+                          disabled={contesting}
                           onClick={commit}
                           className="rounded-sm border border-forge-ember bg-forge-ember/80 py-1.5 font-display text-[11px] uppercase tracking-[0.14em] text-[#160d06] transition enabled:hover:brightness-110 disabled:opacity-40"
                         >
-                          {mine
-                            ? "Your banner holds this ground"
-                            : contesting
-                              ? "Committing…"
-                              : `Commit to the front · +${power}`}
+                          {contesting ? "Committing…" : `Commit to the front · +${power}`}
                         </button>
                         {contestMsg && (
                           <p className="text-[10px] leading-snug text-muted-foreground">
@@ -1232,6 +1309,56 @@ export function RealmAtlas({
                           </p>
                         )}
                       </>
+                    )}
+
+                    {/* build orders — what you can raise depends on the realm's status:
+                        war works on a contested front, development on a peaceful hold */}
+                    {onBuild && live && mine && (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                          {front ? "Fortify the front" : "Develop the realm"}
+                        </div>
+                        <div className="grid grid-cols-1 gap-1.5">
+                          {BUILDING_IDS.filter((b) => BUILDINGS[b].war === front).map((b) => {
+                            const def = BUILDINGS[b];
+                            const have = cell.builds?.[b] ?? 0;
+                            const gate = canBuild(frontier, selected.id as TerritoryId, b);
+                            const busy = building === b;
+                            return (
+                              <button
+                                key={b}
+                                type="button"
+                                disabled={!gate.ok || !!building}
+                                onClick={() => raise(b)}
+                                title={gate.ok ? def.blurb : gate.why}
+                                className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 text-left transition enabled:hover:border-gold/60 enabled:hover:bg-gold/10 disabled:opacity-40"
+                              >
+                                <span aria-hidden="true" className="text-sm leading-none">
+                                  {def.glyph}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-baseline justify-between gap-2">
+                                    <span className="font-display text-xs text-gold">
+                                      {def.label}
+                                    </span>
+                                    <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground">
+                                      {have}/{def.max}
+                                    </span>
+                                  </span>
+                                  <span className="block truncate text-[9px] text-muted-foreground">
+                                    {busy ? "Raising…" : def.blurb}
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {buildMsg && (
+                          <p className="text-[10px] leading-snug text-muted-foreground">
+                            {buildMsg}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -1527,6 +1654,42 @@ export function RealmAtlas({
           <Legend swatch="rounded-full border-dashed border-gold" label="Ruin" />
         </span>
       </div>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  bar,
+  tone,
+}: {
+  label: string;
+  value: string;
+  bar?: number;
+  tone?: string;
+}) {
+  return (
+    <div className="rounded-sm border border-white/10 bg-black/40 px-2 py-1.5">
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="text-[8px] uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </span>
+        <span
+          className="font-display text-xs tabular-nums text-gold"
+          style={tone ? { color: tone } : undefined}
+        >
+          {value}
+        </span>
+      </div>
+      {bar != null && (
+        <div className="mt-1 h-[3px] w-full overflow-hidden rounded-full bg-white/10">
+          <span
+            className="block h-full bg-gold motion-safe:transition-[width]"
+            style={{ width: `${Math.max(0, Math.min(100, bar * 100))}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }

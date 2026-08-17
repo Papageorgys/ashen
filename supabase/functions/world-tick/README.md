@@ -9,6 +9,13 @@ Server-authoritative tick for Aethyr's shared war (the HOI4 layer).
   player commit their banners to a front — grinding the holder toward the shared
   "clan" faction, capped and enforced by a 15-minute per-user cooldown tracked in
   `public.frontier_contests` (user id taken from the JWT `sub`).
+- With a `{ build: { territory, building, clanName } }` body it raises a building on a
+  clan-held realm — status-gated by `canBuild` (war works on a contested front;
+  development on a peaceful, long-held realm), on its own 15-minute per-user cooldown
+  (`frontier_contests.built_at`). Territories carry `dev` (0..100 development), `pop`
+  (population in thousands, grown by a birth rate from peace, fertility, dev and
+  farmsteads) and `builds`; a realm rises when held in peace and is ravaged by war and
+  the Long Night. Development scales the per-realm war spoils the clan earns.
 - The simulation is a **copy of `src/lib/game/frontier.ts`** — edge functions
   can't import app source. Keep the two in sync when tuning the war. The sim is
   PURE and deterministic in `(state, now)`, so concurrent invocations converge and

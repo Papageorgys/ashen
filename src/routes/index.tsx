@@ -385,7 +385,11 @@ function Index() {
   const [flourish, setFlourish] = useState<FlourishEvent | null>(null);
   const boss = useWorldBoss(user?.id ?? null);
   // the one shared, server-ticked war; falls back to the local sim if unreachable
-  const { frontier: worldFrontier, contest: contestFrontier } = useFrontier(!!user);
+  const {
+    frontier: worldFrontier,
+    contest: contestFrontier,
+    build: buildFrontier,
+  } = useFrontier(!!user);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -393,12 +397,18 @@ function Index() {
   }, []);
 
   // feed the shared war back into the L2 economy: what the clan holds becomes the
-  // war-spoils multiplier on every run's gold / xp / essence
+  // war-spoils multiplier on every run's gold / xp / essence — scaled by how
+  // developed each realm is, so a long-held, built-up realm pays far richer
   useEffect(() => {
     if (!worldFrontier || !state) return;
-    const held = territoriesOf(worldFrontier, "clan");
+    const held = territoriesOf(worldFrontier, "clan").map((id) => ({
+      id,
+      dev: Math.round(worldFrontier.control[id]?.dev ?? 20),
+    }));
     const cur = state.warSpoils?.held ?? [];
-    const same = cur.length === held.length && cur.every((h, i) => h === held[i]);
+    const same =
+      cur.length === held.length &&
+      cur.every((h, i) => h.id === held[i]!.id && h.dev === held[i]!.dev);
     if (!same) api.setWarSpoils(held);
   }, [worldFrontier, state, api]);
 
@@ -502,6 +512,7 @@ function Index() {
               onOpenTool={setTool}
               frontier={worldFrontier}
               onContest={contestFrontier}
+              onBuild={buildFrontier}
               navSlot={
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
