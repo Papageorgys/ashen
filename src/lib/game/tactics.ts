@@ -225,6 +225,40 @@ export function abilityKit(role: Role): TacAbility[] {
 
 /* ---------------------------------- Units ---------------------------------- */
 
+/* ------------------------------- Conditions -------------------------------- */
+/**
+ * Elemental damage now leaves a mark the player can see and feel: each damage
+ * type imposes its own condition, so which element you bring (weapon runes and
+ * class) is a live tactical decision, not just a number. Foes' elements do the
+ * same to YOU, so the field is dangerous in kind.
+ */
+export type CondKind = "burn" | "chill" | "doom" | "sunder";
+
+export interface TacCond {
+  kind: CondKind;
+  rounds: number;
+  /** magnitude — a flat DoT for burn, a fraction for the rest (stacks for sunder) */
+  pot: number;
+}
+
+export const COND_META: Record<
+  CondKind,
+  { label: string; glyph: string; from: DamageType; blurb: string }
+> = {
+  burn: { label: "Burn", glyph: "🔥", from: "fire", blurb: "Searing damage each round." },
+  chill: { label: "Chill", glyph: "❄", from: "frost", blurb: "Deals less; slowed." },
+  doom: { label: "Doom", glyph: "🕸", from: "shadow", blurb: "Takes more damage." },
+  sunder: { label: "Sunder", glyph: "🩸", from: "phys", blurb: "Armour broken — takes more." },
+};
+
+/** Which condition an element imposes (holy leaves no lingering mark — it sears). */
+const TYPE_COND: Partial<Record<DamageType, CondKind>> = {
+  fire: "burn",
+  frost: "chill",
+  shadow: "doom",
+  phys: "sunder",
+};
+
 export interface TacUnit {
   id: string;
   side: "ally" | "foe";
@@ -233,6 +267,8 @@ export interface TacUnit {
   role?: Role;
   family?: MonsterFamily;
   dmgType: DamageType;
+  /** the line a unit stands in — front takes the blows, back is shielded */
+  rank: "front" | "back";
   hp: number;
   maxHp: number;
   mp: number;
@@ -243,6 +279,7 @@ export interface TacUnit {
   down: boolean;
   guarding: boolean;
   cds: Record<string, number>;
+  conds: TacCond[];
   kit: TacAbility[]; // allies only (empty for foes)
 }
 
@@ -262,7 +299,58 @@ export interface TacState {
   allyAtk: TacTimed;
   allyDef: TacTimed;
   foeVuln: TacTimed;
+  /** the press of battle — fills as you land blows; at full, the next attack is
+   * a free, empowered Onslaught */
+  momentum: number;
   tierId: string;
+}
+
+export const MOMENTUM_MAX = 100;
+
+/** Default formation for a role — the shield wall up front, the fragile behind. */
+export function defaultRank(role: Role): "front" | "back" {
+  return role === "guardian" || role === "blade" ? "front" : "back";
+}
+
+/* -------------------------------- Cond helpers ----------------------------- */
+
+function condOf(u: TacUnit, kind: CondKind): TacCond | undefined {
+  return u.conds.find((c) => c.kind === kind);
+}
+/** total extra damage a unit takes from its conditions (doom + sunder). */
+function vulnFrom(u: TacUnit): number {
+  return (condOf(u, "doom")?.pot ?? 0) + (condOf(u, "sunder")?.pot ?? 0);
+}
+/** how much a chilled unit's own blows are weakened. */
+function chillCut(u: TacUnit): number {
+  return condOf(u, "chill")?.pot ?? 0;
+}
+
+/** Lay an element's condition on a target (refreshing, or stacking sunder). */
+function applyType(target: TacUnit, dmgType: DamageType, power: number): CondKind | null {
+  const kind = TYPE_COND[dmgType];
+  if (!kind) return null;
+  const existing = condOf(target, kind);
+  if (kind === "burn") {
+    const pot = Math.max(1, Math.round(power * 0.22));
+    if (existing) {
+      existing.rounds = 2;
+      existing.pot = Math.max(existing.pot, pot);
+    } else target.conds.push({ kind, rounds: 2, pot });
+  } else if (kind === "sunder") {
+    if (existing) {
+      existing.rounds = 3;
+      existing.pot = Math.min(0.3, existing.pot + 0.1);
+    } else target.conds.push({ kind, rounds: 3, pot: 0.1 });
+  } else if (kind === "chill") {
+    if (existing) existing.rounds = 2;
+    else target.conds.push({ kind, rounds: 2, pot: 0.3 });
+  } else {
+    // doom
+    if (existing) existing.rounds = 2;
+    else target.conds.push({ kind, rounds: 2, pot: 0.15 });
+  }
+  return kind;
 }
 
 const FAMILY_DMG: Partial<Record<MonsterFamily, DamageType>> = {
@@ -367,6 +455,8 @@ function makeFoes(members: Member[], tier: TacTier): TacUnit[] {
       sub: family,
       family,
       dmgType: FAMILY_DMG[family] ?? "phys",
+      // roughly the first half of the pack forms the front line
+      rank: i < Math.ceil(foeCount / 2) ? "front" : "back",
       hp,
       maxHp: hp,
       mp: 0,
@@ -377,13 +467,14 @@ function makeFoes(members: Member[], tier: TacTier): TacUnit[] {
       down: false,
       guarding: false,
       cds: {},
+      conds: [],
       kit: [],
     });
   }
   return foes;
 }
 
-function allyUnit(m: Member): TacUnit {
+function allyUnit(m: Member, rank: "front" | "back"): TacUnit {
   const role = CLASS_BY_ID[m.classId]?.role ?? "blade";
   const st = memberStats(m);
   return {
@@ -393,6 +484,7 @@ function allyUnit(m: Member): TacUnit {
     sub: ROLE_LABEL[role],
     role,
     dmgType: memberDamageType(m),
+    rank,
     hp: maxHp(m),
     maxHp: maxHp(m),
     mp: maxMp(m),
@@ -403,14 +495,25 @@ function allyUnit(m: Member): TacUnit {
     down: false,
     guarding: false,
     cds: {},
+    conds: [],
     kit: abilityKit(role),
   };
 }
 
-/** Open a proving with these champions against a fresh, party-scaled pack. */
-export function startEncounter(members: Member[], tierId: string): TacState {
+/**
+ * Open a proving with these champions against a fresh, party-scaled pack.
+ * `formation` maps a member id to a chosen line; anyone unlisted takes the
+ * default for their role.
+ */
+export function startEncounter(
+  members: Member[],
+  tierId: string,
+  formation?: Record<string, "front" | "back">,
+): TacState {
   const tier = tierById(tierId);
-  const allies = members.map(allyUnit);
+  const allies = members.map((m) =>
+    allyUnit(m, formation?.[m.id] ?? defaultRank(CLASS_BY_ID[m.classId]?.role ?? "blade")),
+  );
   const foes = makeFoes(members, tier);
   const units = [...allies, ...foes];
   const order = [...units].sort((a, b) => b.init - a.init).map((u) => u.id);
@@ -424,6 +527,7 @@ export function startEncounter(members: Member[], tierId: string): TacState {
     allyAtk: { pct: 0, rounds: 0 },
     allyDef: { pct: 0, rounds: 0 },
     foeVuln: { pct: 0, rounds: 0 },
+    momentum: 0,
     tierId: tier.id,
   };
   // advance through any foes who act before the first champion
@@ -436,7 +540,12 @@ function clone(s: TacState): TacState {
   return {
     ...s,
     order: [...s.order],
-    units: s.units.map((u) => ({ ...u, cds: { ...u.cds }, kit: u.kit })),
+    units: s.units.map((u) => ({
+      ...u,
+      cds: { ...u.cds },
+      conds: u.conds.map((c) => ({ ...c })),
+      kit: u.kit,
+    })),
     log: [...s.log],
     allyAtk: { ...s.allyAtk },
     allyDef: { ...s.allyDef },
@@ -455,6 +564,14 @@ export function livingFoes(s: TacState): TacUnit[] {
 }
 export function livingAllies(s: TacState): TacUnit[] {
   return s.units.filter((u) => u.side === "ally" && !u.down);
+}
+/** Standing units of a side in the front line (empty if the line has fallen). */
+function frontLine(s: TacState, side: "ally" | "foe"): TacUnit[] {
+  return s.units.filter((u) => u.side === side && !u.down && u.rank === "front");
+}
+/** Is this back-rank unit still covered by a standing front line? */
+export function isCovered(s: TacState, u: TacUnit): boolean {
+  return u.rank === "back" && frontLine(s, u.side).length > 0;
 }
 
 function pushLog(s: TacState, text: string) {
@@ -481,6 +598,21 @@ function endRound(s: TacState) {
     u.guarding = false;
     for (const k of Object.keys(u.cds)) if (u.cds[k]! > 0) u.cds[k]! -= 1;
     if (u.side === "ally" && !u.down) u.mp = Math.min(u.maxMp, u.mp + Math.round(u.maxMp * 0.06));
+    if (!u.down) {
+      // burn bites at the turn of the round
+      const burn = condOf(u, "burn");
+      if (burn) {
+        u.hp -= burn.pot;
+        if (u.hp <= 0) {
+          u.hp = 0;
+          u.down = true;
+          pushLog(s, `${u.name} succumbs to the flames.`);
+        }
+      }
+      // conditions wane
+      for (const c of u.conds) c.rounds -= 1;
+      u.conds = u.conds.filter((c) => c.rounds > 0);
+    }
   }
   for (const t of [s.allyAtk, s.allyDef, s.foeVuln]) {
     if (t.rounds > 0) {
@@ -510,48 +642,75 @@ function critRoll(base: number, heavy: boolean): { dmg: number; crit: boolean } 
   return { dmg: base * mult * (0.9 + rand() * 0.2), crit };
 }
 
-/** Apply a raw hit to a foe, accounting for the party's damage-up and the foe's
- * vulnerability and family resistance. Returns damage dealt. */
-function hitFoe(s: TacState, foe: TacUnit, attacker: TacUnit, potency: number, heavy: boolean) {
+/** Apply a champion's hit to a foe: party buffs, the foe's own vulnerability and
+ * family resistance, cover from its front line, then the element's aftermath —
+ * a lingering condition, holy's sear, or shadow's leech back to the striker. */
+function hitFoe(
+  s: TacState,
+  foe: TacUnit,
+  attacker: TacUnit,
+  potency: number,
+  heavy: boolean,
+  single: boolean,
+) {
   const typeMult = foe.family ? typeMultVs(attacker.dmgType, foe.family) : 1;
-  const base = attacker.power * potency * (1 + s.allyAtk.pct) * (1 + s.foeVuln.pct) * typeMult;
+  const base =
+    attacker.power * potency * (1 + s.allyAtk.pct) * (1 + s.foeVuln.pct + vulnFrom(foe)) * typeMult;
   const { dmg, crit } = critRoll(base, heavy);
-  const final = Math.max(1, Math.round(dmg * (1 - foe.mitigation)));
+  // a back-rank foe is harder to reach by a single blow while its line stands
+  const cover = single && isCovered(s, foe) ? 0.4 : 0;
+  const mit = Math.max(0, foe.mitigation - (condOf(foe, "sunder")?.pot ?? 0)) + cover;
+  const final = Math.max(1, Math.round(dmg * (1 - mit)));
   foe.hp -= final;
+  let leech = 0;
+  if (attacker.dmgType === "shadow") {
+    leech = Math.round(final * 0.3);
+    attacker.hp = Math.min(attacker.maxHp, attacker.hp + leech);
+  }
+  if (attacker.dmgType === "holy") {
+    // a sear: mend the most wounded champion for a share of the blow
+    const hurt = livingAllies(s).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+    if (hurt) hurt.hp = Math.min(hurt.maxHp, hurt.hp + Math.round(final * 0.25));
+  }
+  const cond = applyType(foe, attacker.dmgType, attacker.power * potency);
   if (foe.hp <= 0) {
     foe.hp = 0;
     foe.down = true;
   }
-  return { final, crit, downed: foe.down };
+  return { final, crit, downed: foe.down, cond, leech, covered: cover > 0 };
 }
 
-/** A foe strikes an ally, reduced by that ally's mitigation, the party's
- * defence buff, and whether they are guarding. */
+/** A foe strikes an ally: mitigation, party defence, guard, and the foe's own
+ * chill weakening its blow — then the foe's element marks the champion in turn. */
 function hitAlly(s: TacState, ally: TacUnit, foe: TacUnit) {
   const heavy = rand() < 0.18;
-  const { dmg } = critRoll(foe.power * (heavy ? 1.4 : 1), heavy);
+  const chill = 1 - chillCut(foe);
+  const { dmg } = critRoll(foe.power * (heavy ? 1.4 : 1) * chill, heavy);
   const guardCut = ally.guarding ? 0.5 : 0;
-  const reduce = Math.min(0.85, ally.mitigation + s.allyDef.pct + guardCut);
-  const final = Math.max(1, Math.round(dmg * (1 - reduce)));
+  const reduce = Math.min(0.85, ally.mitigation + s.allyDef.pct + guardCut - vulnFrom(ally));
+  const final = Math.max(1, Math.round(dmg * (1 - Math.max(0, reduce))));
   ally.hp -= final;
+  const cond = applyType(ally, foe.dmgType, foe.power);
   if (ally.hp <= 0) {
     ally.hp = 0;
     ally.down = true;
   }
-  return { final, heavy, downed: ally.down };
+  return { final, heavy, downed: ally.down, cond };
 }
 
-/** A foe's whole turn, driven by simple AI: focus the weakest standing ally. */
+/** A foe's whole turn: it must break the shield wall — it strikes the front line
+ * first, and only reaches the back rank once the front has fallen. */
 function foeTurn(s: TacState, foe: TacUnit) {
-  const targets = livingAllies(s);
+  const front = frontLine(s, "ally");
+  const targets = front.length ? front : livingAllies(s);
   if (targets.length === 0) return;
-  // weight toward the lowest-HP ally, but not always
   targets.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
   const target = rand() < 0.7 ? targets[0]! : targets[Math.floor(rand() * targets.length)]!;
   const r = hitAlly(s, target, foe);
+  const mark = r.cond ? ` · ${COND_META[r.cond].label}` : "";
   pushLog(
     s,
-    `${foe.name} hits ${target.name} for ${r.final}${r.heavy ? " (heavy)" : ""}${r.downed ? " — down!" : ""}.`,
+    `${foe.name} hits ${target.name} for ${r.final}${r.heavy ? " (heavy)" : ""}${mark}${r.downed ? " — down!" : ""}.`,
   );
 }
 
@@ -597,20 +756,33 @@ export function applyAction(prev: TacState, action: TacAction): TacState {
   if (!ability) return prev;
   if ((actor.cds[ability.id] ?? 0) > 0 || actor.mp < ability.mp) return prev;
 
-  actor.mp -= ability.mp;
+  const damaging =
+    ability.shape === "strike" || ability.shape === "heavy" || ability.shape === "aoe";
+  // a full press unleashes an Onslaught: the next attack is free and empowered
+  const onslaught = damaging && s.momentum >= MOMENTUM_MAX;
+  const pot = ability.potency * (onslaught ? 1.5 : 1);
+
+  if (!onslaught) actor.mp -= ability.mp;
   if (ability.cooldown > 0) actor.cds[ability.id] = ability.cooldown + 1; // +1: ticked down at round end
+  if (onslaught) pushLog(s, `${actor.name} unleashes an Onslaught!`);
 
   const foes = livingFoes(s);
   const allies = livingAllies(s);
+  let gained = 0;
+  let kills = 0;
   switch (ability.shape) {
     case "strike":
     case "heavy": {
       const foe = (action.targetId && unitOf(s, action.targetId)) || foes[0];
       if (foe && !foe.down && foe.side === "foe") {
-        const r = hitFoe(s, foe, actor, ability.potency, ability.shape === "heavy");
+        const r = hitFoe(s, foe, actor, pot, ability.shape === "heavy", true);
+        if (r.downed) kills++;
+        gained += ability.shape === "heavy" ? 22 : 18;
+        if (r.crit) gained += 8;
+        const mark = r.cond ? ` · ${COND_META[r.cond].label}` : "";
         pushLog(
           s,
-          `${actor.name} ${ability.name} → ${foe.name}: ${r.final}${r.crit ? " crit!" : ""}${r.downed ? " — slain!" : ""}.`,
+          `${actor.name} ${ability.name} → ${foe.name}: ${r.final}${r.crit ? " crit!" : ""}${r.covered ? " (covered)" : ""}${mark}${r.downed ? " — slain!" : ""}.`,
         );
       }
       break;
@@ -618,9 +790,12 @@ export function applyAction(prev: TacState, action: TacAction): TacState {
     case "aoe": {
       let text = `${actor.name} ${ability.name} hits all foes:`;
       for (const foe of foes) {
-        const r = hitFoe(s, foe, actor, ability.potency, false);
+        const r = hitFoe(s, foe, actor, pot, false, false);
+        if (r.downed) kills++;
+        gained += 6;
         text += ` ${foe.name} ${r.final}${r.downed ? "†" : ""};`;
       }
+      gained += 10;
       pushLog(s, text);
       break;
     }
@@ -657,6 +832,10 @@ export function applyAction(prev: TacState, action: TacAction): TacState {
       pushLog(s, `${actor.name} guards, and gathers focus.`);
       break;
   }
+
+  // momentum: an Onslaught spends the whole press; otherwise pressing builds it
+  if (onslaught) s.momentum = 0;
+  s.momentum = Math.min(MOMENTUM_MAX, s.momentum + gained + kills * 25);
 
   if (checkOver(s)) return s;
   nextTurn(s);
