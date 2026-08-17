@@ -87,13 +87,7 @@ import {
 } from "./scrolls";
 
 import { DEFAULT_CREST, portraitFromSeed, type Crest, type Portrait } from "./identity";
-import {
-  initialFrontier,
-  advanceFrontier,
-  REALM_BOON,
-  type FrontierState,
-  type TerritoryId,
-} from "./frontier";
+import { initialFrontier, REALM_BOON, type FrontierState, type TerritoryId } from "./frontier";
 import { initialCourt, fillCharges, courtRankIndex, courtStanding, type CourtState } from "./court";
 import type { TraitId } from "./traits";
 import { initialDomain, type DomainState } from "./logistics";
@@ -2057,12 +2051,12 @@ export function realmPulse(state: GameState) {
   state.longNight = ln;
   const nightSurge = ln.endsAt ? LONG_NIGHT.hostilitySurgePerHour * hours : 0;
 
-  // The continental war grinds on whether or not the player acts (§ HOI4 layer).
-  // Client-ticked here for now; the same pure sim will drive one shared war
-  // server-side. Long Night surges the frontier while it walks the realm.
-  state.frontier = advanceFrontier(state.frontier ?? initialFrontier(now), now, {
-    longNight: !!ln.endsAt,
-  });
+  // The continental war is now ONE shared war, driven server-side by the
+  // world-tick edge function. The client no longer runs a parallel sim here —
+  // that produced a second, divergent frontier that the UI flipped to whenever
+  // the server was out of reach. `state.frontier` is kept only as a cache of the
+  // last server state we saw (refreshed on each pull), so the offline view shows
+  // the real war's last-known state instead of a fiction that never happened.
 
   // Raw Ash never settles — a hoarded pile burns off over time (§6.2).
   if ((state.rawAsh ?? 0) > 0 && hours > 0) {

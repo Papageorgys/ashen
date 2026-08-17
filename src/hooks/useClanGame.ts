@@ -28,6 +28,7 @@ import {
   type BoonId,
 } from "@/lib/game/court";
 import type { TacReward } from "@/lib/game/tactics";
+import type { FrontierState } from "@/lib/game/frontier";
 import { traitField, TRAITS, traitsFor, type TraitId } from "@/lib/game/traits";
 import {
   advanceDomain,
@@ -1316,6 +1317,14 @@ export function useClanGame() {
           );
         if (same) return;
         s.warSpoils = { held };
+      }),
+
+    /** Cache the authoritative server war so the offline view shows its real
+     * last-known state, never a divergent local sim. */
+    cacheFrontier: (fr: FrontierState) =>
+      update((s) => {
+        if (s.frontier && s.frontier.updatedAt >= fr.updatedAt) return; // already current
+        s.frontier = fr;
       }),
 
     /** Answer one of the King's charges — pay any tribute due, collect favor and

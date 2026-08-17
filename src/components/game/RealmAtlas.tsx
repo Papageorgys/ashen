@@ -311,6 +311,7 @@ export function RealmAtlas({
   ) => Promise<{ ok: boolean; built: boolean; reason?: string | undefined }>;
 }) {
   const frontier = frontierProp ?? state?.frontier ?? null;
+  const frontierStale = !frontierProp && !!frontier; // rendering the cached last-known war
   const [contestMsg, setContestMsg] = useState<string | null>(null);
   const [contesting, setContesting] = useState(false);
   const [buildMsg, setBuildMsg] = useState<string | null>(null);
@@ -2223,6 +2224,14 @@ export function RealmAtlas({
             </span>
           </span>
           {nightAbroad && <span className="text-[#b9a8e6]">· ☾ the Long Night rides</span>}
+          {frontierStale && (
+            <span
+              className="text-[#d8a24a]"
+              title="The shared war is out of reach — showing its last-known state"
+            >
+              · ⚠ out of reach (last known)
+            </span>
+          )}
         </div>
       )}
 
