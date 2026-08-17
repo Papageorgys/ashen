@@ -572,6 +572,7 @@ function Index() {
 
   const founded = state.clanLevel >= 1;
   const meta = tool ? (NAV_BY_VALUE[tool] ?? EXTRA_META[tool] ?? null) : null;
+  const ToolIcon: LucideIcon | null = meta && "icon" in meta ? (meta.icon as LucideIcon) : null;
 
   // every screen except the always-visible map renders inside the slide-over
   const toolBody =
@@ -677,17 +678,35 @@ function Index() {
         />
       </div>
 
-      {/* every screen opens here, as a slide-over across the always-visible map */}
+      {/* every screen opens here, as a slide-over across the always-visible map —
+          a war-council page: firelit gradient, a gilded seam down its binding
+          edge, and a crested header, so all screens share one crafted frame */}
       <Sheet open={!!tool} onOpenChange={(o) => !o && setTool(null)}>
         <SheetContent
           side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl lg:max-w-5xl"
+          style={{
+            background:
+              "linear-gradient(180deg, oklch(0.2 0.02 62 / 0.98), oklch(0.15 0.018 60 / 0.98))",
+          }}
+          className="flex w-full flex-col gap-0 border-l-2 border-l-forge-frame/70 p-0 shadow-[inset_6px_0_24px_-18px_oklch(0.82_0.15_84/0.6)] sm:max-w-2xl lg:max-w-5xl"
         >
-          <SheetHeader className="shrink-0 border-b border-border/60 px-4 py-3 pr-12 text-left sm:text-left">
-            <SheetTitle className="font-display text-lg text-gold">{meta?.label ?? ""}</SheetTitle>
-            <SheetDescription className="text-xs">{meta?.hint ?? ""}</SheetDescription>
+          <SheetHeader className="relative shrink-0 gap-0 border-b border-forge-frame/40 bg-[#120d08]/70 px-4 py-3 pr-12 text-left sm:text-left">
+            <div className="flex items-center gap-2.5">
+              {ToolIcon && (
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm border border-gold/25 bg-gold/[0.06] text-gold shadow-[inset_0_1px_0_oklch(1_0_0/0.06)]">
+                  <ToolIcon className="h-[18px] w-[18px]" aria-hidden />
+                </span>
+              )}
+              <div className="min-w-0">
+                <SheetTitle className="gilded font-display text-lg leading-tight">
+                  {meta?.label ?? ""}
+                </SheetTitle>
+                <SheetDescription className="text-xs">{meta?.hint ?? ""}</SheetDescription>
+              </div>
+            </div>
+            <div className="l2-rule absolute inset-x-0 bottom-0" />
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{toolBody}</div>
+          <div className="stage-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4">{toolBody}</div>
         </SheetContent>
       </Sheet>
 
