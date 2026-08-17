@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { GameState } from "@/lib/game/engine";
-import { supplyCap, realmLevy } from "@/lib/game/engine";
+import { supplyCap, realmLevy, provisionNeedPerHour } from "@/lib/game/engine";
 import type { ClanApi } from "@/hooks/useClanGame";
 import {
   NODE_DEF,
@@ -52,6 +52,9 @@ export function LogisticsPanel({
   const levy = realmLevy(state, now);
   const armourOnHand = Math.floor(d.goods.armour ?? 0);
   const woundPoints = state.members.reduce((n, m) => n + (m.wound ?? 0), 0);
+  const warEats = provisionNeedPerHour(state); // provisions the field army needs per hour
+  const rationsOnHand = Math.floor(d.goods.rations ?? 0);
+  const warFed = warEats <= 0 || rationsOnHand >= warEats * 4; // covered comfortably by the granary
 
   const trendTone =
     trend === "well-fed"
@@ -206,6 +209,14 @@ export function LogisticsPanel({
               Fed workers work hard; the hungry do not. The domain eats{" "}
               {rationNeedPerHour(d).toFixed(1)} rations/hr.
             </p>
+            {warEats > 0 && (
+              <p className="mt-1 text-[9px] leading-snug">
+                <span className={warFed ? "text-[#7ea86a]" : "text-[#d8a24a]"}>
+                  The war eats {warEats}/hr in the field —{" "}
+                  {warFed ? "your granary provisions it" : "foraged for gold when short"}.
+                </span>
+              </p>
+            )}
           </div>
           <div className="rounded-sm border border-white/10 bg-black/30 px-2.5 py-2">
             <div className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
