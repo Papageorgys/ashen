@@ -44,6 +44,7 @@ import {
 import {
   FACTIONS,
   isContested,
+  nightPhase,
   TERRITORIES,
   TERRITORY_IDS,
   BUILDINGS,
@@ -476,6 +477,12 @@ export function RealmAtlas({
   /** live wiring: only when both state and api are handed in by the game */
   const live = !!(api && state);
   const clock = now ?? Date.now();
+  // is the Long Night abroad on the map we're looking at? (the shared war's
+  // night on the continent; the local realm's Long Night at home)
+  const nightAbroad =
+    ATLAS_MAPS[currentId].kind === "continent"
+      ? !!frontier && nightPhase(frontier.tick).active
+      : !!state && longNightActive(state, clock);
 
   const map = ATLAS_MAPS[currentId];
   const selected = useMemo(
@@ -779,6 +786,7 @@ export function RealmAtlas({
     const routes: { x1: number; y1: number; x2: number; y2: number; key: string }[] = [];
     const nodes: { x: number; y: number; glyph: string; key: string }[] = [];
     const caravans: { x: number; y: number; glyph: string; key: string }[] = [];
+    const raids: { x: number; y: number; lost: number; key: string }[] = [];
     const RAW_OFFSET: Record<Raw, [number, number]> = {
       grain: [-16, -11],
       timber: [16, -11],
@@ -806,6 +814,17 @@ export function RealmAtlas({
           key: c.id,
         });
       }
+      // a raid flashes on the road for a few seconds after it happens
+      for (const r of state.domain.raids ?? []) {
+        if (clock - r.at > 12000 || clock < r.at) continue;
+        const an = anchor(r.raw);
+        raids.push({
+          x: (an.x + home.x) / 2,
+          y: (an.y + home.y) / 2,
+          lost: r.lost,
+          key: `${r.raw}-${r.at}`,
+        });
+      }
     }
 
     // banners on the march: a line from the home seat to where they are bound
@@ -818,7 +837,7 @@ export function RealmAtlas({
       }
     }
 
-    return { fronts, clashes, routes, nodes, caravans, marches };
+    return { fronts, clashes, routes, nodes, caravans, raids, marches };
   })();
 
   return (
@@ -1027,6 +1046,21 @@ export function RealmAtlas({
             />
           </svg>
 
+          {/* the Long Night, abroad — a creeping dark drawn over the whole map */}
+          {nightAbroad && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 z-[9] motion-safe:animate-pulse"
+              style={{
+                background: "radial-gradient(120% 90% at 50% 30%, transparent 38%, #0b0616cc 100%)",
+              }}
+            >
+              <div className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-[#5b4a7a]/70 bg-[#140f1e]/90 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-[#b9a8e6]">
+                ☾ The Long Night is abroad
+              </div>
+            </div>
+          )}
+
           {/* cartouche — only over the relief plate; the paintings carry their own */}
           {!showArt && (
             <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[46%] rounded-sm border border-white/10 bg-black/70 px-3 py-2 backdrop-blur-sm">
@@ -1143,6 +1177,22 @@ export function RealmAtlas({
                     <span
                       aria-hidden="true"
                       className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full ring-1 ring-white/45 motion-safe:animate-pulse"
+                    />
+                  )}
+                  {/* grip ring — a realm's hold on itself: firm gold when secure,
+                      thin and red and unsettled when the border is buckling */}
+                  {terr && (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                        terr.hold < 40
+                          ? "ring-2 ring-destructive/70 motion-safe:animate-pulse"
+                          : terr.hold < 75
+                            ? "ring-1 ring-gold/50"
+                            : "ring-1 ring-gold/80",
+                      )}
+                      title={`Grip ${Math.round(terr.hold)}`}
                     />
                   )}
                   {isRealm && (
@@ -1299,7 +1349,8 @@ export function RealmAtlas({
               );
             })}
 
-            {/* battles — a clash of arms burns on every contested border */}
+            {/* battles — a clash of arms burns on every contested border, and
+                flares when the Long Night falls on the war */}
             {strategic.clashes.map((c) => (
               <div
                 key={`clash-${c.key}`}
@@ -1308,8 +1359,31 @@ export function RealmAtlas({
                 style={{ left: `${c.x}%`, top: `${c.y}%` }}
               >
                 <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
-                  <span className="grid h-4 w-4 place-items-center rounded-full border border-[#d1603a]/70 bg-black/70 text-[9px] text-[#ff8a5c] shadow-[0_0_6px_oklch(0_0_0/0.7)] motion-safe:animate-pulse">
+                  <span
+                    className={cn(
+                      "grid place-items-center rounded-full border bg-black/70 motion-safe:animate-pulse",
+                      nightAbroad
+                        ? "h-5 w-5 border-[#ff8a5c] text-[11px] text-[#ffb08a] shadow-[0_0_10px_#ff8a5c99]"
+                        : "h-4 w-4 border-[#d1603a]/70 text-[9px] text-[#ff8a5c] shadow-[0_0_6px_oklch(0_0_0/0.7)]",
+                    )}
+                  >
                     ⚔
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {/* road raids — a red flash where a caravan was skimmed */}
+            {strategic.raids.map((r) => (
+              <div
+                key={`raid-${r.key}`}
+                aria-hidden="true"
+                className="pointer-events-none absolute z-[7] -translate-x-1/2 -translate-y-1/2"
+                style={{ left: `${r.x}%`, top: `${r.y}%` }}
+              >
+                <div style={{ transform: `scale(${1 / Math.max(1, zoom)})` }}>
+                  <span className="flex items-center gap-0.5 whitespace-nowrap rounded-[2px] border border-destructive bg-black/80 px-1 py-px font-display text-[8px] leading-none text-destructive motion-safe:animate-pulse">
+                    ✷ raided −{Math.round(r.lost)}
                   </span>
                 </div>
               </div>
@@ -1933,6 +2007,23 @@ export function RealmAtlas({
         )}
       </div>
 
+      {/* war-state ticker — the whole front, read at a glance (continent only) */}
+      {frontier && ATLAS_MAPS[currentId].kind === "continent" && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/10 bg-[#140f1e] px-3 py-1 text-[10px] text-[#c9b06a]">
+          <span aria-hidden="true">⚔</span>
+          <span>
+            {strategic.fronts.length} front{strategic.fronts.length === 1 ? "" : "s"} ablaze
+          </span>
+          <span>
+            · Seat of Vareth held by{" "}
+            <span style={{ color: FACTIONS[frontier.control.vareth.owner].hue }}>
+              {FACTIONS[frontier.control.vareth.owner].short}
+            </span>
+          </span>
+          {nightAbroad && <span className="text-[#b9a8e6]">· ☾ the Long Night rides</span>}
+        </div>
+      )}
+
       {/* status ribbon */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/10 bg-[#17130d] px-3 py-1.5 text-[11px] text-muted-foreground">
         <span className="flex-1 italic">
@@ -1943,10 +2034,21 @@ export function RealmAtlas({
                 : "Play mode — pick a place and march a banner; hold it to earn."
               : "View mode — click any marked place to read its lore, or enter a realm.")}
         </span>
-        <span className="flex flex-wrap gap-3 text-[9px] uppercase tracking-[0.1em]">
+        <span className="flex flex-wrap items-center gap-3 text-[9px] uppercase tracking-[0.1em]">
           <Legend swatch="rounded-[2px] border-forge-ember" label="Stronghold" />
           <Legend swatch="rounded-full border-gold" label="POI" />
-          <Legend swatch="rounded-full border-dashed border-gold" label="Ruin" />
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <span aria-hidden="true" className="text-[#ff8a5c]">
+              ⚔
+            </span>
+            Front
+          </span>
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <span aria-hidden="true" className="text-[#5fd0c6]">
+              ●
+            </span>
+            Caravan
+          </span>
         </span>
       </div>
     </div>

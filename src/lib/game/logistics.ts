@@ -141,6 +141,13 @@ export interface Caravan {
   arrivesAt: number;
 }
 
+/** A caravan skimmed on the road — kept briefly so the map can flash the raid. */
+export interface RaidRecord {
+  raw: Raw;
+  at: number;
+  lost: number;
+}
+
 export interface DomainState {
   tickAt: number;
   /** hired laborers (the workforce) */
@@ -153,6 +160,8 @@ export interface DomainState {
   caravans: Caravan[];
   workshops: Partial<Record<Workshop, number>>;
   smithyFocus: SmithyFocus;
+  /** recent road raids (newest first), for the map's raid flash */
+  raids?: RaidRecord[];
 }
 
 /* -------------------------------- Helpers ---------------------------------- */
@@ -216,7 +225,10 @@ export function advanceDomain(
   const risk = night ? 0.3 : 0.06;
   d.caravans = d.caravans.filter((c) => {
     if (c.arrivesAt > now) return true;
-    add(d.stock, c.raw, Math.round(c.qty * (1 - risk)));
+    const kept = Math.round(c.qty * (1 - risk));
+    add(d.stock, c.raw, kept);
+    const lost = c.qty - kept;
+    if (lost > 0) d.raids = [{ raw: c.raw, at: now, lost }, ...(d.raids ?? [])].slice(0, 6);
     return false;
   });
 
