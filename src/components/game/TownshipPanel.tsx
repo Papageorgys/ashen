@@ -119,6 +119,7 @@ export function TownshipPanel({
         <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">The Holdfast</h3>
         <div className="mt-3">
           <HoldfastMap
+            state={state}
             town={town}
             now={now}
             selected={sel}
