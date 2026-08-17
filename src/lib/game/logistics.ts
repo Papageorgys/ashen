@@ -206,7 +206,7 @@ function add<T extends string>(rec: Partial<Record<T, number>>, key: T, n: numbe
 export function advanceDomain(
   prev: DomainState,
   now: number,
-  opts: { longNight?: boolean } = {},
+  opts: { longNight?: boolean; raidReduction?: number } = {},
 ): DomainState {
   let hours = (now - prev.tickAt) / 3_600_000;
   if (hours <= 0.0001) return prev;
@@ -223,8 +223,9 @@ export function advanceDomain(
   const night = !!opts.longNight;
 
   // 1. caravans that have arrived unload into the city (raiders skim the road,
-  //    worse when the Long Night is abroad)
-  const risk = night ? 0.3 : 0.06;
+  //    worse when the Long Night is abroad — the township's watchtowers cut it)
+  const guard = Math.max(0, Math.min(0.8, opts.raidReduction ?? 0));
+  const risk = (night ? 0.3 : 0.06) * (1 - guard);
   d.caravans = d.caravans.filter((c) => {
     if (c.arrivesAt > now) return true;
     const kept = Math.round(c.qty * (1 - risk));
