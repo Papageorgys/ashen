@@ -28,6 +28,8 @@ import {
 } from "@/lib/game/atlas";
 import { ZONE_BY_ID, travelMsTo } from "@/lib/game/data";
 import { RIVALS } from "@/lib/game/rivals";
+import { AtlasAtmosphere } from "@/components/game/AtlasAtmosphere";
+import { GameIcon, type IconName } from "@/components/game/GameIcon";
 import { useMapManifest } from "@/lib/game/mapAssets";
 import { MapCanvas } from "./MapCanvas";
 import {
@@ -858,18 +860,18 @@ export function RealmAtlas({
     const alerts: {
       x: number;
       y: number;
-      glyph: string;
+      icon: IconName;
       tone: string;
       text: string;
       rank: number;
       key: string;
     }[] = [];
     if (map.kind === "continent" && frontier) {
-      const GLYPH: Record<FrontierEvent["kind"], string> = {
-        conquest: "🏴",
-        siege: "⚔",
-        nightfall: "🌑",
-        muster: "🚩",
+      const GLYPH: Record<FrontierEvent["kind"], IconName> = {
+        conquest: "banner",
+        siege: "swords",
+        nightfall: "moon",
+        muster: "pin",
       };
       const TONE: Record<FrontierEvent["kind"], string> = {
         conquest: "#d1603a",
@@ -885,7 +887,7 @@ export function RealmAtlas({
         alerts.push({
           x: loc.x,
           y: loc.y,
-          glyph: GLYPH[ev.kind],
+          icon: GLYPH[ev.kind],
           tone: TONE[ev.kind],
           text: ev.text,
           rank,
@@ -1123,6 +1125,9 @@ export function RealmAtlas({
             />
           </svg>
 
+          {/* firelight pooling on the war table */}
+          <AtlasAtmosphere />
+
           {/* the Long Night, abroad — a creeping dark drawn over the whole map */}
           {nightAbroad && (
             <div
@@ -1132,8 +1137,9 @@ export function RealmAtlas({
                 background: "radial-gradient(120% 90% at 50% 30%, transparent 38%, #0b0616cc 100%)",
               }}
             >
-              <div className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded-sm border border-[#5b4a7a]/70 bg-[#140f1e]/90 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-[#b9a8e6]">
-                ☾ The Long Night is abroad
+              <div className="absolute left-1/2 top-2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-sm border border-[#5b4a7a]/70 bg-[#140f1e]/90 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-[#b9a8e6]">
+                <GameIcon name="moon" size={12} />
+                The Long Night is abroad
               </div>
             </div>
           )}
@@ -1552,7 +1558,7 @@ export function RealmAtlas({
                     )}
                     style={{ borderColor: a.tone, color: a.tone, opacity: 1 - a.rank * 0.28 }}
                   >
-                    <span className="text-[10px]">{a.glyph}</span>
+                    <GameIcon name={a.icon} size={11} />
                     {a.text}
                   </span>
                 </div>
