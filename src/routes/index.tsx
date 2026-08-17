@@ -48,7 +48,7 @@ import { Curtain } from "@/components/game/Curtain";
 import { playCue } from "@/lib/sound";
 import { summonCurtain } from "@/lib/transition";
 import { CommandBar } from "@/components/game/CommandBar";
-import { NavRail } from "@/components/game/NavRail";
+import { MapNav, type MapNavGroup } from "@/components/game/MapNav";
 import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -79,6 +79,8 @@ import {
   Trophy,
   Swords,
   UserPlus,
+  Hammer,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 
@@ -290,18 +292,26 @@ const HOME_ITEM: NavItem = {
   hint: "The map — deploy your banners, reach the forge and vault",
 };
 
-const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+// the game's screens, reached diegetically through the places they belong — your
+// Castle, the Town below it, the Realm beyond — as menus in the map's own toolbar
+const MAP_NAV: MapNavGroup[] = [
   {
-    title: "Company",
+    title: "Castle",
+    glyph: "⌂",
     items: [
-      { value: "recruit", label: "Recruit", icon: UserPlus, hint: "Swear new blades" },
       {
-        value: "muster",
-        label: "Muster",
-        icon: Handshake,
-        hint: "Petitions and invitations from party leaders",
+        value: "keep",
+        label: "The Keep",
+        icon: Castle,
+        hint: "Upgrade your halls",
+        requiresClan: true,
       },
-      { value: "skills", label: "Skills", icon: Sparkles, hint: "Train abilities" },
+      {
+        value: "court",
+        label: "The Court",
+        icon: Crown,
+        hint: "Rise through the King's court — from outpost to the Ashen Throne",
+      },
       {
         value: "warband",
         label: "Warband",
@@ -314,72 +324,14 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
         icon: Swords,
         hint: "Command a banner in a turn-based bout",
       },
-      { value: "daily", label: "Contracts", icon: ScrollText, hint: "Daily, weekly and monthly" },
-      { value: "scriptorium", label: "Scrolls", icon: PenLine, hint: "Imprint spells into vellum" },
-    ],
-  },
-  {
-    title: "Holdings",
-    items: [
+      { value: "skills", label: "Skills", icon: Sparkles, hint: "Train abilities" },
+      { value: "recruit", label: "Recruit", icon: UserPlus, hint: "Swear new blades" },
       {
-        value: "keep",
-        label: "Keep",
-        icon: Castle,
-        hint: "Upgrade your halls",
-        requiresClan: true,
+        value: "muster",
+        label: "Muster",
+        icon: Handshake,
+        hint: "Petitions and invitations from party leaders",
       },
-      { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
-      {
-        value: "domain",
-        label: "The Domain",
-        icon: Boxes,
-        hint: "War logistics — nodes, caravans, workshops and supply",
-        requiresClan: true,
-      },
-      {
-        value: "sysforge",
-        label: "Town Smithy",
-        icon: Anvil,
-        hint: "Public smithy — standard results, no artisans needed",
-      },
-    ],
-  },
-  {
-    title: "Realm",
-    items: [
-      {
-        value: "frontier",
-        label: "The War",
-        icon: Crosshair,
-        hint: "The living frontier — factions warring across Aethyr",
-      },
-      {
-        value: "court",
-        label: "The Court",
-        icon: Crown,
-        hint: "Rise through the King's court — from outpost to the Ashen Throne",
-      },
-      {
-        value: "bestiary",
-        label: "Bestiary",
-        icon: PawPrint,
-        hint: "Every creature your banners have faced",
-      },
-      {
-        value: "realm",
-        label: "Realm",
-        icon: Flag,
-        hint: "Rivals and the castle",
-        requiresClan: true,
-      },
-      {
-        value: "boss",
-        label: "Warfront",
-        icon: Skull,
-        hint: "The realm's daily World Boss",
-        requiresClan: true,
-      },
-      { value: "world", label: "Ladder", icon: Globe2, hint: "Live rankings of every clan" },
       {
         value: "chronicle",
         label: "Chronicle",
@@ -396,9 +348,76 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       },
     ],
   },
+  {
+    title: "Town",
+    glyph: "⚒",
+    items: [
+      { value: "market", label: "Market", icon: Store, hint: "Refine shots and trade" },
+      {
+        value: "forge",
+        label: "The Forge",
+        icon: Hammer,
+        hint: "Sharpen and reforge gear from raid drops",
+      },
+      {
+        value: "sysforge",
+        label: "Town Smithy",
+        icon: Anvil,
+        hint: "Public smithy — standard results, no artisans needed",
+      },
+      {
+        value: "domain",
+        label: "The Domain",
+        icon: Boxes,
+        hint: "War logistics — nodes, caravans, workshops and supply",
+        requiresClan: true,
+      },
+      {
+        value: "warehouse",
+        label: "The Vault",
+        icon: Warehouse,
+        hint: "Everything your clan has stored",
+      },
+      { value: "scriptorium", label: "Scrolls", icon: PenLine, hint: "Imprint spells into vellum" },
+      { value: "daily", label: "Contracts", icon: ScrollText, hint: "Daily, weekly and monthly" },
+    ],
+  },
+  {
+    title: "Realm",
+    glyph: "⚔",
+    items: [
+      {
+        value: "frontier",
+        label: "The War",
+        icon: Crosshair,
+        hint: "The living frontier — factions warring across Aethyr",
+      },
+      {
+        value: "bestiary",
+        label: "Bestiary",
+        icon: PawPrint,
+        hint: "Every creature your banners have faced",
+      },
+      {
+        value: "boss",
+        label: "Warfront",
+        icon: Skull,
+        hint: "The realm's daily World Boss",
+        requiresClan: true,
+      },
+      { value: "world", label: "Ladder", icon: Globe2, hint: "Live rankings of every clan" },
+      {
+        value: "realm",
+        label: "Rivals",
+        icon: Flag,
+        hint: "Rivals and the castle",
+        requiresClan: true,
+      },
+    ],
+  },
 ];
 
-const ALL_ITEMS = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];
+const ALL_ITEMS = [HOME_ITEM, ...MAP_NAV.flatMap((g) => g.items)];
 
 /** Every screen, keyed by its value — the slide-over reads its title/blurb here. */
 const NAV_BY_VALUE: Record<string, NavItem> = Object.fromEntries(
@@ -589,30 +608,27 @@ function Index() {
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
         <CommandBar state={state} email={user?.email ?? null} signedIn={!!user} />
 
-        {/* the war table: a standing nav rail and the map as the whole stage,
-            with the banners and the field report floated over it as HUD panels
-            instead of stacked around it. Everything else opens in a panel. */}
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <NavRail groups={NAV_GROUPS} active={tool} founded={founded} onSelect={setTool} />
-
-          <div className="relative min-h-0 flex-1">
-            <RealmAtlas
-              state={state}
-              api={api}
-              now={now}
-              fill
-              onOpenTool={setTool}
-              frontier={worldFrontier}
-              onContest={contestFrontier}
-              onBuild={buildFrontier}
-              overlays={
-                <>
-                  <BannerDock state={state} onManage={() => setTool("banners")} />
-                  <FeedDock state={state} onOpen={() => setTool("feed")} />
-                </>
-              }
-            />
-          </div>
+        {/* the war table: the map is the whole stage. Navigation is diegetic —
+            the Castle / Town / Realm menus live in the map's own toolbar — and
+            the banners and field report float over it as HUD panels. */}
+        <div className="relative min-h-0 flex-1">
+          <RealmAtlas
+            state={state}
+            api={api}
+            now={now}
+            fill
+            onOpenTool={setTool}
+            navSlot={<MapNav groups={MAP_NAV} founded={founded} onSelect={setTool} />}
+            frontier={worldFrontier}
+            onContest={contestFrontier}
+            onBuild={buildFrontier}
+            overlays={
+              <>
+                <BannerDock state={state} onManage={() => setTool("banners")} />
+                <FeedDock state={state} onOpen={() => setTool("feed")} />
+              </>
+            }
+          />
         </div>
         <ChatDock
           signedIn={!!user}
