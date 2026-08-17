@@ -157,6 +157,10 @@ export interface Member {
   profession?: ProfessionId;
   /** the marks the world has left on them — scars, deeds, griefs; newest first */
   marks?: Mark[];
+  /** lingering wounds (severity points) taken by being downed in a Blooded
+   * proving — they weaken the champion until they mend or are tended (§ traits/
+   * tactics). Heals slowly at rest, or fast at the infirmary. */
+  wound?: number | undefined;
   /** sworn to the Ashen Oath (§4.2): steps forward first when death comes, and
    * their fall weighs far more in the Chronicle. Irrevocable. */
   oath?: boolean;
@@ -411,6 +415,9 @@ export interface GameState {
   court?: CourtState;
   /** the living realm's day-tag — guards the once-per-day ambient event boon */
   livingDay?: string;
+  /** war supply — shipped home by the frontier realms you hold, and spent to
+   * commit your banners to the front (§ frontier logistics) */
+  supply?: number;
 }
 
 /** One System Forge attempt, kept for the forging ledger. */
@@ -658,6 +665,11 @@ export function regenRate(m: Member) {
   return 1 + passiveSum(m, "regen") / 100;
 }
 
+/** How a lingering wound saps a champion's fighting strength (0.65 .. 1). */
+export function woundFactor(m: Member): number {
+  return 1 - Math.min(0.35, (m.wound ?? 0) * 0.03);
+}
+
 export function memberPower(m: Member) {
   const cls = CLASS_BY_ID[m.classId]!;
   const st = memberStats(m);
@@ -667,7 +679,9 @@ export function memberPower(m: Member) {
   const base =
     (cls.power + main * 0.25) * (1 + m.level * 0.35) + gear + mastery + setBonus(m).power;
   const prof = perkSum([m.profession], "power");
-  return Math.round(base * (1 + (passiveSum(m, "power") + prof) / 100) * armorMastery(m).mult);
+  return Math.round(
+    base * (1 + (passiveSum(m, "power") + prof) / 100) * armorMastery(m).mult * woundFactor(m),
+  );
 }
 
 export function memberFind(m: Member) {
@@ -825,6 +839,15 @@ export function synergyBonus(ms: Member[]) {
 /** How much each shield-bond adds, and the ceiling — so bonds help but never dominate. */
 export const BOND_POWER_PER_PAIR = 0.04;
 export const BOND_POWER_CAP = 0.2;
+
+/* ------------------------------- War supply -------------------------------- */
+/** The most supply your treasury can hold — grows with realms held and the vault. */
+export function supplyCap(state: GameState): number {
+  const held = state.warSpoils?.held?.length ?? 0;
+  return 60 + held * 40 + (state.keep?.vault ?? 0) * 20;
+}
+/** What it costs to commit a banner to a front (spent on the push). */
+export const CONTEST_SUPPLY = 15;
 
 /** Shield-bonded pairs (affinity ≥ BOND_AT) both riding in this banner. */
 export function bondedPairsInParty(state: GameState, party: Party): number {
@@ -1777,6 +1800,17 @@ export function realmPulse(state: GameState) {
   state.realmTickAt = now;
   state.rivals = state.rivals ?? initialRivals();
   state.castle = state.castle ?? initialCastle();
+
+  // frontier logistics: realms held in the shared war ship supply home, the
+  // more developed the richer; and lingering wounds mend at rest.
+  const held = state.warSpoils?.held ?? [];
+  if (held.length) {
+    const rate = held.reduce((n, h) => n + 0.6 + (h.dev ?? 20) / 90, 0); // per hour
+    state.supply = Math.min(supplyCap(state), (state.supply ?? 0) + rate * hours);
+  }
+  const marching = new Set(state.parties.filter((p) => p.run).flatMap((p) => p.memberIds));
+  for (const m of state.members)
+    if ((m.wound ?? 0) > 0 && !marching.has(m.id)) m.wound = Math.max(0, (m.wound ?? 0) - 1);
 
   const openZones = ZONES.filter((z) => z.reqLevel <= 52).map((z) => z.id);
 

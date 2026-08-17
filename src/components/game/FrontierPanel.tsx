@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import type { GameState } from "@/lib/game/engine";
+import { supplyCap, type GameState } from "@/lib/game/engine";
 import {
   FACTIONS,
   TERRITORY_IDS,
@@ -79,6 +79,31 @@ export function FrontierPanel({
           ☾ {omen}
         </p>
       )}
+
+      {/* logistics — supply shipped home by held realms, spent to commit */}
+      <section className="rounded-sm border border-[#3fb0a6]/20 bg-black/30 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            War Supply
+          </span>
+          <span className="text-xs tabular-nums text-[#5fd0c6]">
+            {Math.floor(state.supply ?? 0)} / {supplyCap(state)}
+          </span>
+        </div>
+        <div className="mt-1 h-[4px] w-full overflow-hidden rounded-full bg-black/40">
+          <span
+            className="block h-full bg-[#3fb0a6]"
+            style={{
+              width: `${Math.min(100, ((state.supply ?? 0) / Math.max(1, supplyCap(state))) * 100)}%`,
+            }}
+          />
+        </div>
+        <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+          {clanHeld.length > 0
+            ? "Your realms ship supply home — spend it to commit banners to the front."
+            : "Hold realms on the frontier to ship supply home. Committing to a front spends it."}
+        </p>
+      </section>
 
       {/* the payoff — per-realm war spoils feeding the clan's hunts */}
       <section className="panel-ornate rounded-sm p-4">

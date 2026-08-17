@@ -1236,7 +1236,7 @@ export function useClanGame() {
      * gold/reputation to the clan, favor toward the court, and a tally for the
      * King's patrol charges. Champions cannot die in the proving, so no hp is
      * written back. */
-    finishTactics: (participantIds: string[], reward: TacReward) =>
+    finishTactics: (participantIds: string[], reward: TacReward, downedIds: string[] = []) =>
       update((s) => {
         s.gold += Math.max(0, Math.round(reward.gold));
         s.reputation += Math.max(0, Math.round(reward.rep));
@@ -1253,13 +1253,43 @@ export function useClanGame() {
           }
           if (m.level >= MAX_LEVEL) m.xp = 0;
         }
+        // a Blooded bout leaves lasting wounds on any champion who was downed
+        if (reward.blooded) {
+          for (const id of downedIds) {
+            const m = s.members.find((x) => x.id === id);
+            if (!m) continue;
+            m.wound = Math.min(12, (m.wound ?? 0) + 2);
+            pushLog(s, `${m.name} carries wounds from the Blooded proving.`, "bad");
+          }
+        }
         pushLog(
           s,
           reward.won
-            ? `The banner takes the proving — ${reward.gold} gold, +${reward.favor} favor.`
+            ? `The banner takes the ${reward.blooded ? "Blooded " : ""}proving — ${reward.gold} gold, +${reward.favor} favor.`
             : `The banner is bested in the proving, but learns from the bout.`,
           reward.won ? "good" : "info",
         );
+      }),
+
+    /** Spend war supply to commit a banner to the front (returns nothing; the
+     * caller has already checked there is enough). */
+    spendSupply: (n: number) =>
+      update((s) => {
+        s.supply = Math.max(0, (s.supply ?? 0) - Math.max(0, n));
+      }),
+
+    /** Tend the warband's lingering wounds at the infirmary, for gold. */
+    tendWounds: () =>
+      update((s) => {
+        const wounded = s.members.filter((m) => (m.wound ?? 0) > 0);
+        const points = wounded.reduce((n, m) => n + (m.wound ?? 0), 0);
+        if (points === 0) return void toast("No one carries wounds.");
+        const cost = Math.round(points * 40 * keepEffects(s).mendCost);
+        if (s.gold < cost) return void toast.error(`The infirmary asks ${cost} gold.`);
+        s.gold -= cost;
+        for (const m of wounded) m.wound = undefined;
+        pushLog(s, `The infirmary tends the warband's wounds (${cost} gold).`, "good");
+        toast.success("The wounded are made whole.");
       }),
 
     recallParty: (partyId: string) =>

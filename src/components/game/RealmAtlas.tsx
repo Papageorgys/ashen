@@ -36,6 +36,8 @@ import {
   longNightActive,
   bannersInCity,
   flameRestBill,
+  CONTEST_SUPPLY,
+  supplyCap,
   RISK_LABEL,
   type RiskTier,
 } from "@/lib/game/engine";
@@ -1241,8 +1243,16 @@ export function RealmAtlas({
                       Math.max(1, Math.round(state.members.reduce((s, m) => s + m.level, 0) / 8)),
                     )
                   : 1;
+                const supply = Math.floor(state?.supply ?? 0);
+                const canSupply = supply >= CONTEST_SUPPLY;
                 const commit = async () => {
                   if (!onContest || !state || contesting) return;
+                  if (!canSupply) {
+                    setContestMsg(
+                      `Not enough supply — ${CONTEST_SUPPLY} needed. Hold realms to ship more home.`,
+                    );
+                    return;
+                  }
                   setContesting(true);
                   setContestMsg(null);
                   const r = await onContest(selected.id as TerritoryId, power, state.clanName);
@@ -1252,7 +1262,10 @@ export function RealmAtlas({
                     setContestMsg(
                       `Your banners are still regrouping — ${Math.ceil(r.cooldownMs / 60000)}m.`,
                     );
-                  else setContestMsg("Your banners throw themselves at the line.");
+                  else {
+                    api?.spendSupply(CONTEST_SUPPLY);
+                    setContestMsg("Your banners throw themselves at the line.");
+                  }
                 };
                 const front = isContested(frontier, selected.id as TerritoryId);
                 const dev = Math.round(cell.dev ?? 20);
@@ -1321,13 +1334,28 @@ export function RealmAtlas({
 
                     {onContest && live && !mine && (
                       <>
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>War supply</span>
+                          <span
+                            className={cn(
+                              "tabular-nums",
+                              canSupply ? "text-[#5fd0c6]" : "text-destructive",
+                            )}
+                          >
+                            {supply}/{state ? supplyCap(state) : 0} · costs {CONTEST_SUPPLY}
+                          </span>
+                        </div>
                         <button
                           type="button"
-                          disabled={contesting}
+                          disabled={contesting || !canSupply}
                           onClick={commit}
                           className="rounded-sm border border-forge-ember bg-forge-ember/80 py-1.5 font-display text-[11px] uppercase tracking-[0.14em] text-[#160d06] transition enabled:hover:brightness-110 disabled:opacity-40"
                         >
-                          {contesting ? "Committing…" : `Commit to the front · +${power}`}
+                          {contesting
+                            ? "Committing…"
+                            : !canSupply
+                              ? "Not enough supply"
+                              : `Commit to the front · +${power}`}
                         </button>
                         {contestMsg && (
                           <p className="text-[10px] leading-snug text-muted-foreground">

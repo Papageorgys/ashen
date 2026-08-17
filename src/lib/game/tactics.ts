@@ -487,7 +487,7 @@ function makeFoes(members: Member[], tier: TacTier): TacUnit[] {
   return foes;
 }
 
-function allyUnit(m: Member, rank: "front" | "back"): TacUnit {
+function allyUnit(m: Member, rank: "front" | "back", bonded: boolean): TacUnit {
   const role = CLASS_BY_ID[m.classId]?.role ?? "blade";
   const st = memberStats(m);
   const mods = traitMods(m.trait);
@@ -495,11 +495,12 @@ function allyUnit(m: Member, rank: "front" | "back"): TacUnit {
   let mit = Math.min(0.7, mitigation(m));
   if (mods.mit) mit *= mods.mit; // berserker guards worse
   if (rank === "front" && mods.frontMit) mit += mods.frontMit; // vanguard/warden dig in
+  if (bonded) mit += 0.05; // fighting beside a sworn friend
   return {
     id: `ally_${m.id}`,
     side: "ally",
     name: m.name,
-    sub: ROLE_LABEL[role],
+    sub: ROLE_LABEL[role] + (bonded ? " · bonded" : ""),
     role,
     dmgType: memberDamageType(m),
     rank,
@@ -507,7 +508,8 @@ function allyUnit(m: Member, rank: "front" | "back"): TacUnit {
     maxHp: maxHp(m),
     mp: maxMp(m),
     maxMp: maxMp(m),
-    power: memberPower(m),
+    // a shield-bond lends strength on the field too
+    power: Math.round(memberPower(m) * (bonded ? 1.08 : 1)),
     mitigation: Math.min(0.85, Math.max(0, mit)),
     init: st.dex + m.level + rng(0, 10),
     down: false,
@@ -528,10 +530,16 @@ export function startEncounter(
   members: Member[],
   tierId: string,
   formation?: Record<string, "front" | "back">,
+  bondedIds?: string[],
 ): TacState {
   const tier = tierById(tierId);
+  const bonded = new Set(bondedIds ?? []);
   const allies = members.map((m) =>
-    allyUnit(m, formation?.[m.id] ?? defaultRank(CLASS_BY_ID[m.classId]?.role ?? "blade")),
+    allyUnit(
+      m,
+      formation?.[m.id] ?? defaultRank(CLASS_BY_ID[m.classId]?.role ?? "blade"),
+      bonded.has(m.id),
+    ),
   );
   const foes = makeFoes(members, tier);
   const units = [...allies, ...foes];
@@ -905,23 +913,36 @@ export interface TacReward {
   xp: number; // per participating champion
   favor: number;
   won: boolean;
+  blooded: boolean;
 }
 
-/** What a bout pays. A loss still teaches — a fraction is granted for the effort. */
-export function tacticalReward(s: TacState, members: Member[]): TacReward {
+/** How much richer a Blooded bout pays for its real stakes. */
+export const BLOODED_MULT = 1.5;
+
+/** What a bout pays. A loss still teaches — a fraction is granted for the effort.
+ * A Blooded bout pays half again as much for the risk of lasting wounds. */
+export function tacticalReward(s: TacState, members: Member[], blooded = false): TacReward {
   const tier = tierById(s.tierId);
   const foeHp = s.units.filter((u) => u.side === "foe").reduce((n, u) => n + u.maxHp, 0);
   const avgLevel = Math.round(
     members.reduce((n, m) => n + m.level, 0) / Math.max(1, members.length),
   );
   const won = s.phase === "won";
-  const base = foeHp * 0.16 * tier.mult;
+  const stakes = blooded ? BLOODED_MULT : 1;
+  const base = foeHp * 0.16 * tier.mult * stakes;
   const frac = won ? 1 : 0.2;
   return {
     won,
+    blooded,
     gold: Math.round(base * frac),
-    rep: Math.round((6 + avgLevel * 0.8) * tier.mult * frac),
-    xp: Math.round((40 + avgLevel * avgLevel * 0.6) * tier.mult * frac),
-    favor: won ? tier.favor : 0,
+    rep: Math.round((6 + avgLevel * 0.8) * tier.mult * stakes * frac),
+    xp: Math.round((40 + avgLevel * avgLevel * 0.6) * tier.mult * stakes * frac),
+    favor: won ? Math.round(tier.favor * stakes) : 0,
   };
+}
+
+/** The champions (by member id) left down at the bout's end — they take wounds
+ * in a Blooded proving. */
+export function downedMemberIds(s: TacState): string[] {
+  return s.units.filter((u) => u.side === "ally" && u.down).map((u) => u.id.replace(/^ally_/, ""));
 }
