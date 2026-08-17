@@ -36,7 +36,7 @@ import {
   longNightActive,
   bannersInCity,
   flameRestBill,
-  CONTEST_SUPPLY,
+  contestCost,
   supplyCap,
   warbandPower,
   RISK_LABEL,
@@ -1606,13 +1606,14 @@ export function RealmAtlas({
                 // steady it, feuds fracture it (not a bare headcount)
                 const warband = state ? warbandPower(state) : null;
                 const power = warband?.power ?? 1;
+                const cost = contestCost(power); // scales with the levy committed
                 const supply = Math.floor(state?.supply ?? 0);
-                const canSupply = supply >= CONTEST_SUPPLY;
+                const canSupply = supply >= cost;
                 const commit = async () => {
                   if (!onContest || !state || contesting) return;
                   if (!canSupply) {
                     setContestMsg(
-                      `Not enough supply — ${CONTEST_SUPPLY} needed. Hold realms to ship more home.`,
+                      `Not enough supply — ${cost} needed. Hold realms to ship more home.`,
                     );
                     return;
                   }
@@ -1626,7 +1627,7 @@ export function RealmAtlas({
                       `Your banners are still regrouping — ${Math.ceil(r.cooldownMs / 60000)}m.`,
                     );
                   else {
-                    api?.spendSupply(CONTEST_SUPPLY);
+                    api?.spendSupply(cost);
                     setContestMsg("Your banners throw themselves at the line.");
                   }
                 };
@@ -1757,7 +1758,7 @@ export function RealmAtlas({
                               canSupply ? "text-[#5fd0c6]" : "text-destructive",
                             )}
                           >
-                            {supply}/{state ? supplyCap(state) : 0} · costs {CONTEST_SUPPLY}
+                            {supply}/{state ? supplyCap(state) : 0} · costs {cost}
                           </span>
                         </div>
 

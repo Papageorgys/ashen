@@ -920,8 +920,19 @@ export function realmLevy(
   const ready = count > 0 && elapsed >= LEVY_COOLDOWN_MS;
   return { pool, count, ready, readyIn: Math.max(0, LEVY_COOLDOWN_MS - elapsed) };
 }
-/** What it costs to commit a banner to a front (spent on the push). */
+/** The base cost to commit a banner to a front (spent on the push). */
 export const CONTEST_SUPPLY = 15;
+
+/**
+ * What committing to a front actually costs in supply — the base plus a share
+ * scaled by the size of the levy you throw. A larger war eats more supply than
+ * passive income from held realms can refill, so the domain's shipments stay
+ * worth making no matter how much ground you hold (closes the "supply caps out
+ * and the domain goes redundant" balance gap).
+ */
+export function contestCost(power: number): number {
+  return CONTEST_SUPPLY + Math.round(Math.max(0, power) * 0.4);
+}
 
 /* Provisioning the war — champions in the field must be fed. The domain's
  * surplus rations feed them first (the link that ties domain food to the
