@@ -28,6 +28,7 @@ import {
   buildMs,
   townshipEffects,
   initialTownship,
+  canBuildType,
   type BuildingType,
 } from "@/lib/game/township";
 import { professionFromSeed } from "@/lib/game/professions";
@@ -1279,6 +1280,11 @@ export function useClanGame() {
         if (plot.constructing) return void toast("That plot is already under construction.");
         if (plot.type && plot.type !== type)
           return void toast.error("Raze the current building before raising another here.");
+        // fresh builds are tech-gated; upgrades of an existing building are not
+        if (plot.level === 0) {
+          const gate = canBuildType(s.township, type);
+          if (!gate.ok) return void toast.error(gate.why);
+        }
         const def = BUILDINGS[type];
         const toLevel = plot.level + 1;
         if (toLevel > def.maxLevel) return void toast(`${def.name} is built to its limit.`);

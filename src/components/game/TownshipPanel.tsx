@@ -7,7 +7,10 @@ import {
   BUILDING_TYPES,
   buildCost,
   buildMs,
-  type BuildingType,
+  canBuildType,
+  plotDistrict,
+  PREREQ,
+  ADJ_BONUS,
   type Plot,
 } from "@/lib/game/township";
 import type { ClanApi } from "@/hooks/useClanGame";
@@ -99,16 +102,21 @@ export function TownshipPanel({
       <section className="panel rounded-sm p-4">
         <h3 className="font-display text-sm uppercase tracking-[0.2em] text-gold">The Plots</h3>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          {town.plots.map((p) => (
+          {town.plots.map((p, i) => (
             <PlotTile
               key={p.id}
               plot={p}
+              district={plotDistrict(town, i)}
               now={now}
               selected={sel === p.id}
               onSelect={() => setSel(sel === p.id ? null : p.id)}
             />
           ))}
         </div>
+        <p className="mt-2 text-[10px] leading-snug text-muted-foreground">
+          District bonus: a building works {Math.round(ADJ_BONUS * 100)}% harder for each finished
+          neighbour — pack them together.
+        </p>
       </section>
 
       {/* the selected plot's actions */}
@@ -123,11 +131,13 @@ export function TownshipPanel({
 
 function PlotTile({
   plot,
+  district,
   now,
   selected,
   onSelect,
 }: {
   plot: Plot;
+  district: number;
   now: number;
   selected: boolean;
   onSelect: () => void;
@@ -153,7 +163,10 @@ function PlotTile({
             {def.glyph}
           </span>
           <span className="truncate text-[9px] text-[#e7d7ac]">{def.name}</span>
-          <span className="text-[8px] tabular-nums text-gold">Lv {plot.level}</span>
+          <span className="text-[8px] tabular-nums text-gold">
+            Lv {plot.level}
+            {district > 0 && <span className="ml-0.5 text-[#7ea86a]">+{district * 8}%</span>}
+          </span>
         </>
       ) : (
         <span className="text-[10px] text-muted-foreground">empty</span>
@@ -257,22 +270,32 @@ function PlotActions({
           const def = BUILDINGS[t];
           const cost = buildCost(t, 1);
           const time = buildMs(t, 1, buildSpeed);
+          const gate = canBuildType(state.township, t);
           const afford = state.gold >= cost.gold && timber >= cost.timber;
+          const req = PREREQ[t];
           return (
             <button
               key={t}
               type="button"
-              disabled={!afford}
+              disabled={!afford || !gate.ok}
               onClick={() => api.buildTownship(plot.id, t)}
+              title={gate.ok ? def.blurb : gate.why}
               className="rounded-sm border border-white/10 bg-black/20 p-2 text-left transition enabled:hover:border-gold/60 disabled:opacity-40"
             >
               <div className="flex items-center gap-1.5 text-sm text-gold">
                 <span aria-hidden="true">{def.glyph}</span>
                 {def.name}
+                {!gate.ok && <span aria-hidden="true">🔒</span>}
               </div>
               <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{def.blurb}</p>
               <div className="mt-1 text-[9px] tabular-nums text-muted-foreground">
-                {cost.gold.toLocaleString()}g · {cost.timber}🪵 · {mins(time)}
+                {req && !gate.ok ? (
+                  <span className="text-[#d8a24a]">Requires {BUILDINGS[req].name}</span>
+                ) : (
+                  <>
+                    {cost.gold.toLocaleString()}g · {cost.timber}🪵 · {mins(time)}
+                  </>
+                )}
               </div>
             </button>
           );
