@@ -41,6 +41,8 @@ import { useFrontier } from "@/hooks/useFrontier";
 import { territoriesOf } from "@/lib/game/frontier";
 import { useSession } from "@/hooks/useSession";
 import { AmbientStage } from "@/components/game/AmbientStage";
+import { SoundLayer } from "@/components/game/SoundLayer";
+import { playCue } from "@/lib/sound";
 import { TitleBar } from "@/components/game/TitleBar";
 import { Flourish, type FlourishEvent } from "@/components/game/Flourish";
 import type { Founding as FoundingT } from "@/lib/game/engine";
@@ -428,6 +430,16 @@ function Index() {
     return () => clearInterval(t);
   }, []);
 
+  // the realm's voice: a whoosh as a screen opens over the map, a softer one as
+  // it closes (the per-button click is handled globally by the SoundLayer)
+  const prevTool = useRef<string | null>(null);
+  useEffect(() => {
+    const had = prevTool.current;
+    prevTool.current = tool;
+    if (tool && tool !== had) playCue("open");
+    else if (!tool && had) playCue("close");
+  }, [tool]);
+
   // feed the shared war back into the L2 economy: what the clan holds becomes the
   // war-spoils multiplier on every run's gold / xp / essence — scaled by how
   // developed each realm is, so a long-held, built-up realm pays far richer
@@ -483,6 +495,7 @@ function Index() {
   if (!state) {
     return (
       <>
+        <SoundLayer />
         <AmbientStage />
         <div className="relative z-10">
           <Founding onStart={api.start} />
@@ -543,6 +556,7 @@ function Index() {
 
   return (
     <TooltipProvider delayDuration={200}>
+      <SoundLayer />
       <AmbientStage />
       <Flourish event={flourish} />
       <div className="relative z-10 flex h-dvh flex-col overflow-hidden">
