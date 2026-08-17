@@ -50,6 +50,8 @@ export function LogisticsPanel({
   const supply = Math.floor(state.supply ?? 0);
   const cap = supplyCap(state);
   const levy = realmLevy(state, now);
+  const armourOnHand = Math.floor(d.goods.armour ?? 0);
+  const woundPoints = state.members.reduce((n, m) => n + (m.wound ?? 0), 0);
 
   const trendTone =
     trend === "well-fed"
@@ -490,6 +492,29 @@ export function LogisticsPanel({
         <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
           Supply funds committing your banners to the war (on the map). Weapons, armour and mounts
           are worth far more than raw rations.
+        </p>
+
+        {/* the armory doesn't only ship — its plate kits the champions who fight */}
+        <button
+          type="button"
+          disabled={armourOnHand < 1 || woundPoints < 1}
+          onClick={() => api.kitWarband()}
+          title={
+            woundPoints < 1
+              ? "The warband bears no wounds"
+              : armourOnHand < 1
+                ? "No armour in the stores"
+                : `Issue armour to mend the warband's wounds`
+          }
+          className="mt-2 w-full rounded-sm border border-[#6f8f6a]/50 bg-[#6f8f6a]/10 py-1.5 font-display text-[11px] uppercase tracking-[0.12em] text-[#9fca92] transition enabled:hover:border-[#9fca92] disabled:opacity-40"
+        >
+          {woundPoints < 1
+            ? "Warband unhurt"
+            : `Kit the warband · ${Math.min(armourOnHand, woundPoints)} armour → wounds`}
+        </button>
+        <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+          The smithy&apos;s plate protects your own — issue armour to mend the warband&apos;s wounds
+          ({woundPoints} point{woundPoints === 1 ? "" : "s"} borne).
         </p>
       </section>
     </div>
