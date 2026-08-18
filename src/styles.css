@@ -348,6 +348,7 @@
     inset 0 0 40px oklch(0 0 0 / 0.45),
     0 22px 50px -30px oklch(0 0 0 / 0.95);
   backdrop-filter: blur(2px);
+  animation: stage-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @utility plaque {
@@ -548,6 +549,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ember,
   .stage-enter,
+  .panel-ornate,
   .flourish-bloom,
   .flourish-ring,
   .gilded,
