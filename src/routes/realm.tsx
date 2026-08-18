@@ -46,7 +46,7 @@ import { FactionsPanel } from "@/components/realm/FactionsPanel";
 import { MusterPanel } from "@/components/realm/MusterPanel";
 import { ResearchPanel } from "@/components/realm/ResearchPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
-import { GameIcon } from "@/components/game/GameIcon";
+import { GameIcon, type IconName } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
 
 export const Route = createFileRoute("/realm")({
@@ -413,56 +413,50 @@ function RealmPage() {
             <span className="rounded-sm border border-white/10 bg-black/30 px-2.5 py-1.5 text-[11px] tabular-nums text-muted-foreground">
               Day {Math.floor(state.day)}
             </span>
-            <button
-              type="button"
+            <NavButton
+              icon="crown"
+              label="Council"
+              active={showCouncil}
               onClick={() => {
                 setShowCouncil((s) => !s);
                 setShowDiplo(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="crown" size={13} />
-              Council
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="scales"
+              label="Diplomacy"
+              active={showDiplo}
               onClick={() => {
                 setShowDiplo((s) => !s);
                 setShowCouncil(false);
                 setShowSpy(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="scales" size={13} />
-              Diplomacy
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="moon"
+              label="Spymaster"
+              active={showSpy}
               onClick={() => {
                 setShowSpy((s) => !s);
                 setShowCouncil(false);
                 setShowDiplo(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="moon" size={13} />
-              Spymaster
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="market"
+              label="Market"
+              active={showMarket}
               onClick={() => {
                 setShowMarket((s) => !s);
                 setShowCouncil(false);
                 setShowDiplo(false);
                 setShowSpy(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="market" size={13} />
-              Market
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="scroll"
+              label="Annals"
+              active={showAnnals}
               onClick={() => {
                 setShowAnnals((s) => !s);
                 setShowCouncil(false);
@@ -470,13 +464,11 @@ function RealmPage() {
                 setShowSpy(false);
                 setShowMarket(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="scroll" size={13} />
-              Annals
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="scales"
+              label="Estates"
+              active={showEstates}
               onClick={() => {
                 setShowEstates((s) => !s);
                 setShowCouncil(false);
@@ -485,13 +477,11 @@ function RealmPage() {
                 setShowMarket(false);
                 setShowAnnals(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="scales" size={13} />
-              Estates
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="swords"
+              label="Muster"
+              active={showMuster}
               onClick={() => {
                 setShowMuster((s) => !s);
                 setShowCouncil(false);
@@ -501,13 +491,11 @@ function RealmPage() {
                 setShowAnnals(false);
                 setShowEstates(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="swords" size={13} />
-              Muster
-            </button>
-            <button
-              type="button"
+            />
+            <NavButton
+              icon="anvil"
+              label="Research"
+              active={showResearch}
               onClick={() => {
                 setShowResearch((s) => !s);
                 setShowCouncil(false);
@@ -518,11 +506,7 @@ function RealmPage() {
                 setShowEstates(false);
                 setShowMuster(false);
               }}
-              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
-            >
-              <GameIcon name="anvil" size={13} />
-              Research
-            </button>
+            />
             <button
               type="button"
               onClick={() => setPlaying((p) => !p)}
@@ -738,5 +722,34 @@ function RealmPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/** A tactile header rune-button that lights up while its panel is open. */
+function NavButton({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: IconName;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`btn-rune hover:btn-rune-hover inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] ${
+        active
+          ? "rail-active border-gold/60 bg-gold/[0.08] text-gold"
+          : "border-white/15 text-muted-foreground hover:border-gold/50 hover:text-gold"
+      }`}
+    >
+      <GameIcon name={icon} size={13} />
+      {label}
+    </button>
   );
 }
