@@ -8,12 +8,16 @@ import type { ResourceId, Settlement, World } from "./types";
  * their upkeep; shortfalls breed unrest. Pure, deterministic accounting the UI
  * and the council read from.
  */
+export type TaxRate = "low" | "normal" | "high";
+export const TAX_MULT: Record<TaxRate, number> = { low: 0.6, normal: 1, high: 1.55 };
+
 export interface Ledger {
   treasury: number;
   food: number;
   stores: Record<ResourceId, number>;
   unrest: number; // 0..100
   season: number;
+  tax: TaxRate;
 }
 
 export interface SeasonReport {
@@ -35,6 +39,7 @@ export function seedLedger(world: World, kingdomId: string): Ledger {
     stores: { food: 0, wood: 20, stone: 20, iron: 10, gold: 0, horses: 8 },
     unrest: 12,
     season: 1,
+    tax: "normal",
   };
 }
 
@@ -55,7 +60,7 @@ export function collectSeason(
     .filter((a) => a.ownerId === kingdomId)
     .reduce((s, a) => s + troopCount(a), 0);
 
-  const taxes = Math.round(sum.population * TAX_PER_HEAD);
+  const taxes = Math.round(sum.population * TAX_PER_HEAD * TAX_MULT[ledger.tax]);
   const resourceGold = sum.production.gold ?? 0;
   const upkeep = Math.round(soldiers * UPKEEP_GOLD);
   const goldNet = taxes + resourceGold - upkeep;
@@ -73,6 +78,8 @@ export function collectSeason(
   let unrestDelta = 0;
   if (foodNet < 0) unrestDelta += Math.min(12, Math.ceil(-foodNet / 4));
   if (ledger.treasury <= 0) unrestDelta += 4;
+  if (ledger.tax === "high") unrestDelta += 3;
+  else if (ledger.tax === "low") unrestDelta -= 1;
   if (unrestDelta === 0) unrestDelta = -3;
   ledger.unrest = Math.max(0, Math.min(100, ledger.unrest + unrestDelta));
   ledger.season += 1;
