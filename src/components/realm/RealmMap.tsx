@@ -402,6 +402,7 @@ export function RealmMap({
 
           {/* armies — formations physically on the map, only where seen */}
           {armies.map((a) => {
+            if (troopCount(a) <= 0) return null; // an emptied garrison isn't on the field
             const isPlayer = a.ownerId === world.playerKingdomId;
             // hide enemy hosts standing in fog
             if (fog && !isPlayer && !fog.visible.has(a.provinceId)) return null;

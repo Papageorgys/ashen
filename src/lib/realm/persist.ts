@@ -8,6 +8,7 @@ import { makeMarket, type MarketState } from "./market";
 import { makeRulers, type Ruler } from "./dynasty";
 import { makeAnnals, type AnnalEntry } from "./annals";
 import { makeFactions, type Factions } from "./factions";
+import { makeMuster, type Muster } from "./military";
 import type { RealmState } from "./sim";
 
 /**
@@ -32,6 +33,7 @@ export interface RealmWorld {
   rulers: Record<string, Ruler>;
   annals: AnnalEntry[];
   factions: Factions;
+  muster: Muster;
   gen: number;
 }
 
@@ -52,6 +54,7 @@ interface SaveData {
   rulers?: Record<string, Ruler>;
   annals?: AnnalEntry[];
   factions?: Factions;
+  muster?: Muster;
 }
 
 /** Build a fresh realm for a given generation (seed = aethyr-<gen>). */
@@ -67,6 +70,7 @@ export function freshRealm(gen: number): RealmWorld {
     rulers: makeRulers(world),
     annals: makeAnnals(0),
     factions: makeFactions(),
+    muster: makeMuster(world.playerKingdomId),
     gen,
   };
 }
@@ -84,6 +88,7 @@ function serialize(rw: RealmWorld): SaveData {
     rulers: rw.rulers,
     annals: rw.annals,
     factions: rw.factions,
+    muster: rw.muster,
     intel: {
       seen: [...rw.intel.seen],
       lastOwner: rw.intel.lastOwner,
@@ -133,6 +138,7 @@ export function loadRealm(): RealmWorld | null {
     rulers: data.rulers ?? makeRulers(world),
     annals: data.annals ?? makeAnnals(data.day),
     factions: data.factions ?? makeFactions(),
+    muster: data.muster ?? makeMuster(world.playerKingdomId),
     gen: data.gen,
   };
 }
