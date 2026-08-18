@@ -7,6 +7,14 @@ import { seedLedger, collectSeason, type Ledger } from "@/lib/realm/kingdom";
 import { makeCouncil, type Advisor } from "@/lib/realm/council";
 import { pickEvent, applyOutcome, type Choice, type RealmEvent } from "@/lib/realm/events";
 import { planEnemyKingdoms } from "@/lib/realm/ai";
+import {
+  makeDiplomacy,
+  diplomacyTick,
+  evaluateProposal,
+  type Diplomacy,
+  type DiploAction,
+  type ProposalResult,
+} from "@/lib/realm/diplomacy";
 import { makeRng } from "@/lib/realm/rng";
 import { RealmMap } from "@/components/realm/RealmMap";
 import { RealmHud } from "@/components/realm/RealmHud";
@@ -16,6 +24,7 @@ import { BattleReport } from "@/components/realm/BattleReport";
 import { CouncilPanel } from "@/components/realm/CouncilPanel";
 import { EventCard } from "@/components/realm/EventCard";
 import { Chronicle } from "@/components/realm/Chronicle";
+import { DiplomacyPanel } from "@/components/realm/DiplomacyPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -51,6 +60,7 @@ interface RealmWorld {
   state: RealmState;
   ledger: Ledger;
   council: Advisor[];
+  dip: Diplomacy;
 }
 
 function RealmPage() {
@@ -61,17 +71,20 @@ function RealmPage() {
       state: { world, armies: spawnStartingArmies(world), day: 0 },
       ledger: seedLedger(world, world.playerKingdomId),
       council: makeCouncil(world),
+      dip: makeDiplomacy(world),
     };
   }, [gen]);
 
   const ref = useRef<RealmWorld>(initial);
   const chronicleRef = useRef<BattleEvent[]>([]);
+  const diploSeq = useRef(0);
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [selProv, setSelProv] = useState<string | null>(null);
   const [selArmy, setSelArmy] = useState<string | null>(null);
   const [report, setReport] = useState<BattleEvent | null>(null);
   const [pendingEvent, setPendingEvent] = useState<RealmEvent | null>(null);
   const [showCouncil, setShowCouncil] = useState(false);
+  const [showDiplo, setShowDiplo] = useState(false);
   const [playing, setPlaying] = useState(true);
 
   useEffect(() => {
@@ -82,6 +95,7 @@ function RealmPage() {
     setReport(null);
     setPendingEvent(null);
     setShowCouncil(false);
+    setShowDiplo(false);
     setPlaying(true);
     force();
   }, [initial]);
@@ -104,10 +118,17 @@ function RealmPage() {
         if (mine) setReport(mine);
       }
       if (state.day >= ledger.season * SEASON_DAYS) {
-        // rival crowns take their turn, then the season is collected
+        // rival crowns feud and take their turn, then the season is collected
+        diplomacyTick(
+          ref.current.dip,
+          state.world,
+          state.armies,
+          makeRng(state.world.seed ^ (ledger.season * 40961)),
+        );
         planEnemyKingdoms(
           state.world,
           state.armies,
+          ref.current.dip,
           makeRng(state.world.seed ^ (ledger.season * 104729)),
         );
         collectSeason(ledger, state.world, pid, state.armies);
@@ -127,9 +148,29 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council } = ref.current;
+  const { state, ledger, council, dip } = ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
+
+  const diploEvaluate = (rivalId: string, action: DiploAction): ProposalResult => {
+    if (action === "tribute") {
+      if (ledger.treasury < 60)
+        return { accepted: false, response: "The treasury cannot spare the gift." };
+      ledger.treasury -= 60;
+    }
+    diploSeq.current += 1;
+    const res = evaluateProposal(
+      dip,
+      world,
+      state.armies,
+      playerId,
+      rivalId,
+      action,
+      makeRng(world.seed ^ (diploSeq.current * 2654435761)),
+    );
+    force();
+    return res;
+  };
 
   const selectArmy = (id: string) => {
     setSelArmy((cur) => (cur === id ? null : id));
@@ -169,11 +210,25 @@ function RealmPage() {
             </span>
             <button
               type="button"
-              onClick={() => setShowCouncil((s) => !s)}
+              onClick={() => {
+                setShowCouncil((s) => !s);
+                setShowDiplo(false);
+              }}
               className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
               <GameIcon name="crown" size={13} />
               Council
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowDiplo((s) => !s);
+                setShowCouncil(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="scales" size={13} />
+              Diplomacy
             </button>
             <button
               type="button"
@@ -219,6 +274,15 @@ function RealmPage() {
                 council={council}
                 ctx={{ world, kingdomId: playerId, ledger, armies: state.armies }}
                 onClose={() => setShowCouncil(false)}
+              />
+            )}
+            {showDiplo && (
+              <DiplomacyPanel
+                world={world}
+                dip={dip}
+                treasury={ledger.treasury}
+                evaluate={diploEvaluate}
+                onClose={() => setShowDiplo(false)}
               />
             )}
             {activeArmy && (
