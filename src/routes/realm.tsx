@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { pathfind } from "@/lib/realm/army";
-import { tickRealm, type BattleEvent } from "@/lib/realm/sim";
+import {
+  tickRealm,
+  resolvePending,
+  withdrawArmy,
+  type BattleEvent,
+  type PendingBattle,
+} from "@/lib/realm/sim";
+import type { Tactic } from "@/lib/realm/battle";
 import { collectSeason } from "@/lib/realm/kingdom";
 import { pickEvent, applyOutcome, type Choice, type RealmEvent } from "@/lib/realm/events";
 import { freshRealm, loadRealm, saveRealm, clearRealm, type RealmWorld } from "@/lib/realm/persist";
@@ -29,6 +36,7 @@ import { DiplomacyPanel } from "@/components/realm/DiplomacyPanel";
 import { SpymasterPanel } from "@/components/realm/SpymasterPanel";
 import { MarketPanel } from "@/components/realm/MarketPanel";
 import { AnnalsPanel } from "@/components/realm/AnnalsPanel";
+import { BattlePlanCard } from "@/components/realm/BattlePlanCard";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -78,6 +86,7 @@ function RealmPage() {
   const [showSpy, setShowSpy] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
   const [showAnnals, setShowAnnals] = useState(false);
+  const [pendingBattle, setPendingBattle] = useState<PendingBattle | null>(null);
   const [playing, setPlaying] = useState(true);
   const yearRef = useRef(1);
 
@@ -99,6 +108,7 @@ function RealmPage() {
     setShowSpy(false);
     setShowMarket(false);
     setShowAnnals(false);
+    setPendingBattle(null);
     yearRef.current = yearOf(ref.current.state.day);
     // fold in what the starting holdings can see
     rememberVisible(
@@ -136,7 +146,11 @@ function RealmPage() {
       last = t;
       const { state, ledger } = ref.current;
       const pid = state.world.playerKingdomId;
-      const events = tickRealm(state, dt * SPEED);
+      const { events, pending } = tickRealm(state, dt * SPEED, { playerId: pid });
+      if (pending) {
+        setPendingBattle(pending);
+        setPlaying(false);
+      }
       // fold newly-scouted ground into the player's memory
       rememberVisible(
         state.world,
@@ -226,6 +240,32 @@ function RealmPage() {
     else sell(ledger, market, t, 10);
     force();
   };
+
+  const chooseTactic = (choice: Tactic | "withdraw") => {
+    if (!pendingBattle) return;
+    if (choice === "withdraw") {
+      withdrawArmy(state, pendingBattle);
+    } else {
+      const ev = resolvePending(state, pendingBattle, choice);
+      if (ev) {
+        chronicleRef.current = [ev, ...chronicleRef.current].slice(0, 12);
+        setReport(ev);
+        if (ev.captured && ev.defenderKingdomId)
+          record(
+            annals,
+            state.day,
+            "conquest",
+            `${ev.attackerName} seized ${ev.provinceName} from ${ev.defenderName}.`,
+          );
+      }
+    }
+    setPendingBattle(null);
+    setPlaying(true);
+    force();
+  };
+  const pendingArmy = pendingBattle
+    ? state.armies.find((a) => a.id === pendingBattle.armyId)
+    : null;
 
   const visible = computeVisible(world, state.armies, intel, playerId);
   const fog = {
@@ -464,6 +504,18 @@ function RealmPage() {
             )}
             {report && <BattleReport event={report} onClose={() => setReport(null)} />}
           </div>
+
+          {/* a battle the player leads awaits their command */}
+          {pendingBattle && pendingArmy && (
+            <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center bg-black/50 p-4">
+              <BattlePlanCard
+                world={world}
+                army={pendingArmy}
+                pending={pendingBattle}
+                onChoose={chooseTactic}
+              />
+            </div>
+          )}
 
           {/* an event demands the crown's judgement, centre stage */}
           {pendingEvent && (
