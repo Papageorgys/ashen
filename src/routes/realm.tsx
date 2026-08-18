@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { generateWorld } from "@/lib/realm/worldgen";
-import { spawnStartingArmies, pathfind } from "@/lib/realm/army";
-import { tickRealm, type BattleEvent, type RealmState } from "@/lib/realm/sim";
-import { seedLedger, collectSeason, type Ledger } from "@/lib/realm/kingdom";
-import { makeCouncil, type Advisor } from "@/lib/realm/council";
+import { pathfind } from "@/lib/realm/army";
+import { tickRealm, type BattleEvent } from "@/lib/realm/sim";
+import { collectSeason } from "@/lib/realm/kingdom";
 import { pickEvent, applyOutcome, type Choice, type RealmEvent } from "@/lib/realm/events";
+import { freshRealm, loadRealm, saveRealm, clearRealm, type RealmWorld } from "@/lib/realm/persist";
 import { planEnemyKingdoms } from "@/lib/realm/ai";
 import {
-  makeDiplomacy,
   diplomacyTick,
   evaluateProposal,
-  type Diplomacy,
   type DiploAction,
   type ProposalResult,
 } from "@/lib/realm/diplomacy";
@@ -56,28 +53,14 @@ const LEGEND: { id: keyof typeof TERRAIN; label: string }[] = [
 const SPEED = 6; // days per real second
 const SEASON_DAYS = 90;
 
-interface RealmWorld {
-  state: RealmState;
-  ledger: Ledger;
-  council: Advisor[];
-  dip: Diplomacy;
-}
-
 function RealmPage() {
   const [gen, setGen] = useState(0);
-  const initial = useMemo<RealmWorld>(() => {
-    const world = generateWorld({ seed: `aethyr-${gen}` });
-    return {
-      state: { world, armies: spawnStartingArmies(world), day: 0 },
-      ledger: seedLedger(world, world.playerKingdomId),
-      council: makeCouncil(world),
-      dip: makeDiplomacy(world),
-    };
-  }, [gen]);
+  const initial = useMemo<RealmWorld>(() => freshRealm(gen), [gen]);
 
   const ref = useRef<RealmWorld>(initial);
   const chronicleRef = useRef<BattleEvent[]>([]);
   const diploSeq = useRef(0);
+  const loadedRef = useRef(false);
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [selProv, setSelProv] = useState<string | null>(null);
   const [selArmy, setSelArmy] = useState<string | null>(null);
@@ -89,6 +72,12 @@ function RealmPage() {
 
   useEffect(() => {
     ref.current = initial;
+    // on first mount, resume a saved realm if one exists
+    if (!loadedRef.current) {
+      loadedRef.current = true;
+      const saved = loadRealm();
+      if (saved) ref.current = saved;
+    }
     chronicleRef.current = [];
     setSelProv(null);
     setSelArmy(null);
@@ -99,6 +88,17 @@ function RealmPage() {
     setPlaying(true);
     force();
   }, [initial]);
+
+  // persist the realm when the tab is hidden or closed
+  useEffect(() => {
+    const save = () => saveRealm(ref.current);
+    window.addEventListener("beforeunload", save);
+    document.addEventListener("visibilitychange", save);
+    return () => {
+      window.removeEventListener("beforeunload", save);
+      document.removeEventListener("visibilitychange", save);
+    };
+  }, []);
 
   // the clock: advance hosts, and each season collect taxes + maybe raise an event
   useEffect(() => {
@@ -132,6 +132,7 @@ function RealmPage() {
           makeRng(state.world.seed ^ (ledger.season * 104729)),
         );
         collectSeason(ledger, state.world, pid, state.armies);
+        saveRealm(ref.current); // autosave once per season
         const rng = makeRng(state.world.seed ^ (ledger.season * 7919));
         if (rng() < 0.7) {
           const ev = pickEvent(state.world, ledger, pid, rng);
@@ -239,7 +240,10 @@ function RealmPage() {
             </button>
             <button
               type="button"
-              onClick={() => setGen((g) => g + 1)}
+              onClick={() => {
+                clearRealm();
+                setGen((g) => g + 1);
+              }}
               className="rounded-sm border border-gold/30 bg-gold/[0.06] px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-gold transition hover:border-gold/60"
             >
               Forge a new realm
@@ -334,7 +338,7 @@ function RealmPage() {
               ))}
             </div>
             <span className="rounded-sm border border-white/10 bg-black/60 px-2.5 py-1.5 text-[10px] text-muted-foreground backdrop-blur-sm">
-              Click your host, then a province to march · heed your Council · scroll to zoom
+              Click your host, then a province to march · heed your Council · your realm autosaves
             </span>
           </div>
         </div>
