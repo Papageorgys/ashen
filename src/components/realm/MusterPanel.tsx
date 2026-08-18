@@ -27,6 +27,7 @@ export function MusterPanel({
   armies,
   muster,
   day,
+  discount = 0,
   onRecruit,
   onDrill,
   onClose,
@@ -36,6 +37,7 @@ export function MusterPanel({
   armies: Army[];
   muster: Muster;
   day: number;
+  discount?: number;
   onRecruit: (t: UnitType) => void;
   onDrill: (armyId: string) => void;
   onClose: () => void;
@@ -131,8 +133,8 @@ export function MusterPanel({
           </div>
           <div className="mt-1.5 space-y-1">
             {ROSTER.map((t) => {
-              const cost = recruitCost(t);
-              const check = canRecruit(ledger, muster, world, armies, playerId, t);
+              const cost = recruitCost(t, RECRUIT_LOT, discount);
+              const check = canRecruit(ledger, muster, world, armies, playerId, t, RECRUIT_LOT, discount);
               return (
                 <div
                   key={t}

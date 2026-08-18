@@ -23,9 +23,14 @@ const COST: Record<UnitType, { gold: number; res: ResourceId; resN: number; days
   knights: { gold: 48, res: "horses", resN: 2, days: 110 },
 };
 
-export function recruitCost(type: UnitType, lot = RECRUIT_LOT) {
+export function recruitCost(type: UnitType, lot = RECRUIT_LOT, discount = 0) {
   const c = COST[type];
-  return { gold: c.gold * lot, res: c.res, resN: c.resN * lot, days: c.days };
+  return {
+    gold: Math.round(c.gold * lot * (1 - discount)),
+    res: c.res,
+    resN: c.resN * lot,
+    days: c.days,
+  };
 }
 
 export interface TrainingOrder {
@@ -72,8 +77,9 @@ export function canRecruit(
   playerId: string,
   type: UnitType,
   lot = RECRUIT_LOT,
+  discount = 0,
 ): RecruitCheck {
-  const cost = recruitCost(type, lot);
+  const cost = recruitCost(type, lot, discount);
   if (ledger.treasury < cost.gold) return { ok: false, reason: "gold" };
   if ((ledger.stores[cost.res] ?? 0) < cost.resN) return { ok: false, reason: "resource" };
   if (currentManpower(muster, armies, playerId) + lot > manpowerCap(world, playerId))
@@ -91,9 +97,10 @@ export function recruit(
   type: UnitType,
   day: number,
   lot = RECRUIT_LOT,
+  discount = 0,
 ): boolean {
-  if (!canRecruit(ledger, muster, world, armies, playerId, type, lot).ok) return false;
-  const cost = recruitCost(type, lot);
+  if (!canRecruit(ledger, muster, world, armies, playerId, type, lot, discount).ok) return false;
+  const cost = recruitCost(type, lot, discount);
   ledger.treasury -= cost.gold;
   ledger.stores[cost.res] -= cost.resN;
   muster.queue.push({
