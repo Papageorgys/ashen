@@ -62,15 +62,19 @@ export function resolveBattle(
   province: Province,
   seed: number,
   tactic: Tactic = "balanced",
+  fortLevel = 0,
 ): BattleResult {
   const r = makeRng(seed ^ 0x9e3779b1);
   const terrainDef = TERRAIN[province.terrain].defense;
-  const fort = province.settlementId ? 0.15 : 0;
+  // walls matter: a bare holding gives a little, a strong fortress a great deal
+  const fort = province.settlementId ? 0.08 + fortLevel * 0.11 : 0;
   const siege = !!province.settlementId && (defender ? true : true) && terrainDef >= 0;
   const mod = tacticMods(tactic, attacker, r);
 
   const atk = armyStrength(attacker) * (0.9 + r() * 0.2) * mod.atk;
-  const defBase = defender ? armyStrength(defender) : troopCount(attacker) * 0.12; // token garrison
+  // an undefended holding still has a garrison, and stronger walls hold more men
+  const garrison = province.settlementId ? 30 + fortLevel * 55 : troopCount(attacker) * 0.12;
+  const defBase = defender ? armyStrength(defender) : garrison;
   const def = defBase * (1 + terrainDef + fort) * (0.9 + r() * 0.2);
 
   const total = atk + def;
@@ -78,7 +82,11 @@ export function resolveBattle(
   // loss ratio: the loser bleeds more; strength gap widens the gap
   const gap = Math.abs(atk - def) / total; // 0..1
   const atkTroops = troopCount(attacker);
-  const defTroops = defender ? troopCount(defender) : Math.round(atkTroops * 0.15);
+  const defTroops = defender
+    ? troopCount(defender)
+    : province.settlementId
+      ? Math.round(20 + fortLevel * 30)
+      : Math.round(atkTroops * 0.15);
 
   let attackerLosses: number;
   let defenderLosses: number;

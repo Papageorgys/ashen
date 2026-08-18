@@ -1,6 +1,6 @@
 import { realmSummary } from "./economy";
 import { troopCount, type Army } from "./army";
-import type { ResourceId, World } from "./types";
+import type { ResourceId, Settlement, World } from "./types";
 
 /**
  * The kingdom ledger — you rule, you don't only command. Each season the
@@ -87,6 +87,24 @@ export function collectSeason(
     foodNet,
     unrestDelta,
   };
+}
+
+export const MAX_FORT = 5;
+
+/** Gold + stone to raise a holding's walls one level. */
+export function fortCost(level: number): { gold: number; stone: number } {
+  return { gold: 80 + level * 60, stone: 20 + level * 15 };
+}
+
+/** Raise a settlement's walls if the realm can pay for it. */
+export function reinforce(ledger: Ledger, settlement: Settlement): boolean {
+  if (settlement.fortLevel >= MAX_FORT) return false;
+  const cost = fortCost(settlement.fortLevel);
+  if (ledger.treasury < cost.gold || (ledger.stores.stone ?? 0) < cost.stone) return false;
+  ledger.treasury -= cost.gold;
+  ledger.stores.stone -= cost.stone;
+  settlement.fortLevel += 1;
+  return true;
 }
 
 /** A crude threat read: the strongest rival's total troops vs the player's. */

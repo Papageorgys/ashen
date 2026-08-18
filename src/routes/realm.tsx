@@ -20,6 +20,7 @@ import {
   type ProposalResult,
 } from "@/lib/realm/diplomacy";
 import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
+import { reinforce, fortCost, MAX_FORT } from "@/lib/realm/kingdom";
 import { updateMarket, buy, sell, type Tradeable } from "@/lib/realm/market";
 import { advanceYear } from "@/lib/realm/dynasty";
 import { record, yearOf } from "@/lib/realm/annals";
@@ -499,9 +500,38 @@ function RealmPage() {
                 onClose={() => setSelArmy(null)}
               />
             )}
-            {!activeArmy && selProv && (
-              <ProvincePanel world={world} provinceId={selProv} onClose={() => setSelProv(null)} />
-            )}
+            {!activeArmy &&
+              selProv &&
+              (() => {
+                const prov = world.provinces.find((p) => p.id === selProv);
+                const st = prov?.settlementId
+                  ? world.settlements.find((s) => s.id === prov.settlementId)
+                  : null;
+                const mine = prov?.ownerId === playerId && !!st;
+                const cost = st ? fortCost(st.fortLevel) : { gold: 0, stone: 0 };
+                return (
+                  <ProvincePanel
+                    world={world}
+                    provinceId={selProv}
+                    onClose={() => setSelProv(null)}
+                    reinforce={
+                      mine && st
+                        ? {
+                            cost,
+                            maxed: st.fortLevel >= MAX_FORT,
+                            affordable:
+                              ledger.treasury >= cost.gold &&
+                              (ledger.stores.stone ?? 0) >= cost.stone,
+                            onReinforce: () => {
+                              reinforce(ledger, st);
+                              force();
+                            },
+                          }
+                        : undefined
+                    }
+                  />
+                );
+              })()}
             {report && <BattleReport event={report} onClose={() => setReport(null)} />}
           </div>
 

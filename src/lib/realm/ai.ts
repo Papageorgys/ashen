@@ -19,7 +19,10 @@ function defenceOf(world: World, armies: Army[], provinceId: string, excludeOwne
     .filter((o) => o.ownerId !== excludeOwner && o.provinceId === provinceId && troopCount(o) > 0)
     .sort((a, b) => troopCount(b) - troopCount(a))[0];
   let def = foe ? armyStrength(foe) : 40; // token garrison
-  if (prov.settlementId) def *= 1 + TERRAIN[prov.terrain].defense + 0.15;
+  if (prov.settlementId) {
+    const s = world.settlements.find((x) => x.id === prov.settlementId);
+    def *= 1 + TERRAIN[prov.terrain].defense + 0.08 + (s?.fortLevel ?? 0) * 0.11;
+  }
   return def;
 }
 
