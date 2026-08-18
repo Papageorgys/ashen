@@ -20,7 +20,8 @@ import {
   type ProposalResult,
 } from "@/lib/realm/diplomacy";
 import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
-import { reinforce, fortCost, MAX_FORT } from "@/lib/realm/kingdom";
+import { reinforce, fortCost, MAX_FORT, type TaxRate } from "@/lib/realm/kingdom";
+import { updateFactions, checkRebellion } from "@/lib/realm/factions";
 import { updateMarket, buy, sell, type Tradeable } from "@/lib/realm/market";
 import { advanceYear } from "@/lib/realm/dynasty";
 import { record, yearOf } from "@/lib/realm/annals";
@@ -38,6 +39,7 @@ import { SpymasterPanel } from "@/components/realm/SpymasterPanel";
 import { MarketPanel } from "@/components/realm/MarketPanel";
 import { AnnalsPanel } from "@/components/realm/AnnalsPanel";
 import { BattlePlanCard } from "@/components/realm/BattlePlanCard";
+import { FactionsPanel } from "@/components/realm/FactionsPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -87,6 +89,7 @@ function RealmPage() {
   const [showSpy, setShowSpy] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
   const [showAnnals, setShowAnnals] = useState(false);
+  const [showEstates, setShowEstates] = useState(false);
   const [pendingBattle, setPendingBattle] = useState<PendingBattle | null>(null);
   const [playing, setPlaying] = useState(true);
   const yearRef = useRef(1);
@@ -109,6 +112,7 @@ function RealmPage() {
     setShowSpy(false);
     setShowMarket(false);
     setShowAnnals(false);
+    setShowEstates(false);
     setPendingBattle(null);
     yearRef.current = yearOf(ref.current.state.day);
     // fold in what the starting holdings can see
@@ -214,6 +218,17 @@ function RealmPage() {
           makeRng(state.world.seed ^ (ledger.season * 71933)),
         );
         collectSeason(ledger, state.world, pid, state.armies);
+        // the estates judge the reign, and may rise against it
+        updateFactions(ref.current.factions, state.world, ref.current.dip, ledger, pid, ledger.tax);
+        checkRebellion(
+          ref.current.factions,
+          state.world,
+          ledger,
+          ref.current.annals,
+          pid,
+          state.day,
+          makeRng(state.world.seed ^ (ledger.season * 88259)),
+        );
         saveRealm(ref.current); // autosave once per season
         const rng = makeRng(state.world.seed ^ (ledger.season * 7919));
         if (rng() < 0.7) {
@@ -231,7 +246,7 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council, dip, intel, market, rulers, annals } = ref.current;
+  const { state, ledger, council, dip, intel, market, rulers, annals, factions } = ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
   const playerName = world.kingdoms.find((k) => k.id === playerId)?.name ?? "Your House";
@@ -408,6 +423,21 @@ function RealmPage() {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setShowEstates((s) => !s);
+                setShowCouncil(false);
+                setShowDiplo(false);
+                setShowSpy(false);
+                setShowMarket(false);
+                setShowAnnals(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="scales" size={13} />
+              Estates
+            </button>
+            <button
+              type="button"
               onClick={() => setPlaying((p) => !p)}
               className="rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
@@ -490,6 +520,17 @@ function RealmPage() {
                 rulers={rulers}
                 annals={annals}
                 onClose={() => setShowAnnals(false)}
+              />
+            )}
+            {showEstates && (
+              <FactionsPanel
+                factions={factions}
+                tax={ledger.tax}
+                onSetTax={(t: TaxRate) => {
+                  ledger.tax = t;
+                  force();
+                }}
+                onClose={() => setShowEstates(false)}
               />
             )}
             {activeArmy && (

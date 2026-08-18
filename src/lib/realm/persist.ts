@@ -7,6 +7,7 @@ import { makeIntel, type Intel } from "./intel";
 import { makeMarket, type MarketState } from "./market";
 import { makeRulers, type Ruler } from "./dynasty";
 import { makeAnnals, type AnnalEntry } from "./annals";
+import { makeFactions, type Factions } from "./factions";
 import type { RealmState } from "./sim";
 
 /**
@@ -30,6 +31,7 @@ export interface RealmWorld {
   market: MarketState;
   rulers: Record<string, Ruler>;
   annals: AnnalEntry[];
+  factions: Factions;
   gen: number;
 }
 
@@ -49,6 +51,7 @@ interface SaveData {
   market?: MarketState;
   rulers?: Record<string, Ruler>;
   annals?: AnnalEntry[];
+  factions?: Factions;
 }
 
 /** Build a fresh realm for a given generation (seed = aethyr-<gen>). */
@@ -63,6 +66,7 @@ export function freshRealm(gen: number): RealmWorld {
     market: makeMarket(),
     rulers: makeRulers(world),
     annals: makeAnnals(0),
+    factions: makeFactions(),
     gen,
   };
 }
@@ -79,6 +83,7 @@ function serialize(rw: RealmWorld): SaveData {
     market: rw.market,
     rulers: rw.rulers,
     annals: rw.annals,
+    factions: rw.factions,
     intel: {
       seen: [...rw.intel.seen],
       lastOwner: rw.intel.lastOwner,
@@ -127,6 +132,7 @@ export function loadRealm(): RealmWorld | null {
     market: data.market ?? makeMarket(),
     rulers: data.rulers ?? makeRulers(world),
     annals: data.annals ?? makeAnnals(data.day),
+    factions: data.factions ?? makeFactions(),
     gen: data.gen,
   };
 }
