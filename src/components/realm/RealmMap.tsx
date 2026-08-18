@@ -176,6 +176,7 @@ export function RealmMap({
 }) {
   const { width, height } = world;
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [hover, setHover] = useState<string | null>(null);
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const moved = useRef(false);
   const kingdomColor = useMemo(
@@ -311,6 +312,12 @@ export function RealmMap({
   };
 
   const selected = selectedId ? provById.get(selectedId) : null;
+  const hovered = hover ? provById.get(hover) : null;
+  // when your own host is selected, hovering a province reads as a march order
+  const selArmyOwned =
+    !!selectedArmyId &&
+    armies.find((a) => a.id === selectedArmyId)?.ownerId === world.playerKingdomId;
+  const marching = selArmyOwned && !!hovered;
 
   return (
     <div className={`relative overflow-hidden rounded-sm ${className ?? ""}`}>
@@ -323,6 +330,7 @@ export function RealmMap({
           (e.target as Element).setPointerCapture?.(e.pointerId);
           drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
           moved.current = false;
+          setHover(null);
         }}
         onPointerMove={(e) => {
           if (!drag.current) return;
@@ -334,7 +342,10 @@ export function RealmMap({
           setView((v) => clamp({ ...v, x: drag.current!.vx + dx, y: drag.current!.vy + dy }));
         }}
         onPointerUp={() => (drag.current = null)}
-        onPointerLeave={() => (drag.current = null)}
+        onPointerLeave={() => {
+          drag.current = null;
+          setHover(null);
+        }}
         role="group"
         aria-label="The realm map"
       >
@@ -500,6 +511,19 @@ export function RealmMap({
             dangerouslySetInnerHTML={{ __html: layers.roads }}
           />
           <g dangerouslySetInnerHTML={{ __html: layers.bridges }} />
+          {/* hover feedback — a warm wash under the cursor's province */}
+          {hovered && hovered.id !== selectedId && (
+            <path
+              d={polyD(hovered.polygon)}
+              fill={marching ? "#7ea86a" : "#f2d488"}
+              fillOpacity={0.16}
+              stroke={marching ? "#9cc487" : "#f7dc93"}
+              strokeWidth={2.2}
+              strokeOpacity={0.85}
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+          )}
           {/* selection */}
           {selected && (
             <path
@@ -520,17 +544,19 @@ export function RealmMap({
                 d={polyD(p.polygon)}
                 fill="transparent"
                 className="cursor-pointer"
+                onPointerEnter={() => setHover(p.id)}
+                onPointerLeave={() => setHover((h) => (h === p.id ? null : h))}
                 onClick={() => {
                   if (!moved.current) onSelect(p.id);
                 }}
               />
             ) : null,
           )}
-          {/* settlements on top */}
-          <g dangerouslySetInnerHTML={{ __html: settleMarks }} />
+          {/* settlements on top (decorative — clicks pass through to the province) */}
+          <g pointerEvents="none" dangerouslySetInnerHTML={{ __html: settleMarks }} />
 
           {/* fog of war — shroud over ground the player cannot see */}
-          {fog && <g dangerouslySetInnerHTML={{ __html: layers.fogLayer }} />}
+          {fog && <g pointerEvents="none" dangerouslySetInnerHTML={{ __html: layers.fogLayer }} />}
 
           {/* march path of the selected army */}
           {selectedArmyId &&
