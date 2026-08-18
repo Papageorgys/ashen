@@ -180,6 +180,14 @@ export function CommandBar({
 
         {/* the realm's hour, its voice, your account */}
         <div className="flex shrink-0 items-center gap-1.5">
+          <Link
+            to="/realm"
+            title="Enter the grand-strategy Realm"
+            className="btn-rune hover:btn-rune-hover inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm border border-gold/45 bg-gold/[0.09] px-2.5 text-[11px] font-medium uppercase tracking-[0.12em] text-gold hover:border-gold/70 hover:bg-gold/[0.16]"
+          >
+            <GameIcon name="crown" size={14} />
+            <span className="hidden sm:inline">Enter the Realm</span>
+          </Link>
           <Clock />
           <SoundToggle />
           {signedIn ? (
