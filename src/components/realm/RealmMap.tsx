@@ -73,41 +73,80 @@ function motifs(p: Province): string {
   return s;
 }
 
+// warm masonry palette with a sunlit face and a shadowed face
+const STONE = {
+  lit: "#8f8064",
+  mid: "#6d6151",
+  shadow: "#403829",
+  line: "#221d15",
+  rim: "#f3e6c6",
+};
+const ROOF = { lit: "#8a6440", shadow: "#4c3626" };
+
 function settlementMark(s: Settlement, color: string, showLabel: boolean): string {
   const { x, y } = s.pos;
   const owned = color !== "#8a8374";
-  let m = `<ellipse cx="${x}" cy="${y + 4}" rx="10" ry="4" fill="#000" opacity="0.3"/>`;
+  const { lit, mid, shadow, line, rim } = STONE;
+  // grounding shadow + a faint aura in the owner's colours
+  let m = `<ellipse cx="${x}" cy="${y + 5}" rx="12" ry="4" fill="#000" opacity="0.34"/>`;
+  if (owned) m += `<circle cx="${x}" cy="${y - 2}" r="20" fill="${color}" opacity="0.1"/>`;
   const banner = (bx: number, by: number) =>
-    `<line x1="${bx}" y1="${by}" x2="${bx}" y2="${by - 13}" stroke="#3a2c18" stroke-width="1.4"/><path d="M ${bx} ${by - 13} L ${bx + 9} ${by - 10.5} L ${bx} ${by - 8} Z" fill="${color}"/>`;
+    `<line x1="${bx}" y1="${by}" x2="${bx}" y2="${by - 15}" stroke="#2a2015" stroke-width="1.4"/>` +
+    `<path d="M ${bx} ${by - 15} L ${bx + 10} ${by - 12} L ${bx} ${by - 9} Z" fill="${color}"/>` +
+    `<path d="M ${bx} ${by - 15} L ${bx + 10} ${by - 12} L ${bx + 5} ${by - 12} Z" fill="#fff" fill-opacity="0.2"/>`;
+  // a pitched-roof house: lit left wall, shadow right wall, warm roof
+  const house = (hx: number, hw: number, hh: number) =>
+    `<path d="M ${hx - hw} ${y + 4} L ${hx - hw} ${y + 4 - hh} L ${hx} ${y + 4 - hh} L ${hx} ${y + 4} Z" fill="${mid}"/>` +
+    `<path d="M ${hx} ${y + 4} L ${hx} ${y + 4 - hh} L ${hx + hw} ${y + 4 - hh} L ${hx + hw} ${y + 4} Z" fill="${shadow}"/>` +
+    `<path d="M ${hx - hw - 1} ${y + 4 - hh} L ${hx} ${y + 4 - hh - hw} L ${hx + hw + 1} ${y + 4 - hh} Z" fill="${ROOF.lit}"/>` +
+    `<path d="M ${hx} ${y + 4 - hh - hw} L ${hx + hw + 1} ${y + 4 - hh} L ${hx} ${y + 4 - hh} Z" fill="${ROOF.shadow}"/>`;
   switch (s.tier) {
     case "fortress":
     case "castle": {
-      const w = s.tier === "fortress" ? 9 : 7;
-      m += `<rect x="${x - w}" y="${y - 6}" width="${w * 2}" height="12" fill="#5b5346"/><rect x="${x - w}" y="${y - 6}" width="${w * 2}" height="12" fill="none" stroke="#2a251d" stroke-width="1"/>`;
-      for (let i = 0; i <= 3; i++)
-        m += `<rect x="${x - w + i * ((w * 2) / 3) - 1.5}" y="${y - 9}" width="3" height="3.5" fill="#5b5346"/>`;
-      m += `<rect x="${x - 2.2}" y="${y - 3}" width="4.4" height="6" fill="#241f18"/>`;
-      m += banner(x + w - 1, y - 6);
+      const w = s.tier === "fortress" ? 10 : 8;
+      const top = y - 7;
+      const bot = y + 6;
+      const kw = 4;
+      const keepTop = s.tier === "fortress" ? y - 15 : y - 13;
+      // curtain wall — sunlit left, shadowed right
+      m += `<path d="M ${x - w} ${top} L ${x} ${top} L ${x} ${bot} L ${x - w} ${bot} Z" fill="${lit}"/>`;
+      m += `<path d="M ${x} ${top} L ${x + w} ${top} L ${x + w} ${bot} L ${x} ${bot} Z" fill="${mid}"/>`;
+      // crenellations
+      for (let i = 0; i <= 4; i++)
+        m += `<rect x="${x - w + i * ((w * 2) / 4) - 1.4}" y="${top - 3}" width="2.8" height="3.4" fill="${i < 2 ? lit : mid}"/>`;
+      // inner keep, taller, with a roof
+      m += `<path d="M ${x - kw} ${keepTop} L ${x} ${keepTop} L ${x} ${top} L ${x - kw} ${top} Z" fill="${lit}"/>`;
+      m += `<path d="M ${x} ${keepTop} L ${x + kw} ${keepTop} L ${x + kw} ${top} L ${x} ${top} Z" fill="${shadow}"/>`;
+      m += `<path d="M ${x - kw - 1} ${keepTop} L ${x} ${keepTop - 4} L ${x + kw + 1} ${keepTop} Z" fill="${ROOF.lit}"/>`;
+      // gate + top rim light
+      m += `<rect x="${x - 2}" y="${bot - 6}" width="4" height="6" rx="1.4" fill="#211810"/>`;
+      m += `<line x1="${x - w}" y1="${top}" x2="${x + w}" y2="${top}" stroke="${rim}" stroke-width="0.7" stroke-opacity="0.55"/>`;
+      m += banner(x + kw, keepTop + 2);
+      m += `<rect x="${x - w}" y="${top}" width="${w * 2}" height="${bot - top}" fill="none" stroke="${line}" stroke-width="0.8"/>`;
       break;
     }
     case "port":
-      m += `<path d="M ${x - 6} ${y + 3} L ${x - 5} ${y - 5} L ${x + 5} ${y - 5} L ${x + 6} ${y + 3} Z" fill="#6a5a44"/><path d="M ${x - 8} ${y + 3} h 16" stroke="#4a3f2c" stroke-width="2"/><circle cx="${x}" cy="${y - 2}" r="2" fill="none" stroke="#d8c48a" stroke-width="1.2"/>`;
+      m += `<path d="M ${x - 8} ${y + 3} h 16" stroke="#4a3f2c" stroke-width="2.4"/>`;
+      m += house(x - 3, 4, 6);
+      m += `<path d="M ${x + 3} ${y + 2} L ${x + 4} ${y - 6} L ${x + 5} ${y + 2} Z" fill="#6a5a44"/>`;
+      m += `<path d="M ${x + 4} ${y - 6} L ${x + 4} ${y + 1} L ${x + 9} ${y - 1} Z" fill="#e6d3a0" fill-opacity="0.9"/>`;
       break;
     case "city":
     case "town": {
       const big = s.tier === "city";
-      m += `<path d="M ${x - 8} ${y + 4} L ${x - 8} ${y - 3} L ${x - 3} ${y - 7} L ${x + 2} ${y - 3} L ${x + 2} ${y + 4} Z" fill="#6a5f4c"/>`;
-      m += `<path d="M ${x + 1} ${y + 4} L ${x + 1} ${y - 5} L ${x + 5} ${y - 8} L ${x + 9} ${y - 5} L ${x + 9} ${y + 4} Z" fill="#5a5042"/>`;
-      if (big) m += banner(x + 5, y - 8);
+      m += house(x - 5, 5, 6);
+      m += house(x + 4, 4.5, big ? 9 : 7);
+      if (big) m += banner(x + 8, y - 9);
+      m += `<line x1="${x - 10}" y1="${y + 4}" x2="${x + 9}" y2="${y + 4}" stroke="${line}" stroke-width="0.8" stroke-opacity="0.6"/>`;
       break;
     }
     default: // village
-      m += `<path d="M ${x - 5} ${y + 3} L ${x - 5} ${y - 2} L ${x} ${y - 6} L ${x + 5} ${y - 2} L ${x + 5} ${y + 3} Z" fill="#5f5240"/><rect x="${x - 1.4}" y="${y - 1}" width="2.8" height="4" fill="#2a2118"/>`;
+      m += house(x, 5, 5);
   }
   if (owned)
-    m += `<circle cx="${x}" cy="${y}" r="15" fill="none" stroke="${color}" stroke-width="1" stroke-opacity="0.25"/>`;
+    m += `<circle cx="${x}" cy="${y}" r="15" fill="none" stroke="${color}" stroke-width="1" stroke-opacity="0.3"/>`;
   if (showLabel)
-    m += `<text x="${x}" y="${y + 18}" text-anchor="middle" font-family="Cinzel, Georgia, serif" font-size="9" fill="#e7d7ac" fill-opacity="0.85" style="paint-order:stroke;stroke:#0c0a06;stroke-width:2.5px">${s.name}</text>`;
+    m += `<text x="${x}" y="${y + 19}" text-anchor="middle" font-family="Cinzel, Georgia, serif" font-size="9.5" letter-spacing="0.4" fill="#f0e0b4" fill-opacity="0.9" style="paint-order:stroke;stroke:#0c0a06;stroke-width:3px">${s.name}</text>`;
   return m;
 }
 
