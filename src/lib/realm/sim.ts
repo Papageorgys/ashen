@@ -21,6 +21,9 @@ export interface BattleEvent extends BattleResult {
   provinceName: string;
   attackerName: string;
   defenderName: string;
+  attackerKingdomId: string;
+  defenderKingdomId: string | null;
+  captured: boolean;
 }
 
 /** Remove `n` troops from a host, spread across its unit types. */
@@ -58,23 +61,29 @@ export function tickRealm(state: RealmState, days: number): BattleEvent[] {
 
     let res: BattleResult | null = null;
     let defenderName = "the garrison";
+    let defenderKingdomId: string | null = null;
+    let captured = false;
     if (foe) {
       res = resolveBattle(army, foe, prov, world.seed ^ hash(army.id) ^ Math.floor(state.day));
       applyLosses(army, res.attackerLosses);
       applyLosses(foe, res.defenderLosses);
       defenderName = kName(foe.ownerId);
+      defenderKingdomId = foe.ownerId;
       army.path = []; // a clash halts the march
       if (res.victor === "attacker" && prov.ownerId !== army.ownerId && prov.settlementId) {
         prov.ownerId = army.ownerId;
+        captured = true;
       }
     } else if (prov.ownerId !== army.ownerId && prov.settlementId) {
       // 2) an undefended enemy/wilderness holding → an assault
       res = resolveBattle(army, null, prov, world.seed ^ hash(army.id) ^ Math.floor(state.day));
       applyLosses(army, res.attackerLosses);
-      defenderName = kName(prov.ownerId ?? "");
+      defenderName = prov.ownerId ? kName(prov.ownerId) : "the garrison";
+      defenderKingdomId = prov.ownerId;
       if (res.victor === "attacker") {
         prov.ownerId = army.ownerId;
         army.path = [];
+        captured = true;
       }
     }
 
@@ -85,6 +94,9 @@ export function tickRealm(state: RealmState, days: number): BattleEvent[] {
         provinceName: provName(entered),
         attackerName: kName(army.ownerId),
         defenderName,
+        attackerKingdomId: army.ownerId,
+        defenderKingdomId,
+        captured,
       });
     }
   }
