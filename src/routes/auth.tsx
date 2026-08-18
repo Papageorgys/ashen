@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { setRememberSession } from "@/integrations/supabase/auth-storage";
@@ -100,7 +100,9 @@ function AuthPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-5 px-5 py-12">
       <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">The war for Aethyr</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+          The war for Aethyr
+        </p>
         <h1 className="gilded font-display text-4xl">Ashen Legacy</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           The realm is open only to sworn lords. Sign in or raise a new banner to take the road,
@@ -152,6 +154,22 @@ function AuthPage() {
           {mode === "in" ? "No account yet? Create one." : "Already sworn? Sign in."}
         </button>
       </form>
+
+      <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+        <span className="h-px flex-1 bg-white/10" />
+        or
+        <span className="h-px flex-1 bg-white/10" />
+      </div>
+      <Link
+        to="/realm"
+        className="btn-rune hover:btn-rune-hover inline-flex items-center justify-center gap-2 rounded-sm border border-gold/40 bg-gold/[0.07] px-4 py-2.5 text-sm uppercase tracking-[0.12em] text-gold hover:border-gold/70 hover:bg-gold/[0.14]"
+      >
+        Step into the Realm
+        <span aria-hidden>→</span>
+      </Link>
+      <p className="-mt-2 text-center text-[11px] text-muted-foreground">
+        The grand-strategy campaign — no account needed.
+      </p>
 
       <Toaster />
     </main>
