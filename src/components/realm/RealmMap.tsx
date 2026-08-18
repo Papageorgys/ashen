@@ -118,6 +118,7 @@ export function RealmMap({
   armies = [],
   selectedArmyId = null,
   onSelectArmy,
+  fog,
   className,
 }: {
   world: World;
@@ -126,6 +127,12 @@ export function RealmMap({
   armies?: Army[];
   selectedArmyId?: string | null;
   onSelectArmy?: (id: string) => void;
+  fog?: {
+    visible: Set<string>;
+    seen: Set<string>;
+    lastOwner: Record<string, string | null>;
+    spied: Set<string>;
+  };
   className?: string;
 }) {
   const { width, height } = world;
@@ -138,24 +145,27 @@ export function RealmMap({
   );
   const provById = useMemo(() => new Map(world.provinces.map((p) => [p.id, p])), [world.provinces]);
 
-  // static geography + political layers, precomputed as markup strings
-  const layers = useMemo(() => {
-    const land = world.provinces.filter((p) => TERRAIN[p.terrain].land);
+  // what the player perceives owns a province: the truth where they can see,
+  // last-known where they've been, unknown (undefined) where fog still lies
+  const perceivedOwner = (id: string): string | null | undefined => {
+    const p = provById.get(id);
+    if (!p) return undefined;
+    if (!fog) return p.ownerId;
+    if (fog.visible.has(id)) return p.ownerId;
+    if (fog.seen.has(id)) return fog.lastOwner[id] ?? null;
+    return undefined;
+  };
+
+  // static geography — depends only on the world, so it survives every tick
+  const geo = useMemo(() => {
     let terrainFill = "";
     let motifLayer = "";
-    let tint = "";
-    for (const p of land) {
-      terrainFill += `<path d="${polyD(p.polygon)}" fill="${TERRAIN[p.terrain].fill}"/>`;
-      motifLayer += motifs(p);
-      if (p.ownerId) {
-        const c = kingdomColor.get(p.ownerId) ?? "#8a8374";
-        tint += `<path d="${polyD(p.polygon)}" fill="${c}" fill-opacity="0.16"/>`;
-      }
-    }
-    // borders: shared vertices are the same lattice objects → find by identity
     let coast = "";
     let internal = "";
-    let realmBorder = "";
+    for (const p of world.provinces.filter((x) => TERRAIN[x.terrain].land)) {
+      terrainFill += `<path d="${polyD(p.polygon)}" fill="${TERRAIN[p.terrain].fill}"/>`;
+      motifLayer += motifs(p);
+    }
     const done = new Set<string>();
     for (const p of world.provinces) {
       for (const nid of p.neighbors) {
@@ -168,14 +178,8 @@ export function RealmMap({
         const seg = `M ${shared[0]!.x.toFixed(1)} ${shared[0]!.y.toFixed(1)} L ${shared[1]!.x.toFixed(1)} ${shared[1]!.y.toFixed(1)}`;
         const pLand = TERRAIN[p.terrain].land;
         const nLand = TERRAIN[n.terrain].land;
-        if (pLand !== nLand) {
-          coast += `<path d="${seg}"/>`;
-        } else if (pLand && p.ownerId !== n.ownerId && (p.ownerId || n.ownerId)) {
-          const c = kingdomColor.get(p.ownerId ?? n.ownerId!) ?? "#b8a06a";
-          realmBorder += `<path d="${seg}" stroke="${c}"/>`;
-        } else if (pLand) {
-          internal += `<path d="${seg}"/>`;
-        }
+        if (pLand !== nLand) coast += `<path d="${seg}"/>`;
+        else if (pLand) internal += `<path d="${seg}"/>`;
       }
     }
     const rivers = world.rivers.map((rv) => `<path d="${smooth(rv.path)}"/>`).join("");
@@ -186,19 +190,64 @@ export function RealmMap({
           `<rect x="${b.pos.x - 4}" y="${b.pos.y - 2.5}" width="8" height="5" rx="1" fill="#7a6338" stroke="#2a2015" stroke-width="0.8"/>`,
       )
       .join("");
-    return { terrainFill, motifLayer, tint, coast, internal, realmBorder, rivers, roads, bridges };
-  }, [world, kingdomColor, provById]);
+    return { terrainFill, motifLayer, coast, internal, rivers, roads, bridges };
+  }, [world, provById]);
+
+  // political control + fog — recomputed as visibility changes
+  const political = useMemo(() => {
+    let tint = "";
+    let realmBorder = "";
+    let fogLayer = "";
+    for (const p of world.provinces) {
+      if (!TERRAIN[p.terrain].land) continue;
+      const owner = perceivedOwner(p.id);
+      if (owner) {
+        const c = kingdomColor.get(owner) ?? "#8a8374";
+        tint += `<path d="${polyD(p.polygon)}" fill="${c}" fill-opacity="0.16"/>`;
+      }
+      if (fog) {
+        if (!fog.visible.has(p.id) && !fog.seen.has(p.id))
+          fogLayer += `<path d="${polyD(p.polygon)}" fill="#05060a" fill-opacity="0.62"/>`;
+        else if (!fog.visible.has(p.id))
+          fogLayer += `<path d="${polyD(p.polygon)}" fill="#0a0c14" fill-opacity="0.3"/>`;
+      }
+    }
+    const done = new Set<string>();
+    for (const p of world.provinces) {
+      const po = perceivedOwner(p.id);
+      for (const nid of p.neighbors) {
+        const key = [p.id, nid].sort().join("|");
+        if (done.has(key)) continue;
+        done.add(key);
+        const n = provById.get(nid)!;
+        if (!TERRAIN[p.terrain].land || !TERRAIN[n.terrain].land) continue;
+        const no = perceivedOwner(nid);
+        // a realm border is only drawn where the player can perceive both sides
+        if (po === undefined || no === undefined || po === no || (!po && !no)) continue;
+        const shared = p.polygon.filter((v) => n.polygon.includes(v));
+        if (shared.length < 2) continue;
+        const seg = `M ${shared[0]!.x.toFixed(1)} ${shared[0]!.y.toFixed(1)} L ${shared[1]!.x.toFixed(1)} ${shared[1]!.y.toFixed(1)}`;
+        const c = kingdomColor.get((po ?? no)!) ?? "#b8a06a";
+        realmBorder += `<path d="${seg}" stroke="${c}"/>`;
+      }
+    }
+    return { tint, realmBorder, fogLayer };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world, provById, kingdomColor, fog]);
+
+  const layers = { ...geo, ...political };
 
   const settleMarks = useMemo(() => {
     const showLabel = view.k > 1.35;
     return world.settlements
       .map((s) => {
-        const owner = provById.get(s.provinceId)?.ownerId ?? null;
+        const owner = perceivedOwner(s.provinceId);
         const c = owner ? (kingdomColor.get(owner) ?? "#8a8374") : "#8a8374";
         return settlementMark(s, c, showLabel);
       })
       .join("");
-  }, [world.settlements, provById, kingdomColor, view.k]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world.settlements, provById, kingdomColor, view.k, fog]);
 
   const clamp = (v: { x: number; y: number; k: number }) => {
     const k = Math.max(1, Math.min(4, v.k));
@@ -329,6 +378,9 @@ export function RealmMap({
           {/* settlements on top */}
           <g dangerouslySetInnerHTML={{ __html: settleMarks }} />
 
+          {/* fog of war — shroud over ground the player cannot see */}
+          {fog && <g dangerouslySetInnerHTML={{ __html: layers.fogLayer }} />}
+
           {/* march path of the selected army */}
           {selectedArmyId &&
             (() => {
@@ -348,13 +400,21 @@ export function RealmMap({
               );
             })()}
 
-          {/* armies — formations physically on the map */}
+          {/* armies — formations physically on the map, only where seen */}
           {armies.map((a) => {
+            const isPlayer = a.ownerId === world.playerKingdomId;
+            // hide enemy hosts standing in fog
+            if (fog && !isPlayer && !fog.visible.has(a.provinceId)) return null;
             const pos = armyPos(world, a);
             const color = kingdomColor.get(a.ownerId) ?? "#b8a06a";
             const sel = a.id === selectedArmyId;
             const n = troopCount(a);
-            const label = n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+            // fuzz enemy numbers unless a spy sits in their court
+            const spied = !fog || isPlayer || fog.spied.has(a.ownerId);
+            const shown = spied ? n : Math.max(50, Math.round(n / 50) * 50);
+            const label =
+              (spied ? "" : "~") +
+              (shown >= 1000 ? `${(shown / 1000).toFixed(1)}k` : String(shown));
             return (
               <g
                 key={a.id}

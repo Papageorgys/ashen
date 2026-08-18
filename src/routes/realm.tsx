@@ -12,6 +12,7 @@ import {
   type DiploAction,
   type ProposalResult,
 } from "@/lib/realm/diplomacy";
+import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
 import { makeRng } from "@/lib/realm/rng";
 import { RealmMap } from "@/components/realm/RealmMap";
 import { RealmHud } from "@/components/realm/RealmHud";
@@ -22,6 +23,7 @@ import { CouncilPanel } from "@/components/realm/CouncilPanel";
 import { EventCard } from "@/components/realm/EventCard";
 import { Chronicle } from "@/components/realm/Chronicle";
 import { DiplomacyPanel } from "@/components/realm/DiplomacyPanel";
+import { SpymasterPanel } from "@/components/realm/SpymasterPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -68,6 +70,7 @@ function RealmPage() {
   const [pendingEvent, setPendingEvent] = useState<RealmEvent | null>(null);
   const [showCouncil, setShowCouncil] = useState(false);
   const [showDiplo, setShowDiplo] = useState(false);
+  const [showSpy, setShowSpy] = useState(false);
   const [playing, setPlaying] = useState(true);
 
   useEffect(() => {
@@ -85,6 +88,18 @@ function RealmPage() {
     setPendingEvent(null);
     setShowCouncil(false);
     setShowDiplo(false);
+    setShowSpy(false);
+    // fold in what the starting holdings can see
+    rememberVisible(
+      ref.current.state.world,
+      ref.current.intel,
+      computeVisible(
+        ref.current.state.world,
+        ref.current.state.armies,
+        ref.current.intel,
+        ref.current.state.world.playerKingdomId,
+      ),
+    );
     setPlaying(true);
     force();
   }, [initial]);
@@ -111,6 +126,12 @@ function RealmPage() {
       const { state, ledger } = ref.current;
       const pid = state.world.playerKingdomId;
       const events = tickRealm(state, dt * SPEED);
+      // fold newly-scouted ground into the player's memory
+      rememberVisible(
+        state.world,
+        ref.current.intel,
+        computeVisible(state.world, state.armies, ref.current.intel, pid),
+      );
       if (events.length) {
         chronicleRef.current = [...events.slice().reverse(), ...chronicleRef.current].slice(0, 12);
         // only a battle touching the player interrupts with the big report card
@@ -124,6 +145,13 @@ function RealmPage() {
           state.world,
           state.armies,
           makeRng(state.world.seed ^ (ledger.season * 40961)),
+        );
+        spyTick(
+          ref.current.intel,
+          state.world,
+          ref.current.dip,
+          pid,
+          makeRng(state.world.seed ^ (ledger.season * 55009)),
         );
         planEnemyKingdoms(
           state.world,
@@ -149,9 +177,24 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council, dip } = ref.current;
+  const { state, ledger, council, dip, intel } = ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
+
+  const visible = computeVisible(world, state.armies, intel, playerId);
+  const fog = {
+    visible,
+    seen: intel.seen,
+    lastOwner: intel.lastOwner,
+    spied: new Set(Object.keys(intel.spies)),
+  };
+
+  const placeSpyOn = (kingdomId: string) => {
+    if (ledger.treasury < SPY_COST) return;
+    ledger.treasury -= SPY_COST;
+    placeSpy(intel, kingdomId, state.day);
+    force();
+  };
 
   const diploEvaluate = (rivalId: string, action: DiploAction): ProposalResult => {
     if (action === "tribute") {
@@ -225,11 +268,24 @@ function RealmPage() {
               onClick={() => {
                 setShowDiplo((s) => !s);
                 setShowCouncil(false);
+                setShowSpy(false);
               }}
               className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
               <GameIcon name="scales" size={13} />
               Diplomacy
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSpy((s) => !s);
+                setShowCouncil(false);
+                setShowDiplo(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="moon" size={13} />
+              Spymaster
             </button>
             <button
               type="button"
@@ -265,6 +321,7 @@ function RealmPage() {
             selectedArmyId={selArmy}
             onSelect={clickProvince}
             onSelectArmy={selectArmy}
+            fog={fog}
             className="h-full w-full"
           />
 
@@ -287,6 +344,17 @@ function RealmPage() {
                 treasury={ledger.treasury}
                 evaluate={diploEvaluate}
                 onClose={() => setShowDiplo(false)}
+              />
+            )}
+            {showSpy && (
+              <SpymasterPanel
+                world={world}
+                armies={state.armies}
+                intel={intel}
+                dip={dip}
+                treasury={ledger.treasury}
+                onPlaceSpy={placeSpyOn}
+                onClose={() => setShowSpy(false)}
               />
             )}
             {activeArmy && (
