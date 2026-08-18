@@ -13,6 +13,7 @@ import {
   type ProposalResult,
 } from "@/lib/realm/diplomacy";
 import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
+import { updateMarket, buy, sell, type Tradeable } from "@/lib/realm/market";
 import { makeRng } from "@/lib/realm/rng";
 import { RealmMap } from "@/components/realm/RealmMap";
 import { RealmHud } from "@/components/realm/RealmHud";
@@ -24,6 +25,7 @@ import { EventCard } from "@/components/realm/EventCard";
 import { Chronicle } from "@/components/realm/Chronicle";
 import { DiplomacyPanel } from "@/components/realm/DiplomacyPanel";
 import { SpymasterPanel } from "@/components/realm/SpymasterPanel";
+import { MarketPanel } from "@/components/realm/MarketPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -71,6 +73,7 @@ function RealmPage() {
   const [showCouncil, setShowCouncil] = useState(false);
   const [showDiplo, setShowDiplo] = useState(false);
   const [showSpy, setShowSpy] = useState(false);
+  const [showMarket, setShowMarket] = useState(false);
   const [playing, setPlaying] = useState(true);
 
   useEffect(() => {
@@ -89,6 +92,7 @@ function RealmPage() {
     setShowCouncil(false);
     setShowDiplo(false);
     setShowSpy(false);
+    setShowMarket(false);
     // fold in what the starting holdings can see
     rememberVisible(
       ref.current.state.world,
@@ -159,6 +163,12 @@ function RealmPage() {
           ref.current.dip,
           makeRng(state.world.seed ^ (ledger.season * 104729)),
         );
+        updateMarket(
+          ref.current.market,
+          state.world,
+          ref.current.dip,
+          makeRng(state.world.seed ^ (ledger.season * 71933)),
+        );
         collectSeason(ledger, state.world, pid, state.armies);
         saveRealm(ref.current); // autosave once per season
         const rng = makeRng(state.world.seed ^ (ledger.season * 7919));
@@ -177,9 +187,15 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council, dip, intel } = ref.current;
+  const { state, ledger, council, dip, intel, market } = ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
+
+  const trade = (t: Tradeable, side: "buy" | "sell") => {
+    if (side === "buy") buy(ledger, market, t, 10);
+    else sell(ledger, market, t, 10);
+    force();
+  };
 
   const visible = computeVisible(world, state.armies, intel, playerId);
   const fog = {
@@ -289,6 +305,19 @@ function RealmPage() {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setShowMarket((s) => !s);
+                setShowCouncil(false);
+                setShowDiplo(false);
+                setShowSpy(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="market" size={13} />
+              Market
+            </button>
+            <button
+              type="button"
               onClick={() => setPlaying((p) => !p)}
               className="rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
@@ -355,6 +384,14 @@ function RealmPage() {
                 treasury={ledger.treasury}
                 onPlaceSpy={placeSpyOn}
                 onClose={() => setShowSpy(false)}
+              />
+            )}
+            {showMarket && (
+              <MarketPanel
+                market={market}
+                ledger={ledger}
+                onTrade={trade}
+                onClose={() => setShowMarket(false)}
               />
             )}
             {activeArmy && (
