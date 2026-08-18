@@ -53,44 +53,73 @@ export function BattlePlanCard({
   const prov = world.provinces.find((p) => p.id === pending.provinceId);
 
   return (
-    <div className="panel-ornate pointer-events-auto w-[26rem] rounded-sm p-4 backdrop-blur-sm">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-[#d8a24a]">
-        <GameIcon name={pending.siege ? "tower" : "swords"} size={13} />
-        {pending.siege ? "A siege begins" : "Battle is joined"}
+    <div className="panel-ornate pointer-events-auto relative w-[26rem] overflow-hidden rounded-sm p-4 backdrop-blur-sm">
+      {/* war-glow behind the summons */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(120% 70% at 50% 0%, #d8a24a1f, transparent 60%)" }}
+      />
+
+      <div className="relative flex items-center gap-3">
+        <span className="relative grid place-items-center">
+          <span
+            className="flourish-ring absolute h-12 w-12 rounded-full border border-[#d8a24a99]"
+            aria-hidden
+          />
+          <span className="grid h-11 w-11 place-items-center rounded-full border-2 border-[#d8a24a] bg-[#d8a24a1c] text-[#e9c07a]">
+            <GameIcon name={pending.siege ? "tower" : "swords"} size={22} />
+          </span>
+        </span>
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[#d8a24a]">
+            {pending.siege ? "A siege begins" : "Battle is joined"}
+          </div>
+          <h3 className="gilded font-display text-2xl leading-tight">
+            {pending.siege ? "The Walls of" : "The Field of"} {prov?.name ?? "the march"}
+          </h3>
+        </div>
       </div>
-      <h3 className="gilded mt-0.5 font-display text-2xl leading-tight">
-        {pending.siege ? "The Walls of" : "The Field of"} {prov?.name ?? "the march"}
-      </h3>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Your host of {troopCount(army).toLocaleString()} stands before{" "}
-        {pending.siege ? "the walls" : "the enemy"}. How will you fight?
+      <p className="relative mt-2 text-sm text-muted-foreground">
+        Your host of{" "}
+        <span className="font-display tabular-nums text-foreground">
+          {troopCount(army).toLocaleString()}
+        </span>{" "}
+        stands before {pending.siege ? "the walls" : "the enemy"}. How will you fight?
       </p>
 
-      <div className="mt-3 grid grid-cols-2 gap-1.5">
-        {TACTICS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => onChoose(t.key)}
-            className={`rounded-sm border px-2.5 py-2 text-left transition ${
-              t.key === "withdraw"
-                ? "border-white/12 hover:border-muted-foreground/60"
-                : "border-white/12 hover:border-gold/60 hover:bg-gold/[0.05]"
-            }`}
-          >
-            <span className="flex items-center gap-1.5 text-[13px] text-foreground">
-              <GameIcon
-                name={t.icon}
-                size={13}
-                className={t.key === "withdraw" ? "text-muted-foreground" : "text-gold"}
-              />
-              {t.label}
-            </span>
-            <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
-              {t.blurb}
-            </span>
-          </button>
-        ))}
+      <div className="relative mt-3 grid grid-cols-2 gap-1.5">
+        {TACTICS.map((t) => {
+          const flee = t.key === "withdraw";
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => onChoose(t.key)}
+              className={`btn-rune hover:btn-rune-hover group flex items-start gap-2 rounded-sm border px-2.5 py-2 text-left ${
+                flee
+                  ? "border-white/12 hover:border-muted-foreground/60"
+                  : "border-white/12 hover:border-gold/60 hover:bg-gold/[0.05]"
+              }`}
+            >
+              <span
+                className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-[3px] border ${
+                  flee
+                    ? "border-white/15 bg-white/[0.04] text-muted-foreground"
+                    : "border-gold/30 bg-gold/[0.06] text-gold"
+                }`}
+              >
+                <GameIcon name={t.icon} size={13} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] text-foreground">{t.label}</span>
+                <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">
+                  {t.blurb}
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
