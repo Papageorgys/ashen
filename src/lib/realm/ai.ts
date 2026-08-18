@@ -1,5 +1,6 @@
 import { armyStrength, pathfind, troopCount, type Army } from "./army";
 import { TERRAIN } from "./terrain";
+import { getRelation, type Diplomacy } from "./diplomacy";
 import type { Rng } from "./rng";
 import type { World } from "./types";
 
@@ -22,8 +23,16 @@ function defenceOf(world: World, armies: Army[], provinceId: string, excludeOwne
   return def;
 }
 
-/** Give one kingdom's idle hosts their marching orders for the season. */
-export function planKingdom(world: World, armies: Army[], kingdomId: string, r: Rng): void {
+/** Give one kingdom's idle hosts their marching orders for the season. Only
+ *  wilderness and provinces of kingdoms this realm is at WAR with are valid
+ *  targets — pacts and peace hold the line. */
+export function planKingdom(
+  world: World,
+  armies: Army[],
+  kingdomId: string,
+  dip: Diplomacy,
+  r: Rng,
+): void {
   const owned = new Set(world.provinces.filter((p) => p.ownerId === kingdomId).map((p) => p.id));
   const hosts = armies.filter(
     (a) => a.ownerId === kingdomId && a.path.length === 0 && troopCount(a) > 0,
@@ -41,6 +50,8 @@ export function planKingdom(world: World, armies: Army[], kingdomId: string, r: 
         if (!TERRAIN[n.terrain].land) continue;
         if (n.ownerId === kingdomId) continue;
         if (!n.settlementId) continue; // only holdings are worth taking
+        // a held province is fair game only if we're at war with its owner
+        if (n.ownerId && getRelation(dip, kingdomId, n.ownerId).stance !== "war") continue;
         candidates.add(nid);
       }
     }
@@ -66,9 +77,9 @@ export function planKingdom(world: World, armies: Army[], kingdomId: string, r: 
 }
 
 /** Plan orders for every AI kingdom this season. */
-export function planEnemyKingdoms(world: World, armies: Army[], r: Rng): void {
+export function planEnemyKingdoms(world: World, armies: Army[], dip: Diplomacy, r: Rng): void {
   for (const k of world.kingdoms) {
     if (k.isPlayer) continue;
-    planKingdom(world, armies, k.id, r);
+    planKingdom(world, armies, k.id, dip, r);
   }
 }
