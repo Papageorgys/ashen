@@ -91,9 +91,14 @@ export function fight(
     defenderKingdomId = prov.ownerId;
   }
   let captured = false;
-  if (res.victor === "attacker" && prov.ownerId !== army.ownerId && prov.settlementId) {
-    prov.ownerId = army.ownerId;
-    captured = true;
+  if (res.victor === "attacker") {
+    army.veterancy = Math.min(6, (army.veterancy ?? 0) + 0.34); // blooded in victory
+    if (prov.ownerId !== army.ownerId && prov.settlementId) {
+      prov.ownerId = army.ownerId;
+      captured = true;
+    }
+  } else if (foe) {
+    foe.veterancy = Math.min(6, (foe.veterancy ?? 0) + 0.34); // the defender earns it too
   }
   return {
     ...res,
@@ -116,7 +121,7 @@ export function resolvePending(
   const army = state.armies.find((a) => a.id === pending.armyId);
   if (!army || troopCount(army) <= 0) return null;
   const ev = fight(state, army, pending.provinceId, tactic);
-  state.armies = state.armies.filter((a) => troopCount(a) > 0);
+  state.armies = state.armies.filter((a) => troopCount(a) > 0 || a.id.startsWith("garrison_"));
   return ev;
 }
 
@@ -164,7 +169,7 @@ export function tickRealm(
   }
 
   // clear out annihilated hosts
-  state.armies = state.armies.filter((a) => troopCount(a) > 0);
+  state.armies = state.armies.filter((a) => troopCount(a) > 0 || a.id.startsWith("garrison_"));
   return { events, pending: null };
 }
 

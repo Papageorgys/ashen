@@ -22,6 +22,8 @@ import {
 import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
 import { reinforce, fortCost, MAX_FORT, type TaxRate } from "@/lib/realm/kingdom";
 import { updateFactions, checkRebellion } from "@/lib/realm/factions";
+import { recruit, drill, tickMuster } from "@/lib/realm/military";
+import type { UnitType } from "@/lib/realm/army";
 import { updateMarket, buy, sell, type Tradeable } from "@/lib/realm/market";
 import { advanceYear } from "@/lib/realm/dynasty";
 import { record, yearOf } from "@/lib/realm/annals";
@@ -40,6 +42,7 @@ import { MarketPanel } from "@/components/realm/MarketPanel";
 import { AnnalsPanel } from "@/components/realm/AnnalsPanel";
 import { BattlePlanCard } from "@/components/realm/BattlePlanCard";
 import { FactionsPanel } from "@/components/realm/FactionsPanel";
+import { MusterPanel } from "@/components/realm/MusterPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -90,6 +93,7 @@ function RealmPage() {
   const [showMarket, setShowMarket] = useState(false);
   const [showAnnals, setShowAnnals] = useState(false);
   const [showEstates, setShowEstates] = useState(false);
+  const [showMuster, setShowMuster] = useState(false);
   const [pendingBattle, setPendingBattle] = useState<PendingBattle | null>(null);
   const [playing, setPlaying] = useState(true);
   const yearRef = useRef(1);
@@ -113,6 +117,7 @@ function RealmPage() {
     setShowMarket(false);
     setShowAnnals(false);
     setShowEstates(false);
+    setShowMuster(false);
     setPendingBattle(null);
     yearRef.current = yearOf(ref.current.state.day);
     // fold in what the starting holdings can see
@@ -156,6 +161,8 @@ function RealmPage() {
         setPendingBattle(pending);
         setPlaying(false);
       }
+      // finished recruits join the garrison
+      tickMuster(ref.current.muster, state.armies, state.day);
       // fold newly-scouted ground into the player's memory
       rememberVisible(
         state.world,
@@ -246,10 +253,21 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council, dip, intel, market, rulers, annals, factions } = ref.current;
+  const { state, ledger, council, dip, intel, market, rulers, annals, factions, muster } =
+    ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
   const playerName = world.kingdoms.find((k) => k.id === playerId)?.name ?? "Your House";
+
+  const doRecruit = (t: UnitType) => {
+    recruit(ledger, muster, world, state.armies, playerId, t, state.day);
+    force();
+  };
+  const doDrill = (armyId: string) => {
+    const a = state.armies.find((x) => x.id === armyId);
+    if (a) drill(ledger, a);
+    force();
+  };
 
   const trade = (t: Tradeable, side: "buy" | "sell") => {
     if (side === "buy") buy(ledger, market, t, 10);
@@ -438,6 +456,22 @@ function RealmPage() {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setShowMuster((s) => !s);
+                setShowCouncil(false);
+                setShowDiplo(false);
+                setShowSpy(false);
+                setShowMarket(false);
+                setShowAnnals(false);
+                setShowEstates(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="swords" size={13} />
+              Muster
+            </button>
+            <button
+              type="button"
               onClick={() => setPlaying((p) => !p)}
               className="rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
@@ -531,6 +565,18 @@ function RealmPage() {
                   force();
                 }}
                 onClose={() => setShowEstates(false)}
+              />
+            )}
+            {showMuster && (
+              <MusterPanel
+                world={world}
+                ledger={ledger}
+                armies={state.armies}
+                muster={muster}
+                day={state.day}
+                onRecruit={doRecruit}
+                onDrill={doDrill}
+                onClose={() => setShowMuster(false)}
               />
             )}
             {activeArmy && (

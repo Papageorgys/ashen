@@ -47,6 +47,9 @@ export interface Army {
    *  current leg (0..1). Empty path = stationary. */
   path: string[];
   legProgress: number;
+  /** battle experience, 0..5+ — raised by victories and by drilling; every
+   *  point adds ~10% to the host's fighting strength. */
+  veterancy: number;
 }
 
 export const troopCount = (a: Army): number =>
@@ -92,6 +95,24 @@ export function spawnStartingArmies(world: World): Army[] {
       supply: rrange(r, 0.7, 1),
       path: [],
       legProgress: 0,
+      veterancy: k.isPlayer ? 0 : rrange(r, 0, 1.5),
+    });
+  }
+  // the player also holds a home garrison at the seat — the muster's destination
+  const player = world.kingdoms.find((k) => k.isPlayer);
+  if (player?.capitalProvinceId) {
+    armies.push({
+      id: `garrison_${player.id}`,
+      name: "Home Garrison",
+      ownerId: player.id,
+      provinceId: player.capitalProvinceId,
+      composition: { spearmen: 30, archers: 15 },
+      commander: makeCommander(r),
+      morale: 0.8,
+      supply: 1,
+      path: [],
+      legProgress: 0,
+      veterancy: 0,
     });
   }
   return armies;
@@ -109,18 +130,20 @@ export function armyPos(world: World, a: Army): Point {
   };
 }
 
-/** Raw fighting strength before terrain — troops weighted by type, commander
- * and morale/supply. */
-export function armyStrength(a: Army): number {
+/** Raw fighting strength before terrain — troops weighted by type, commander,
+ * morale/supply and veterancy. `powerMods` (from researched doctrines) scale a
+ * unit type's power, e.g. { spearmen: 1.25 }. */
+export function armyStrength(a: Army, powerMods?: Partial<Record<UnitType, number>>): number {
   let base = 0;
   let cav = 0;
   for (const [t, n] of Object.entries(a.composition) as [UnitType, number][]) {
-    base += UNIT[t].power * n;
+    base += UNIT[t].power * (powerMods?.[t] ?? 1) * n;
     if (UNIT[t].cav) cav += n;
   }
   const cmd = 0.7 + (a.commander.command / 100) * 0.6;
   const cavBonus = 1 + (cav / Math.max(1, troopCount(a))) * (a.commander.cavalry / 100) * 0.4;
-  return base * cmd * cavBonus * (0.4 + a.morale * 0.6) * (0.6 + a.supply * 0.4);
+  const vet = 1 + (a.veterancy ?? 0) * 0.1;
+  return base * cmd * cavBonus * vet * (0.4 + a.morale * 0.6) * (0.6 + a.supply * 0.4);
 }
 
 /** Cost to enter a province, in days, for one unit of "leg". Roads between two
