@@ -159,11 +159,13 @@ export function RealmMap({
   // static geography — depends only on the world, so it survives every tick
   const geo = useMemo(() => {
     let terrainFill = "";
+    let landMask = "";
     let motifLayer = "";
     let coast = "";
     let internal = "";
     for (const p of world.provinces.filter((x) => TERRAIN[x.terrain].land)) {
       terrainFill += `<path d="${polyD(p.polygon)}" fill="${TERRAIN[p.terrain].fill}"/>`;
+      landMask += `<path d="${polyD(p.polygon)}"/>`;
       motifLayer += motifs(p);
     }
     const done = new Set<string>();
@@ -190,7 +192,7 @@ export function RealmMap({
           `<rect x="${b.pos.x - 4}" y="${b.pos.y - 2.5}" width="8" height="5" rx="1" fill="#7a6338" stroke="#2a2015" stroke-width="0.8"/>`,
       )
       .join("");
-    return { terrainFill, motifLayer, coast, internal, rivers, roads, bridges };
+    return { terrainFill, landMask, motifLayer, coast, internal, rivers, roads, bridges };
   }, [world, provById]);
 
   // political control + fog — recomputed as visibility changes
@@ -298,16 +300,113 @@ export function RealmMap({
         aria-label="The realm map"
       >
         <defs>
-          <radialGradient id="rm-sea" cx="50%" cy="35%" r="80%">
-            <stop offset="0%" stopColor="#33566f" />
-            <stop offset="100%" stopColor="#1f3547" />
+          <radialGradient id="rm-sea" cx="50%" cy="30%" r="85%">
+            <stop offset="0%" stopColor="#3a6885" />
+            <stop offset="45%" stopColor="#28516b" />
+            <stop offset="100%" stopColor="#132a3c" />
           </radialGradient>
+          <radialGradient id="rm-shimmer" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#8fd0e0" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#8fd0e0" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="rm-sun" cx="40%" cy="6%" r="100%">
+            <stop offset="0%" stopColor="#ffe4a6" stopOpacity="0.34" />
+            <stop offset="40%" stopColor="#ffcf9c" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="#ffcf9c" stopOpacity="0" />
+          </radialGradient>
+          {/* warm daylight that sculpts the flat terrain (soft-light) */}
+          <linearGradient
+            id="rm-daylight"
+            gradientUnits="userSpaceOnUse"
+            x1={0}
+            y1={0}
+            x2={width * 0.75}
+            y2={height}
+          >
+            <stop offset="0%" stopColor="#fff4d8" stopOpacity="0.7" />
+            <stop offset="50%" stopColor="#f6e6c0" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="#4a3820" stopOpacity="0.16" />
+          </linearGradient>
+          <radialGradient id="rm-vignette" cx="50%" cy="46%" r="78%">
+            <stop offset="0%" stopColor="#000000" stopOpacity="0" />
+            <stop offset="66%" stopColor="#05060a" stopOpacity="0" />
+            <stop offset="100%" stopColor="#05060a" stopOpacity="0.4" />
+          </radialGradient>
+          {/* soft warm land-glow bleeding into the sea (the classic map halo) */}
+          <filter id="rm-halo" x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur stdDeviation="7" />
+          </filter>
+          {/* tighter turquoise shore foam */}
+          <filter id="rm-foam" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.6" />
+          </filter>
+          {/* land drop shadow, so the continent lifts off the water */}
+          <filter id="rm-lift" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="5" />
+          </filter>
+          {/* fine paper grain over the whole vellum */}
+          <filter id="rm-paper" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" />
+            <feColorMatrix type="saturate" values="0" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.5" intercept="0" />
+            </feComponentTransfer>
+          </filter>
         </defs>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
-          {/* sea */}
+          {/* sea — graded deep water */}
           <rect x="0" y="0" width={width} height={height} fill="url(#rm-sea)" />
+          {/* drifting light on the water */}
+          <g pointerEvents="none" opacity={0.55}>
+            <ellipse
+              className="rm-sea-a"
+              cx={width * 0.3}
+              cy={height * 0.32}
+              rx={width * 0.34}
+              ry={height * 0.26}
+              fill="url(#rm-shimmer)"
+            />
+            <ellipse
+              className="rm-sea-b"
+              cx={width * 0.72}
+              cy={height * 0.66}
+              rx={width * 0.3}
+              ry={height * 0.22}
+              fill="url(#rm-shimmer)"
+            />
+          </g>
+          {/* the landmass, lifted off the water and haloed by its shore */}
+          <g
+            pointerEvents="none"
+            fill="#04070b"
+            opacity={0.5}
+            transform="translate(0 5)"
+            filter="url(#rm-lift)"
+            dangerouslySetInnerHTML={{ __html: layers.landMask }}
+          />
+          <g
+            pointerEvents="none"
+            fill="#e7d6a4"
+            opacity={0.32}
+            filter="url(#rm-halo)"
+            dangerouslySetInnerHTML={{ __html: layers.landMask }}
+          />
+          <g
+            pointerEvents="none"
+            fill="#69b0bf"
+            opacity={0.5}
+            filter="url(#rm-foam)"
+            dangerouslySetInnerHTML={{ __html: layers.landMask }}
+          />
           {/* permanent geography */}
           <g dangerouslySetInnerHTML={{ __html: layers.terrainFill }} />
+          {/* daylight modelling the land into relief */}
+          <g
+            pointerEvents="none"
+            fill="url(#rm-daylight)"
+            style={{ mixBlendMode: "soft-light" }}
+            dangerouslySetInnerHTML={{ __html: layers.landMask }}
+          />
           <g dangerouslySetInnerHTML={{ __html: layers.motifLayer }} />
           {/* political control tint */}
           <g dangerouslySetInnerHTML={{ __html: layers.tint }} />
@@ -342,6 +441,17 @@ export function RealmMap({
             strokeLinecap="round"
             dangerouslySetInnerHTML={{ __html: layers.rivers }}
           />
+          {/* a bright current threading the rivers */}
+          <g
+            className="rm-current"
+            stroke="#9fdcea"
+            strokeWidth={1}
+            strokeOpacity={0.7}
+            fill="none"
+            strokeLinecap="round"
+            pointerEvents="none"
+            dangerouslySetInnerHTML={{ __html: layers.rivers }}
+          />
           <g
             stroke="#b89a5a"
             strokeWidth={1.4}
@@ -354,11 +464,13 @@ export function RealmMap({
           {/* selection */}
           {selected && (
             <path
+              className="rm-select"
               d={polyD(selected.polygon)}
               fill="none"
               stroke="#f2d488"
               strokeWidth={3}
               strokeOpacity={0.95}
+              strokeLinejoin="round"
             />
           )}
           {/* click targets */}
@@ -389,6 +501,7 @@ export function RealmMap({
               const pts = [armyPos(world, a), ...a.path.map((id) => provById.get(id)!.center)];
               return (
                 <path
+                  className="rm-march"
                   d={smooth(pts)}
                   fill="none"
                   stroke="#f2d488"
@@ -427,7 +540,10 @@ export function RealmMap({
                 }}
               >
                 <ellipse cx={0} cy={7} rx={13} ry={4} fill="#000" opacity={0.32} />
-                {sel && <circle r={17} fill="none" stroke="#f2d488" strokeWidth={2} />}
+                {sel && (
+                  <circle className="rm-ring" r={17} fill="none" stroke="#f2d488" strokeWidth={2} />
+                )}
+                {isPlayer && <circle r={13} fill={color} opacity={0.16} />}
                 <path d="M -8 -13 L 4 -13 L 1 -9 L 4 -5 L -8 -5 Z" fill={color} />
                 <rect x={-9} y={-13} width={2} height={20} fill="#2a2015" />
                 <rect
@@ -454,6 +570,35 @@ export function RealmMap({
             );
           })}
         </g>
+
+        {/* cinematic overlays, fixed to the frame */}
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          fill="url(#rm-sun)"
+          pointerEvents="none"
+          style={{ mixBlendMode: "screen" }}
+        />
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          filter="url(#rm-paper)"
+          opacity={0.05}
+          pointerEvents="none"
+          style={{ mixBlendMode: "overlay" }}
+        />
+        <rect
+          x="0"
+          y="0"
+          width={width}
+          height={height}
+          fill="url(#rm-vignette)"
+          pointerEvents="none"
+        />
       </svg>
       <AtlasAtmosphere />
     </div>
