@@ -14,6 +14,8 @@ import {
 } from "@/lib/realm/diplomacy";
 import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
 import { updateMarket, buy, sell, type Tradeable } from "@/lib/realm/market";
+import { advanceYear } from "@/lib/realm/dynasty";
+import { record, yearOf } from "@/lib/realm/annals";
 import { makeRng } from "@/lib/realm/rng";
 import { RealmMap } from "@/components/realm/RealmMap";
 import { RealmHud } from "@/components/realm/RealmHud";
@@ -26,6 +28,7 @@ import { Chronicle } from "@/components/realm/Chronicle";
 import { DiplomacyPanel } from "@/components/realm/DiplomacyPanel";
 import { SpymasterPanel } from "@/components/realm/SpymasterPanel";
 import { MarketPanel } from "@/components/realm/MarketPanel";
+import { AnnalsPanel } from "@/components/realm/AnnalsPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -74,7 +77,9 @@ function RealmPage() {
   const [showDiplo, setShowDiplo] = useState(false);
   const [showSpy, setShowSpy] = useState(false);
   const [showMarket, setShowMarket] = useState(false);
+  const [showAnnals, setShowAnnals] = useState(false);
   const [playing, setPlaying] = useState(true);
+  const yearRef = useRef(1);
 
   useEffect(() => {
     ref.current = initial;
@@ -93,6 +98,8 @@ function RealmPage() {
     setShowDiplo(false);
     setShowSpy(false);
     setShowMarket(false);
+    setShowAnnals(false);
+    yearRef.current = yearOf(ref.current.state.day);
     // fold in what the starting holdings can see
     rememberVisible(
       ref.current.state.world,
@@ -141,6 +148,28 @@ function RealmPage() {
         // only a battle touching the player interrupts with the big report card
         const mine = events.find((e) => e.attackerKingdomId === pid || e.defenderKingdomId === pid);
         if (mine) setReport(mine);
+        // a conquest from another crown is written into the permanent annals
+        for (const e of events)
+          if (e.captured && e.defenderKingdomId)
+            record(
+              ref.current.annals,
+              state.day,
+              "conquest",
+              `${e.attackerName} seized ${e.provinceName} from ${e.defenderName}.`,
+            );
+      }
+      // a new year turns: rulers age, some die and are succeeded
+      const yr = yearOf(state.day);
+      if (yr > yearRef.current) {
+        yearRef.current = yr;
+        advanceYear(
+          ref.current.rulers,
+          state.world,
+          ref.current.dip,
+          ref.current.annals,
+          state.day,
+          makeRng(state.world.seed ^ (yr * 2246822519)),
+        );
       }
       if (state.day >= ledger.season * SEASON_DAYS) {
         // rival crowns feud and take their turn, then the season is collected
@@ -187,9 +216,10 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council, dip, intel, market } = ref.current;
+  const { state, ledger, council, dip, intel, market, rulers, annals } = ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
+  const playerName = world.kingdoms.find((k) => k.id === playerId)?.name ?? "Your House";
 
   const trade = (t: Tradeable, side: "buy" | "sell") => {
     if (side === "buy") buy(ledger, market, t, 10);
@@ -228,6 +258,11 @@ function RealmPage() {
       action,
       makeRng(world.seed ^ (diploSeq.current * 2654435761)),
     );
+    const rivalName = world.kingdoms.find((k) => k.id === rivalId)?.name ?? "a rival";
+    if (action === "declare_war")
+      record(annals, state.day, "war", `${playerName} declares war on ${rivalName}.`);
+    else if (action === "peace" && res.accepted)
+      record(annals, state.day, "peace", `${playerName} makes peace with ${rivalName}.`);
     force();
     return res;
   };
@@ -318,6 +353,20 @@ function RealmPage() {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setShowAnnals((s) => !s);
+                setShowCouncil(false);
+                setShowDiplo(false);
+                setShowSpy(false);
+                setShowMarket(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="scroll" size={13} />
+              Annals
+            </button>
+            <button
+              type="button"
               onClick={() => setPlaying((p) => !p)}
               className="rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
@@ -392,6 +441,14 @@ function RealmPage() {
                 ledger={ledger}
                 onTrade={trade}
                 onClose={() => setShowMarket(false)}
+              />
+            )}
+            {showAnnals && (
+              <AnnalsPanel
+                world={world}
+                rulers={rulers}
+                annals={annals}
+                onClose={() => setShowAnnals(false)}
               />
             )}
             {activeArmy && (
