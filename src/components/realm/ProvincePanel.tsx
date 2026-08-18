@@ -24,10 +24,20 @@ export function ProvincePanel({
   world,
   provinceId,
   onClose,
+  reinforce,
 }: {
   world: World;
   provinceId: string;
   onClose: () => void;
+  /** present only when the province is the player's own holding */
+  reinforce?:
+    | {
+        cost: { gold: number; stone: number };
+        affordable: boolean;
+        maxed: boolean;
+        onReinforce: () => void;
+      }
+    | undefined;
 }) {
   const p = world.provinces.find((x) => x.id === provinceId);
   if (!p) return null;
@@ -84,6 +94,27 @@ export function ProvincePanel({
             </div>
           </div>
         </div>
+      )}
+
+      {settlement && reinforce && (
+        <button
+          type="button"
+          disabled={reinforce.maxed || !reinforce.affordable}
+          onClick={reinforce.onReinforce}
+          className="mt-2 flex w-full items-center justify-between gap-2 rounded-sm border border-gold/25 bg-gold/[0.05] px-2.5 py-1.5 text-[11px] text-gold transition enabled:hover:border-gold/60 disabled:opacity-40"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <GameIcon name="tower" size={13} />
+            {reinforce.maxed
+              ? "Walls at their height"
+              : `Reinforce walls → ${settlement.fortLevel + 1}`}
+          </span>
+          {!reinforce.maxed && (
+            <span className="tabular-nums text-muted-foreground">
+              {reinforce.cost.gold}g · {reinforce.cost.stone} stone
+            </span>
+          )}
+        </button>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2">

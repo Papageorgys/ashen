@@ -74,7 +74,10 @@ export function fight(
   const { foe } = battleAt(state, army, entered);
 
   const seed = world.seed ^ hash(army.id) ^ Math.floor(state.day);
-  const res = resolveBattle(army, foe ?? null, prov, seed, tactic);
+  const fortLevel = prov.settlementId
+    ? (world.settlements.find((s) => s.id === prov.settlementId)?.fortLevel ?? 0)
+    : 0;
+  const res = resolveBattle(army, foe ?? null, prov, seed, tactic, fortLevel);
   applyLosses(army, res.attackerLosses);
   army.path = [];
   let defenderName: string;
