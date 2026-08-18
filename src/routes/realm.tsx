@@ -22,7 +22,8 @@ import {
 import { computeVisible, rememberVisible, spyTick, placeSpy, SPY_COST } from "@/lib/realm/intel";
 import { reinforce, fortCost, MAX_FORT, type TaxRate } from "@/lib/realm/kingdom";
 import { updateFactions, checkRebellion } from "@/lib/realm/factions";
-import { recruit, drill, tickMuster } from "@/lib/realm/military";
+import { recruit, drill, tickMuster, RECRUIT_LOT } from "@/lib/realm/military";
+import { researchBonuses, tickResearch, startResearch, TECH_BY_ID } from "@/lib/realm/research";
 import type { UnitType } from "@/lib/realm/army";
 import { updateMarket, buy, sell, type Tradeable } from "@/lib/realm/market";
 import { advanceYear } from "@/lib/realm/dynasty";
@@ -43,6 +44,7 @@ import { AnnalsPanel } from "@/components/realm/AnnalsPanel";
 import { BattlePlanCard } from "@/components/realm/BattlePlanCard";
 import { FactionsPanel } from "@/components/realm/FactionsPanel";
 import { MusterPanel } from "@/components/realm/MusterPanel";
+import { ResearchPanel } from "@/components/realm/ResearchPanel";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -94,6 +96,7 @@ function RealmPage() {
   const [showAnnals, setShowAnnals] = useState(false);
   const [showEstates, setShowEstates] = useState(false);
   const [showMuster, setShowMuster] = useState(false);
+  const [showResearch, setShowResearch] = useState(false);
   const [pendingBattle, setPendingBattle] = useState<PendingBattle | null>(null);
   const [playing, setPlaying] = useState(true);
   const yearRef = useRef(1);
@@ -118,6 +121,7 @@ function RealmPage() {
     setShowAnnals(false);
     setShowEstates(false);
     setShowMuster(false);
+    setShowResearch(false);
     setPendingBattle(null);
     yearRef.current = yearOf(ref.current.state.day);
     // fold in what the starting holdings can see
@@ -156,7 +160,20 @@ function RealmPage() {
       last = t;
       const { state, ledger } = ref.current;
       const pid = state.world.playerKingdomId;
-      const { events, pending } = tickRealm(state, dt * SPEED, { playerId: pid });
+      const boons = researchBonuses(ref.current.research);
+      const { events, pending } = tickRealm(state, dt * SPEED, {
+        playerId: pid,
+        boons: { powerMods: boons.powerMods, wall: boons.wall, move: boons.move },
+      });
+      // a doctrine may complete this tick
+      const learned = tickResearch(ref.current.research, state.day);
+      if (learned)
+        record(
+          ref.current.annals,
+          state.day,
+          "founding",
+          `Your scholars master ${TECH_BY_ID[learned]?.name ?? "a new doctrine"}.`,
+        );
       if (pending) {
         setPendingBattle(pending);
         setPlaying(false);
@@ -224,7 +241,7 @@ function RealmPage() {
           ref.current.dip,
           makeRng(state.world.seed ^ (ledger.season * 71933)),
         );
-        collectSeason(ledger, state.world, pid, state.armies);
+        collectSeason(ledger, state.world, pid, state.armies, boons.tax);
         // the estates judge the reign, and may rise against it
         updateFactions(ref.current.factions, state.world, ref.current.dip, ledger, pid, ledger.tax);
         checkRebellion(
@@ -253,19 +270,34 @@ function RealmPage() {
     return () => cancelAnimationFrame(raf);
   }, [playing, initial]);
 
-  const { state, ledger, council, dip, intel, market, rulers, annals, factions, muster } =
+  const { state, ledger, council, dip, intel, market, rulers, annals, factions, muster, research } =
     ref.current;
   const world = state.world;
   const playerId = world.playerKingdomId;
   const playerName = world.kingdoms.find((k) => k.id === playerId)?.name ?? "Your House";
+  const boons = researchBonuses(research);
 
   const doRecruit = (t: UnitType) => {
-    recruit(ledger, muster, world, state.armies, playerId, t, state.day);
+    recruit(
+      ledger,
+      muster,
+      world,
+      state.armies,
+      playerId,
+      t,
+      state.day,
+      RECRUIT_LOT,
+      boons.recruit,
+    );
     force();
   };
   const doDrill = (armyId: string) => {
     const a = state.armies.find((x) => x.id === armyId);
     if (a) drill(ledger, a);
+    force();
+  };
+  const doResearch = (techId: string) => {
+    startResearch(research, ledger, techId, state.day);
     force();
   };
 
@@ -280,7 +312,11 @@ function RealmPage() {
     if (choice === "withdraw") {
       withdrawArmy(state, pendingBattle);
     } else {
-      const ev = resolvePending(state, pendingBattle, choice);
+      const ev = resolvePending(state, pendingBattle, choice, {
+        powerMods: boons.powerMods,
+        wall: boons.wall,
+        move: boons.move,
+      });
       if (ev) {
         chronicleRef.current = [ev, ...chronicleRef.current].slice(0, 12);
         setReport(ev);
@@ -472,6 +508,23 @@ function RealmPage() {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setShowResearch((s) => !s);
+                setShowCouncil(false);
+                setShowDiplo(false);
+                setShowSpy(false);
+                setShowMarket(false);
+                setShowAnnals(false);
+                setShowEstates(false);
+                setShowMuster(false);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
+            >
+              <GameIcon name="anvil" size={13} />
+              Research
+            </button>
+            <button
+              type="button"
               onClick={() => setPlaying((p) => !p)}
               className="rounded-sm border border-white/15 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-gold/50 hover:text-gold"
             >
@@ -574,9 +627,19 @@ function RealmPage() {
                 armies={state.armies}
                 muster={muster}
                 day={state.day}
+                discount={boons.recruit}
                 onRecruit={doRecruit}
                 onDrill={doDrill}
                 onClose={() => setShowMuster(false)}
+              />
+            )}
+            {showResearch && (
+              <ResearchPanel
+                research={research}
+                ledger={ledger}
+                day={state.day}
+                onStart={doResearch}
+                onClose={() => setShowResearch(false)}
               />
             )}
             {activeArmy && (

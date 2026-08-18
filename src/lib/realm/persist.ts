@@ -9,6 +9,7 @@ import { makeRulers, type Ruler } from "./dynasty";
 import { makeAnnals, type AnnalEntry } from "./annals";
 import { makeFactions, type Factions } from "./factions";
 import { makeMuster, type Muster } from "./military";
+import { makeResearch, type ResearchState } from "./research";
 import type { RealmState } from "./sim";
 
 /**
@@ -34,6 +35,7 @@ export interface RealmWorld {
   annals: AnnalEntry[];
   factions: Factions;
   muster: Muster;
+  research: ResearchState;
   gen: number;
 }
 
@@ -55,6 +57,7 @@ interface SaveData {
   annals?: AnnalEntry[];
   factions?: Factions;
   muster?: Muster;
+  research?: ResearchState;
 }
 
 /** Build a fresh realm for a given generation (seed = aethyr-<gen>). */
@@ -71,6 +74,7 @@ export function freshRealm(gen: number): RealmWorld {
     annals: makeAnnals(0),
     factions: makeFactions(),
     muster: makeMuster(world.playerKingdomId),
+    research: makeResearch(),
     gen,
   };
 }
@@ -89,6 +93,7 @@ function serialize(rw: RealmWorld): SaveData {
     annals: rw.annals,
     factions: rw.factions,
     muster: rw.muster,
+    research: rw.research,
     intel: {
       seen: [...rw.intel.seen],
       lastOwner: rw.intel.lastOwner,
@@ -139,6 +144,7 @@ export function loadRealm(): RealmWorld | null {
     annals: data.annals ?? makeAnnals(data.day),
     factions: data.factions ?? makeFactions(),
     muster: data.muster ?? makeMuster(world.playerKingdomId),
+    research: data.research ?? makeResearch(),
     gen: data.gen,
   };
 }

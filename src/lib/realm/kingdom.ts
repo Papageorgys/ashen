@@ -54,13 +54,14 @@ export function collectSeason(
   world: World,
   kingdomId: string,
   armies: Army[],
+  taxBonus = 0,
 ): SeasonReport {
   const sum = realmSummary(world, kingdomId);
   const soldiers = armies
     .filter((a) => a.ownerId === kingdomId)
     .reduce((s, a) => s + troopCount(a), 0);
 
-  const taxes = Math.round(sum.population * TAX_PER_HEAD * TAX_MULT[ledger.tax]);
+  const taxes = Math.round(sum.population * TAX_PER_HEAD * TAX_MULT[ledger.tax] * (1 + taxBonus));
   const resourceGold = sum.production.gold ?? 0;
   const upkeep = Math.round(soldiers * UPKEEP_GOLD);
   const goldNet = taxes + resourceGold - upkeep;

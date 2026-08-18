@@ -3,6 +3,14 @@ import { resolveBattle, type BattleResult, type Tactic } from "./battle";
 import { TERRAIN } from "./terrain";
 import type { World } from "./types";
 
+/** Live research effects the player's realm enjoys in the field. */
+export interface PlayerBoons {
+  powerMods: Partial<Record<UnitType, number>>;
+  wall: number;
+  move: number;
+}
+const NO_BOONS: PlayerBoons = { powerMods: {}, wall: 0, move: 0 };
+
 /**
  * The realm tick — the authoritative real-time loop. It advances marching
  * armies across the province graph and, when a host enters contested ground,
@@ -67,8 +75,10 @@ export function fight(
   army: Army,
   entered: string,
   tactic: Tactic = "balanced",
+  boons: PlayerBoons = NO_BOONS,
 ): BattleEvent | null {
   const { world } = state;
+  const pid = world.playerKingdomId;
   const kName = (id: string) => world.kingdoms.find((k) => k.id === id)?.name ?? "wilderness";
   const prov = world.provinces.find((p) => p.id === entered)!;
   const { foe } = battleAt(state, army, entered);
@@ -77,7 +87,17 @@ export function fight(
   const fortLevel = prov.settlementId
     ? (world.settlements.find((s) => s.id === prov.settlementId)?.fortLevel ?? 0)
     : 0;
-  const res = resolveBattle(army, foe ?? null, prov, seed, tactic, fortLevel);
+  // the player's doctrines strengthen their own hosts and their own walls
+  const battleOpts: {
+    wallBonus: number;
+    atkMods?: typeof boons.powerMods;
+    defMods?: typeof boons.powerMods;
+  } = {
+    wallBonus: prov.ownerId === pid ? boons.wall : 0,
+  };
+  if (army.ownerId === pid) battleOpts.atkMods = boons.powerMods;
+  if (foe?.ownerId === pid) battleOpts.defMods = boons.powerMods;
+  const res = resolveBattle(army, foe ?? null, prov, seed, tactic, fortLevel, battleOpts);
   applyLosses(army, res.attackerLosses);
   army.path = [];
   let defenderName: string;
@@ -117,10 +137,11 @@ export function resolvePending(
   state: RealmState,
   pending: PendingBattle,
   tactic: Tactic,
+  boons: PlayerBoons = NO_BOONS,
 ): BattleEvent | null {
   const army = state.armies.find((a) => a.id === pending.armyId);
   if (!army || troopCount(army) <= 0) return null;
-  const ev = fight(state, army, pending.provinceId, tactic);
+  const ev = fight(state, army, pending.provinceId, tactic, boons);
   state.armies = state.armies.filter((a) => troopCount(a) > 0 || a.id.startsWith("garrison_"));
   return ev;
 }
@@ -141,18 +162,21 @@ export function withdrawArmy(state: RealmState, pending: PendingBattle) {
 export function tickRealm(
   state: RealmState,
   days: number,
-  opts?: { playerId?: string },
+  opts?: { playerId?: string; boons?: PlayerBoons },
 ): { events: BattleEvent[]; pending: PendingBattle | null } {
   const { world } = state;
   const events: BattleEvent[] = [];
   const playerId = opts?.playerId;
+  const boons = opts?.boons ?? NO_BOONS;
 
   state.day += days;
 
   for (const army of state.armies) {
     if (troopCount(army) <= 0 || army.path.length === 0) continue;
     const from = army.provinceId;
-    const entered = advanceArmy(world, army, days);
+    // the player's forced-march doctrine speeds their own hosts
+    const marchDays = army.ownerId === playerId ? days * (1 + boons.move) : days;
+    const entered = advanceArmy(world, army, marchDays);
     if (!entered) continue;
     const { fight: willFight, siege, foe } = battleAt(state, army, entered);
     if (!willFight) continue;
@@ -164,7 +188,7 @@ export function tickRealm(
         pending: { armyId: army.id, provinceId: entered, from, siege, defenderId: foe?.id ?? null },
       };
     }
-    const ev = fight(state, army, entered);
+    const ev = fight(state, army, entered, "balanced", boons);
     if (ev) events.push(ev);
   }
 
