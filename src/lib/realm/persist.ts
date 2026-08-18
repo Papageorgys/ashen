@@ -3,6 +3,7 @@ import { spawnStartingArmies, type Army } from "./army";
 import { seedLedger, type Ledger } from "./kingdom";
 import { makeCouncil, type Advisor } from "./council";
 import { makeDiplomacy, type Diplomacy } from "./diplomacy";
+import { makeIntel, type Intel } from "./intel";
 import type { RealmState } from "./sim";
 
 /**
@@ -22,6 +23,7 @@ export interface RealmWorld {
   ledger: Ledger;
   council: Advisor[];
   dip: Diplomacy;
+  intel: Intel;
   gen: number;
 }
 
@@ -33,6 +35,11 @@ interface SaveData {
   dip: Diplomacy;
   armies: Army[];
   ownership: (string | null)[];
+  intel?: {
+    seen: string[];
+    lastOwner: Record<string, string | null>;
+    spies: Record<string, { since: number }>;
+  };
 }
 
 /** Build a fresh realm for a given generation (seed = aethyr-<gen>). */
@@ -43,6 +50,7 @@ export function freshRealm(gen: number): RealmWorld {
     ledger: seedLedger(world, world.playerKingdomId),
     council: makeCouncil(world),
     dip: makeDiplomacy(world),
+    intel: makeIntel(),
     gen,
   };
 }
@@ -56,6 +64,11 @@ function serialize(rw: RealmWorld): SaveData {
     dip: rw.dip,
     armies: rw.state.armies,
     ownership: rw.state.world.provinces.map((p) => p.ownerId),
+    intel: {
+      seen: [...rw.intel.seen],
+      lastOwner: rw.intel.lastOwner,
+      spies: rw.intel.spies,
+    },
   };
 }
 
@@ -91,6 +104,11 @@ export function loadRealm(): RealmWorld | null {
     ledger: data.ledger,
     council: makeCouncil(world),
     dip: data.dip,
+    intel: {
+      seen: new Set(data.intel?.seen ?? []),
+      lastOwner: data.intel?.lastOwner ?? {},
+      spies: data.intel?.spies ?? {},
+    },
     gen: data.gen,
   };
 }
