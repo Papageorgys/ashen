@@ -6,6 +6,7 @@ import { tickRealm, type BattleEvent, type RealmState } from "@/lib/realm/sim";
 import { seedLedger, collectSeason, type Ledger } from "@/lib/realm/kingdom";
 import { makeCouncil, type Advisor } from "@/lib/realm/council";
 import { pickEvent, applyOutcome, type Choice, type RealmEvent } from "@/lib/realm/events";
+import { planEnemyKingdoms } from "@/lib/realm/ai";
 import { makeRng } from "@/lib/realm/rng";
 import { RealmMap } from "@/components/realm/RealmMap";
 import { RealmHud } from "@/components/realm/RealmHud";
@@ -14,6 +15,7 @@ import { ArmyPanel } from "@/components/realm/ArmyPanel";
 import { BattleReport } from "@/components/realm/BattleReport";
 import { CouncilPanel } from "@/components/realm/CouncilPanel";
 import { EventCard } from "@/components/realm/EventCard";
+import { Chronicle } from "@/components/realm/Chronicle";
 import { AmbientStage } from "@/components/game/AmbientStage";
 import { GameIcon } from "@/components/game/GameIcon";
 import { TERRAIN } from "@/lib/realm/terrain";
@@ -63,6 +65,7 @@ function RealmPage() {
   }, [gen]);
 
   const ref = useRef<RealmWorld>(initial);
+  const chronicleRef = useRef<BattleEvent[]>([]);
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [selProv, setSelProv] = useState<string | null>(null);
   const [selArmy, setSelArmy] = useState<string | null>(null);
@@ -73,6 +76,7 @@ function RealmPage() {
 
   useEffect(() => {
     ref.current = initial;
+    chronicleRef.current = [];
     setSelProv(null);
     setSelArmy(null);
     setReport(null);
@@ -93,8 +97,19 @@ function RealmPage() {
       const { state, ledger } = ref.current;
       const pid = state.world.playerKingdomId;
       const events = tickRealm(state, dt * SPEED);
-      if (events.length) setReport(events[events.length - 1]!);
+      if (events.length) {
+        chronicleRef.current = [...events.slice().reverse(), ...chronicleRef.current].slice(0, 12);
+        // only a battle touching the player interrupts with the big report card
+        const mine = events.find((e) => e.attackerKingdomId === pid || e.defenderKingdomId === pid);
+        if (mine) setReport(mine);
+      }
       if (state.day >= ledger.season * SEASON_DAYS) {
+        // rival crowns take their turn, then the season is collected
+        planEnemyKingdoms(
+          state.world,
+          state.armies,
+          makeRng(state.world.seed ^ (ledger.season * 104729)),
+        );
         collectSeason(ledger, state.world, pid, state.armies);
         const rng = makeRng(state.world.seed ^ (ledger.season * 7919));
         if (rng() < 0.7) {
@@ -233,6 +248,11 @@ function RealmPage() {
               />
             </div>
           )}
+
+          {/* the chronicle — the world moving on its own */}
+          <div className="pointer-events-none absolute bottom-16 left-3 z-20">
+            <Chronicle events={chronicleRef.current} playerId={playerId} />
+          </div>
 
           <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2 rounded-sm border border-white/10 bg-black/60 px-2.5 py-1.5 backdrop-blur-sm">
