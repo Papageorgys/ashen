@@ -4,6 +4,7 @@ import { seedLedger, type Ledger } from "./kingdom";
 import { makeCouncil, type Advisor } from "./council";
 import { makeDiplomacy, type Diplomacy } from "./diplomacy";
 import { makeIntel, type Intel } from "./intel";
+import { makeMarket, type MarketState } from "./market";
 import type { RealmState } from "./sim";
 
 /**
@@ -24,6 +25,7 @@ export interface RealmWorld {
   council: Advisor[];
   dip: Diplomacy;
   intel: Intel;
+  market: MarketState;
   gen: number;
 }
 
@@ -40,6 +42,7 @@ interface SaveData {
     lastOwner: Record<string, string | null>;
     spies: Record<string, { since: number }>;
   };
+  market?: MarketState;
 }
 
 /** Build a fresh realm for a given generation (seed = aethyr-<gen>). */
@@ -51,6 +54,7 @@ export function freshRealm(gen: number): RealmWorld {
     council: makeCouncil(world),
     dip: makeDiplomacy(world),
     intel: makeIntel(),
+    market: makeMarket(),
     gen,
   };
 }
@@ -64,6 +68,7 @@ function serialize(rw: RealmWorld): SaveData {
     dip: rw.dip,
     armies: rw.state.armies,
     ownership: rw.state.world.provinces.map((p) => p.ownerId),
+    market: rw.market,
     intel: {
       seen: [...rw.intel.seen],
       lastOwner: rw.intel.lastOwner,
@@ -109,6 +114,7 @@ export function loadRealm(): RealmWorld | null {
       lastOwner: data.intel?.lastOwner ?? {},
       spies: data.intel?.spies ?? {},
     },
+    market: data.market ?? makeMarket(),
     gen: data.gen,
   };
 }
