@@ -1,5 +1,5 @@
 import { advanceArmy, troopCount, type Army, type Composition, type UnitType } from "./army";
-import { resolveBattle, type BattleResult } from "./battle";
+import { resolveBattle, type BattleResult, type Tactic } from "./battle";
 import { TERRAIN } from "./terrain";
 import type { World } from "./types";
 
@@ -39,71 +39,130 @@ function applyLosses(a: Army, n: number) {
   a.morale = Math.max(0.15, a.morale - frac * 0.5);
 }
 
-/** Advance the whole realm by `days`. Mutates state; returns battles fought. */
-export function tickRealm(state: RealmState, days: number): BattleEvent[] {
+/** A battle awaiting the player's tactical decision before it is resolved. */
+export interface PendingBattle {
+  armyId: string;
+  provinceId: string;
+  from: string;
+  siege: boolean;
+  defenderId: string | null;
+}
+
+/** Would `army` fight on entering `entered`, and if so is it a siege? */
+function battleAt(state: RealmState, army: Army, entered: string) {
+  const prov = state.world.provinces.find((p) => p.id === entered)!;
+  const foe = state.armies
+    .filter((o) => o.ownerId !== army.ownerId && o.provinceId === entered && troopCount(o) > 0)
+    .sort((a, b) => troopCount(b) - troopCount(a))[0];
+  if (foe) return { fight: true, foe, siege: !!prov.settlementId };
+  if (prov.ownerId !== army.ownerId && prov.settlementId)
+    return { fight: true, foe: null, siege: true };
+  return { fight: false, foe: null, siege: false };
+}
+
+/** Resolve one army's battle on entering a province, with a chosen tactic.
+ *  Mutates state (losses, capture); returns the event. */
+export function fight(
+  state: RealmState,
+  army: Army,
+  entered: string,
+  tactic: Tactic = "balanced",
+): BattleEvent | null {
+  const { world } = state;
+  const kName = (id: string) => world.kingdoms.find((k) => k.id === id)?.name ?? "wilderness";
+  const prov = world.provinces.find((p) => p.id === entered)!;
+  const { foe } = battleAt(state, army, entered);
+
+  const seed = world.seed ^ hash(army.id) ^ Math.floor(state.day);
+  const res = resolveBattle(army, foe ?? null, prov, seed, tactic);
+  applyLosses(army, res.attackerLosses);
+  army.path = [];
+  let defenderName: string;
+  let defenderKingdomId: string | null;
+  if (foe) {
+    applyLosses(foe, res.defenderLosses);
+    defenderName = kName(foe.ownerId);
+    defenderKingdomId = foe.ownerId;
+  } else {
+    defenderName = prov.ownerId ? kName(prov.ownerId) : "the garrison";
+    defenderKingdomId = prov.ownerId;
+  }
+  let captured = false;
+  if (res.victor === "attacker" && prov.ownerId !== army.ownerId && prov.settlementId) {
+    prov.ownerId = army.ownerId;
+    captured = true;
+  }
+  return {
+    ...res,
+    day: Math.floor(state.day),
+    provinceName: prov.name,
+    attackerName: kName(army.ownerId),
+    defenderName,
+    attackerKingdomId: army.ownerId,
+    defenderKingdomId,
+    captured,
+  };
+}
+
+/** Resolve a deferred player battle once the tactic is chosen. */
+export function resolvePending(
+  state: RealmState,
+  pending: PendingBattle,
+  tactic: Tactic,
+): BattleEvent | null {
+  const army = state.armies.find((a) => a.id === pending.armyId);
+  if (!army || troopCount(army) <= 0) return null;
+  const ev = fight(state, army, pending.provinceId, tactic);
+  state.armies = state.armies.filter((a) => troopCount(a) > 0);
+  return ev;
+}
+
+/** Pull a marching army back to where it came from (chose to withdraw). */
+export function withdrawArmy(state: RealmState, pending: PendingBattle) {
+  const army = state.armies.find((a) => a.id === pending.armyId);
+  if (army) {
+    army.provinceId = pending.from;
+    army.path = [];
+    army.legProgress = 0;
+    army.morale = Math.max(0.15, army.morale - 0.08);
+  }
+}
+
+/** Advance the whole realm by `days`. Mutates state; returns battles fought,
+ *  plus any player-initiated battle deferred for a tactical decision. */
+export function tickRealm(
+  state: RealmState,
+  days: number,
+  opts?: { playerId?: string },
+): { events: BattleEvent[]; pending: PendingBattle | null } {
   const { world } = state;
   const events: BattleEvent[] = [];
-  const provName = (id: string) => world.provinces.find((p) => p.id === id)?.name ?? id;
-  const kName = (id: string) => world.kingdoms.find((k) => k.id === id)?.name ?? "wilderness";
+  const playerId = opts?.playerId;
 
   state.day += days;
 
   for (const army of state.armies) {
     if (troopCount(army) <= 0 || army.path.length === 0) continue;
+    const from = army.provinceId;
     const entered = advanceArmy(world, army, days);
     if (!entered) continue;
-    const prov = world.provinces.find((p) => p.id === entered)!;
-
-    // 1) an enemy host standing here → a field battle
-    const foe = state.armies
-      .filter((o) => o.ownerId !== army.ownerId && o.provinceId === entered && troopCount(o) > 0)
-      .sort((a, b) => troopCount(b) - troopCount(a))[0];
-
-    let res: BattleResult | null = null;
-    let defenderName = "the garrison";
-    let defenderKingdomId: string | null = null;
-    let captured = false;
-    if (foe) {
-      res = resolveBattle(army, foe, prov, world.seed ^ hash(army.id) ^ Math.floor(state.day));
-      applyLosses(army, res.attackerLosses);
-      applyLosses(foe, res.defenderLosses);
-      defenderName = kName(foe.ownerId);
-      defenderKingdomId = foe.ownerId;
-      army.path = []; // a clash halts the march
-      if (res.victor === "attacker" && prov.ownerId !== army.ownerId && prov.settlementId) {
-        prov.ownerId = army.ownerId;
-        captured = true;
-      }
-    } else if (prov.ownerId !== army.ownerId && prov.settlementId) {
-      // 2) an undefended enemy/wilderness holding → an assault
-      res = resolveBattle(army, null, prov, world.seed ^ hash(army.id) ^ Math.floor(state.day));
-      applyLosses(army, res.attackerLosses);
-      defenderName = prov.ownerId ? kName(prov.ownerId) : "the garrison";
-      defenderKingdomId = prov.ownerId;
-      if (res.victor === "attacker") {
-        prov.ownerId = army.ownerId;
-        army.path = [];
-        captured = true;
-      }
+    const { fight: willFight, siege, foe } = battleAt(state, army, entered);
+    if (!willFight) continue;
+    // a battle the player leads waits on their command
+    if (playerId && army.ownerId === playerId) {
+      army.path = [];
+      return {
+        events,
+        pending: { armyId: army.id, provinceId: entered, from, siege, defenderId: foe?.id ?? null },
+      };
     }
-
-    if (res) {
-      events.push({
-        ...res,
-        day: Math.floor(state.day),
-        provinceName: provName(entered),
-        attackerName: kName(army.ownerId),
-        defenderName,
-        attackerKingdomId: army.ownerId,
-        defenderKingdomId,
-        captured,
-      });
-    }
+    const ev = fight(state, army, entered);
+    if (ev) events.push(ev);
   }
 
   // clear out annihilated hosts
   state.armies = state.armies.filter((a) => troopCount(a) > 0);
-  return events;
+  return { events, pending: null };
 }
 
 function hash(s: string): number {

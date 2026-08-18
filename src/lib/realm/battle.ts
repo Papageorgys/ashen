@@ -24,20 +24,52 @@ export interface BattleResult {
   siege: boolean;
 }
 
+/** How the attacker fights — the player's tactical call before a battle. */
+export type Tactic = "balanced" | "aggressive" | "defensive" | "flank" | "cavalry";
+
+/** Tactic → (attack multiplier, own-loss multiplier, enemy-loss multiplier). */
+function tacticMods(tactic: Tactic, attacker: Army, r: () => number) {
+  switch (tactic) {
+    case "aggressive":
+      return { atk: 1.18, ownLoss: 1.35, foeLoss: 1.15 };
+    case "defensive":
+      return { atk: 0.9, ownLoss: 0.6, foeLoss: 0.85 };
+    case "flank": {
+      const worked = r() < 0.5;
+      return worked
+        ? { atk: 1.45, ownLoss: 0.8, foeLoss: 1.3 }
+        : { atk: 0.72, ownLoss: 1.3, foeLoss: 0.9 };
+    }
+    case "cavalry": {
+      const total = troopCount(attacker) || 1;
+      let cav = 0;
+      for (const [t, n] of Object.entries(attacker.composition) as [UnitType, number][])
+        if (UNIT[t].cav) cav += n ?? 0;
+      const frac = cav / total;
+      return { atk: 1 + frac * 1.1, ownLoss: 1 + frac * 0.3, foeLoss: 1 + frac * 0.5 };
+    }
+    default:
+      return { atk: 1, ownLoss: 1, foeLoss: 1 };
+  }
+}
+
 /** Resolve a field battle or an assault on a held province. `defender` may be
- *  null (an undefended settlement → a quick storm). */
+ *  null (an undefended settlement → a quick storm). `tactic` is the attacker's
+ *  chosen approach. */
 export function resolveBattle(
   attacker: Army,
   defender: Army | null,
   province: Province,
   seed: number,
+  tactic: Tactic = "balanced",
 ): BattleResult {
   const r = makeRng(seed ^ 0x9e3779b1);
   const terrainDef = TERRAIN[province.terrain].defense;
   const fort = province.settlementId ? 0.15 : 0;
   const siege = !!province.settlementId && (defender ? true : true) && terrainDef >= 0;
+  const mod = tacticMods(tactic, attacker, r);
 
-  const atk = armyStrength(attacker) * (0.9 + r() * 0.2);
+  const atk = armyStrength(attacker) * (0.9 + r() * 0.2) * mod.atk;
   const defBase = defender ? armyStrength(defender) : troopCount(attacker) * 0.12; // token garrison
   const def = defBase * (1 + terrainDef + fort) * (0.9 + r() * 0.2);
 
@@ -51,11 +83,11 @@ export function resolveBattle(
   let attackerLosses: number;
   let defenderLosses: number;
   if (attackerWins) {
-    attackerLosses = Math.round(atkTroops * (0.08 + (1 - gap) * 0.22));
-    defenderLosses = Math.round(defTroops * (0.35 + gap * 0.5));
+    attackerLosses = Math.round(atkTroops * (0.08 + (1 - gap) * 0.22) * mod.ownLoss);
+    defenderLosses = Math.round(defTroops * (0.35 + gap * 0.5) * mod.foeLoss);
   } else {
-    attackerLosses = Math.round(atkTroops * (0.35 + gap * 0.5));
-    defenderLosses = Math.round(defTroops * (0.08 + (1 - gap) * 0.22));
+    attackerLosses = Math.round(atkTroops * (0.35 + gap * 0.5) * mod.ownLoss);
+    defenderLosses = Math.round(defTroops * (0.08 + (1 - gap) * 0.22) * mod.foeLoss);
   }
   attackerLosses = Math.min(attackerLosses, atkTroops);
   defenderLosses = Math.min(defenderLosses, defTroops);
